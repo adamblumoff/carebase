@@ -21,7 +21,9 @@ npm run dev
 
 ## Environment Variables
 
-Create a `.env` file with:
+### For Local Development
+
+Create a `.env.local` file (this file is gitignored) based on `.env.example`:
 
 ```env
 # Database

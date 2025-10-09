@@ -1,8 +1,19 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+import { existsSync } from 'fs';
 import express from 'express';
 import session from 'express-session';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+
+// Load environment variables
+// .env.local takes precedence over .env for local development
+if (existsSync('.env.local')) {
+  dotenv.config({ path: '.env.local' });
+  console.log('Loaded .env.local (development mode)');
+} else {
+  dotenv.config();
+  console.log('Loaded .env (production mode)');
+}
 import passportConfig from './auth/passport.js';
 import authRoutes from './routes/auth.js';
 import webhookRoutes from './routes/webhook.js';
