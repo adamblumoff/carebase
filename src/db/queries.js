@@ -188,10 +188,9 @@ export async function createAuditLog(itemId, action, meta) {
 
 export async function getLowConfidenceItems(limit = 50) {
   const result = await db.query(
-    `SELECT i.*, s.sender, s.subject, s.short_excerpt, a.meta
+    `SELECT DISTINCT i.*, s.sender, s.subject, s.short_excerpt
      FROM items i
      JOIN sources s ON i.source_id = s.id
-     LEFT JOIN audit a ON i.id = a.item_id
      WHERE i.confidence < 0.7
      ORDER BY i.created_at DESC
      LIMIT $1`,
