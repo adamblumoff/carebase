@@ -9,6 +9,7 @@ import webhookRoutes from './routes/webhook.js';
 import planRoutes from './routes/plan.js';
 import calendarRoutes from './routes/calendar.js';
 import uploadRoutes from './routes/upload.js';
+import settingsRoutes from './routes/settings.js';
 import { scheduleFridayDigest } from './jobs/digest.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -50,6 +51,7 @@ app.use('/webhook', webhookRoutes);
 app.use('/plan', planRoutes);
 app.use('/calendar', calendarRoutes);
 app.use('/upload', uploadRoutes);
+app.use('/settings', settingsRoutes);
 
 // Schedule jobs
 scheduleFridayDigest();
