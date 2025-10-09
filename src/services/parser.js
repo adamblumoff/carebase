@@ -123,7 +123,7 @@ export function extractAppointment(text, subject) {
   endLocal.setHours(startLocal.getHours() + 1);
 
   // Extract location (look for address-like patterns or clinic names)
-  const locationMatch = combined.match(/(?:at|location:|address:)\s*([^\n]{10,80})/i);
+  const locationMatch = combined.match(/(?:location:|address:|(?:^|\s)at\s)\s*([^\n]{10,80})/i);
   const location = locationMatch ? locationMatch[1].trim() : null;
 
   // Extract prep note (look for "bring", "prepare", "remember")
