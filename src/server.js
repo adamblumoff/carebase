@@ -7,6 +7,7 @@ import passportConfig from './auth/passport.js';
 import authRoutes from './routes/auth.js';
 import webhookRoutes from './routes/webhook.js';
 import planRoutes from './routes/plan.js';
+import calendarRoutes from './routes/calendar.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -45,6 +46,7 @@ app.get('/health', (req, res) => {
 app.use('/auth', authRoutes);
 app.use('/webhook', webhookRoutes);
 app.use('/plan', planRoutes);
+app.use('/calendar', calendarRoutes);
 
 // Start server
 app.listen(PORT, () => {
