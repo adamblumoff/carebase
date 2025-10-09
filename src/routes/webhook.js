@@ -6,14 +6,20 @@ import { storeText } from '../services/storage.js';
 const router = express.Router();
 
 /**
- * Resend inbound email webhook
- * Expects: { from, to, subject, text, html, messageId }
+ * Postmark inbound email webhook
+ * Expects: { From, To, Subject, TextBody, MessageID }
+ * Also supports Resend format for backward compatibility
  */
 router.post('/inbound-email', async (req, res) => {
   try {
-    const { from, to, subject, text, messageId } = req.body;
+    // Handle both Postmark (capitalized) and Resend (lowercase) formats
+    const from = req.body.From || req.body.from;
+    const to = req.body.To || req.body.to;
+    const subject = req.body.Subject || req.body.subject;
+    const text = req.body.TextBody || req.body.text;
+    const messageId = req.body.MessageID || req.body.messageId;
 
-    console.log('Inbound email webhook:', { from, to, subject });
+    console.log('Inbound email webhook:', { from, to, subject, provider: req.body.From ? 'Postmark' : 'Resend' });
 
     // Find user by forwarding address
     const userResult = await import('../db/client.js').then(m => m.default.query(
