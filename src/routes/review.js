@@ -56,14 +56,26 @@ router.post('/:itemId/reclassify', requireAuth, async (req, res) => {
     // Recreate appointment or bill based on new type
     if (newType === 'appointment') {
       const parsed = parseSource(source);
-      if (parsed.appointmentData) {
-        await createAppointment(itemId, parsed.appointmentData);
-      }
+      // Force create appointment even if parser couldn't extract all fields
+      const appointmentData = parsed.appointmentData || {
+        startLocal: new Date().toISOString(),
+        endLocal: new Date(Date.now() + 3600000).toISOString(), // 1 hour later
+        location: null,
+        prepNote: null,
+        summary: source.subject || 'Appointment (needs review)'
+      };
+      await createAppointment(itemId, appointmentData);
     } else if (newType === 'bill') {
       const parsed = parseSource(source);
-      if (parsed.billData) {
-        await createBill(itemId, parsed.billData);
-      }
+      // Force create bill even if parser couldn't extract all fields
+      const billData = parsed.billData || {
+        statementDate: null,
+        amountCents: null,
+        dueDate: null,
+        payUrl: null,
+        status: 'todo'
+      };
+      await createBill(itemId, billData);
     }
 
     // Log manual reclassification
