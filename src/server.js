@@ -10,6 +10,7 @@ import planRoutes from './routes/plan.js';
 import calendarRoutes from './routes/calendar.js';
 import uploadRoutes from './routes/upload.js';
 import settingsRoutes from './routes/settings.js';
+import reviewRoutes from './routes/review.js';
 import { scheduleFridayDigest } from './jobs/digest.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -61,6 +62,7 @@ app.use('/plan', planRoutes);
 app.use('/calendar', calendarRoutes);
 app.use('/upload', uploadRoutes);
 app.use('/settings', settingsRoutes);
+app.use('/review', reviewRoutes);
 
 // Schedule jobs
 scheduleFridayDigest();

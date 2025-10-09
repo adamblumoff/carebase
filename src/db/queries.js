@@ -188,7 +188,7 @@ export async function createAuditLog(itemId, action, meta) {
 
 export async function getLowConfidenceItems(limit = 50) {
   const result = await db.query(
-    `SELECT i.*, s.sender, s.subject, a.meta
+    `SELECT i.*, s.sender, s.subject, s.short_excerpt, a.meta
      FROM items i
      JOIN sources s ON i.source_id = s.id
      LEFT JOIN audit a ON i.id = a.item_id
@@ -198,4 +198,23 @@ export async function getLowConfidenceItems(limit = 50) {
     [limit]
   );
   return result.rows;
+}
+
+export async function reclassifyItem(itemId, newType) {
+  // Update item's detected_type
+  await db.query(
+    'UPDATE items SET detected_type = $1 WHERE id = $2',
+    [newType, itemId]
+  );
+
+  // Delete existing appointment or bill (if any)
+  await db.query('DELETE FROM appointments WHERE item_id = $1', [itemId]);
+  await db.query('DELETE FROM bills WHERE item_id = $1', [itemId]);
+
+  return true;
+}
+
+export async function findItemById(id) {
+  const result = await db.query('SELECT * FROM items WHERE id = $1', [id]);
+  return result.rows[0];
 }
