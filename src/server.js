@@ -1,9 +1,10 @@
 import 'dotenv/config';
 import express from 'express';
 import session from 'express-session';
-import passport from 'passport';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import passportConfig from './auth/passport.js';
+import authRoutes from './routes/auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -20,8 +21,8 @@ app.use(session({
   saveUninitialized: false,
   cookie: { secure: process.env.NODE_ENV === 'production' }
 }));
-app.use(passport.initialize());
-app.use(passport.session());
+app.use(passportConfig.initialize());
+app.use(passportConfig.session());
 
 // View engine
 app.set('view engine', 'ejs');
@@ -38,6 +39,8 @@ app.get('/', (req, res) => {
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
+
+app.use('/auth', authRoutes);
 
 // Start server
 app.listen(PORT, () => {
