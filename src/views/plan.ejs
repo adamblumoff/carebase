@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Weekly Plan - <%= recipient.display_name %></title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50">
+  <div class="min-h-screen">
+    <!-- Header -->
+    <div class="bg-white shadow">
+      <div class="max-w-4xl mx-auto px-4 py-6">
+        <h1 class="text-2xl font-bold text-gray-900">
+          <%= recipient.display_name %>'s Weekly Plan
+        </h1>
+        <p class="text-sm text-gray-600 mt-1">Next 7 days</p>
+        <div class="mt-4 flex gap-3">
+          <% if (user) { %>
+            <a href="/settings" class="text-sm text-blue-600 hover:text-blue-800">Settings</a>
+            <a href="/" class="text-sm text-gray-600 hover:text-gray-800">Home</a>
+          <% } %>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="max-w-4xl mx-auto px-4 py-8">
+      <!-- Appointments Section -->
+      <div class="mb-8">
+        <h2 class="text-xl font-bold text-gray-900 mb-4">Show Up</h2>
+
+        <% if (appointments.length === 0) { %>
+          <div class="bg-white rounded-lg shadow p-6 text-center text-gray-500">
+            No appointments scheduled
+          </div>
+        <% } else { %>
+          <div class="space-y-4">
+            <% appointments.forEach(appt => { %>
+              <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex justify-between items-start">
+                  <div class="flex-1">
+                    <h3 class="font-semibold text-lg text-gray-900"><%= appt.summary %></h3>
+                    <div class="mt-2 space-y-1 text-sm text-gray-600">
+                      <p>
+                        <span class="font-medium">When:</span>
+                        <%= new Date(appt.start_local).toLocaleDateString('en-US', {
+                          weekday: 'long',
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        }) %>
+                        at
+                        <%= new Date(appt.start_local).toLocaleTimeString('en-US', {
+                          hour: 'numeric',
+                          minute: '2-digit',
+                          hour12: true
+                        }) %>
+                      </p>
+                      <% if (appt.location) { %>
+                        <p><span class="font-medium">Where:</span> <%= appt.location %></p>
+                      <% } %>
+                      <% if (appt.prep_note) { %>
+                        <p><span class="font-medium">Prepare:</span> <%= appt.prep_note %></p>
+                      <% } %>
+                    </div>
+                  </div>
+                  <a
+                    href="<%= baseUrl %>/calendar/<%= appt.ics_token %>.ics"
+                    class="ml-4 bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
+                  >
+                    Add to Calendar
+                  </a>
+                </div>
+              </div>
+            <% }) %>
+          </div>
+        <% } %>
+      </div>
+
+      <!-- Bills Section -->
+      <div>
+        <h2 class="text-xl font-bold text-gray-900 mb-4">Pay</h2>
+
+        <% if (bills.length === 0) { %>
+          <div class="bg-white rounded-lg shadow p-6 text-center text-gray-500">
+            No bills due
+          </div>
+        <% } else { %>
+          <div class="space-y-4">
+            <% bills.forEach(bill => { %>
+              <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex justify-between items-start">
+                  <div class="flex-1">
+                    <div class="flex items-center gap-3">
+                      <h3 class="font-semibold text-lg text-gray-900">
+                        <% if (bill.amount_cents) { %>
+                          $<%= (bill.amount_cents / 100).toFixed(2) %>
+                        <% } else { %>
+                          Bill
+                        <% } %>
+                      </h3>
+                      <span class="px-2 py-1 text-xs rounded <%= bill.status === 'paid' ? 'bg-green-100 text-green-800' : bill.status === 'ignore' ? 'bg-gray-100 text-gray-600' : 'bg-yellow-100 text-yellow-800' %>">
+                        <%= bill.status %>
+                      </span>
+                    </div>
+                    <div class="mt-2 space-y-1 text-sm text-gray-600">
+                      <% if (bill.due_date) { %>
+                        <p>
+                          <span class="font-medium">Due:</span>
+                          <%= new Date(bill.due_date).toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          }) %>
+                        </p>
+                      <% } %>
+                      <% if (bill.statement_date) { %>
+                        <p>
+                          <span class="font-medium">Statement Date:</span>
+                          <%= new Date(bill.statement_date).toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                          }) %>
+                        </p>
+                      <% } %>
+                    </div>
+                  </div>
+                  <% if (bill.pay_url && bill.status === 'todo') { %>
+                    <a
+                      href="<%= bill.pay_url %>"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="ml-4 bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700"
+                    >
+                      Pay Now
+                    </a>
+                  <% } %>
+                </div>
+              </div>
+            <% }) %>
+          </div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
