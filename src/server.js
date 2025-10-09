@@ -5,15 +5,18 @@ import session from 'express-session';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
-// Load environment variables
+// Load environment variables FIRST before any other imports
 // .env.local takes precedence over .env for local development
 if (existsSync('.env.local')) {
-  dotenv.config({ path: '.env.local' });
+  dotenv.config({ path: '.env.local', override: true });
   console.log('Loaded .env.local (development mode)');
+  console.log('Callback URL:', process.env.GOOGLE_CALLBACK_URL);
 } else {
   dotenv.config();
   console.log('Loaded .env (production mode)');
 }
+
+// NOW import everything else after env vars are loaded
 import passportConfig from './auth/passport.js';
 import authRoutes from './routes/auth.js';
 import webhookRoutes from './routes/webhook.js';
