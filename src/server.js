@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import passportConfig from './auth/passport.js';
 import authRoutes from './routes/auth.js';
+import webhookRoutes from './routes/webhook.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -41,6 +42,7 @@ app.get('/health', (req, res) => {
 });
 
 app.use('/auth', authRoutes);
+app.use('/webhook', webhookRoutes);
 
 // Start server
 app.listen(PORT, () => {
