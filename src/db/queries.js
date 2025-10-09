@@ -200,9 +200,9 @@ export async function getLowConfidenceItems(limit = 50) {
 }
 
 export async function reclassifyItem(itemId, newType) {
-  // Update item's detected_type
+  // Update item's detected_type and set confidence to 1.0 (manually reviewed)
   await db.query(
-    'UPDATE items SET detected_type = $1 WHERE id = $2',
+    'UPDATE items SET detected_type = $1, confidence = 1.0 WHERE id = $2',
     [newType, itemId]
   );
 
