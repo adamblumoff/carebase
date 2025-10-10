@@ -1,25 +1,74 @@
 /**
  * Login Screen
- * For MVP, this will show instructions to log in via web browser
- * In future, implement proper OAuth or session-based auth
+ * Google OAuth Sign In
  */
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, Alert } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
-import { API_BASE_URL } from '../config';
+import * as Google from 'expo-auth-session/providers/google';
+import * as WebBrowser from 'expo-web-browser';
+import apiClient from '../api/client';
+import { API_ENDPOINTS } from '../config';
+import { GOOGLE_CLIENT_ID } from '../config';
+
+// Required for web browser to close properly after auth
+WebBrowser.maybeCompleteAuthSession();
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 export default function LoginScreen({ navigation }: Props) {
-  const handleLogin = () => {
-    // Open web browser to login page
-    Linking.openURL(`${API_BASE_URL}/auth/google`);
+  const [loading, setLoading] = useState(false);
+
+  // Configure Google Auth
+  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
+    clientId: GOOGLE_CLIENT_ID.web,
+    iosClientId: GOOGLE_CLIENT_ID.ios,
+    androidClientId: GOOGLE_CLIENT_ID.android,
+  });
+
+  // Handle auth response
+  useEffect(() => {
+    if (response?.type === 'success') {
+      const { id_token } = response.params;
+      handleGoogleSignIn(id_token);
+    } else if (response?.type === 'error') {
+      Alert.alert('Error', 'Failed to sign in with Google');
+      setLoading(false);
+    } else if (response?.type === 'cancel') {
+      setLoading(false);
+    }
+  }, [response]);
+
+  const handleGoogleSignIn = async (idToken: string) => {
+    setLoading(true);
+    try {
+      // Exchange Google token for our session
+      const result = await apiClient.post(API_ENDPOINTS.exchangeGoogleToken || '/api/auth/google', {
+        idToken
+      });
+
+      if (result.data.success) {
+        // Navigate to main app
+        navigation.replace('Plan');
+      } else {
+        Alert.alert('Error', 'Failed to create session');
+      }
+    } catch (error: any) {
+      console.error('Sign in error:', error);
+      Alert.alert('Error', error.response?.data?.error || 'Failed to sign in');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleContinue = () => {
-    // For MVP, just navigate to Plan screen
-    // In production, check session first
+  const handleLogin = () => {
+    setLoading(true);
+    promptAsync();
+  };
+
+  const handleContinueWithoutAuth = () => {
+    // For development/testing only
     navigation.replace('Plan');
   };
 
@@ -35,13 +84,23 @@ export default function LoginScreen({ navigation }: Props) {
             Get your weekly plan: Show Up (appointments) and Pay (bills).
           </Text>
 
-          <TouchableOpacity style={styles.button} onPress={handleLogin}>
-            <Text style={styles.buttonText}>Sign in with Google</Text>
+          <TouchableOpacity
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={handleLogin}
+            disabled={!request || loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Sign in with Google</Text>
+            )}
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.linkButton} onPress={handleContinue}>
-            <Text style={styles.linkText}>Continue without signing in</Text>
-          </TouchableOpacity>
+          {__DEV__ && (
+            <TouchableOpacity style={styles.linkButton} onPress={handleContinueWithoutAuth}>
+              <Text style={styles.linkText}>Continue without signing in (Dev)</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <Text style={styles.footer}>
@@ -104,6 +163,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     alignItems: 'center',
     marginBottom: 12,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   buttonText: {
     color: '#fff',
