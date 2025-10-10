@@ -7,6 +7,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import * as WebBrowser from 'expo-web-browser';
+import CookieManager from '@react-native-cookies/cookies';
 import apiClient from '../api/client';
 import { API_ENDPOINTS, API_BASE_URL } from '../config';
 
@@ -31,18 +32,33 @@ export default function LoginScreen({ navigation }: Props) {
       console.log('WebBrowser result:', result);
 
       if (result.type === 'success') {
+        // Try to get cookies from the browser session
+        try {
+          const baseUrl = new URL(API_BASE_URL);
+          const cookies = await CookieManager.get(baseUrl.origin);
+          console.log('Cookies after OAuth:', cookies);
+        } catch (cookieError) {
+          console.warn('Could not fetch cookies:', cookieError);
+        }
+
         // Check if we're now authenticated by checking session
+        console.log('Checking session...');
         const sessionCheck = await apiClient.get(API_ENDPOINTS.checkSession);
+        console.log('Session check response:', sessionCheck.data);
 
         if (sessionCheck.data.authenticated) {
+          console.log('Session authenticated! Navigating to Plan...');
           navigation.replace('Plan');
         } else {
-          Alert.alert('Error', 'Authentication succeeded but session was not created');
+          console.error('Session not authenticated');
+          Alert.alert('Error', 'Authentication succeeded but session was not created. Cookies may not be shared between browser and app.');
           setLoading(false);
         }
       } else if (result.type === 'cancel') {
+        console.log('User cancelled OAuth');
         setLoading(false);
       } else {
+        console.error('OAuth failed:', result);
         Alert.alert('Error', 'Authentication failed');
         setLoading(false);
       }
@@ -73,7 +89,7 @@ export default function LoginScreen({ navigation }: Props) {
           <TouchableOpacity
             style={[styles.button, loading && styles.buttonDisabled]}
             onPress={handleLogin}
-            disabled={!request || loading}
+            disabled={loading}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />
