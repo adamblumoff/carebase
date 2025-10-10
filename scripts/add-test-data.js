@@ -124,7 +124,7 @@ async function addTestData() {
 
     await createBill(billItem1.id, {
       statementDate: new Date().toISOString().split('T')[0],
-      amountCents: 12550, // $125.50
+      amount: 125.50,
       dueDate: dueDate1.toISOString().split('T')[0],
       payUrl: 'https://portal.healthcarepayments.com/pay/12345',
       status: 'todo'
@@ -154,7 +154,7 @@ async function addTestData() {
 
     await createBill(billItem2.id, {
       statementDate: new Date().toISOString().split('T')[0],
-      amountCents: 3500, // $35.00
+      amount: 35.00,
       dueDate: dueDate2.toISOString().split('T')[0],
       payUrl: 'https://pharmacy.com/pay',
       status: 'todo'
@@ -181,7 +181,7 @@ async function addTestData() {
 
     await createBill(billItem3.id, {
       statementDate: new Date().toISOString().split('T')[0],
-      amountCents: 8900, // $89.00
+      amount: 89.00,
       dueDate: new Date().toISOString().split('T')[0],
       payUrl: 'https://labcorp.com/pay',
       status: 'paid'

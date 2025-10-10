@@ -67,7 +67,7 @@ function generateDigestHTML(data) {
           : bills.map(bill => `
             <div class="item">
               <div class="item-title">
-                ${bill.amount_cents ? `$${(bill.amount_cents / 100).toFixed(2)}` : 'Bill'}
+                ${bill.amount ? `$${parseFloat(bill.amount).toFixed(2)}` : 'Bill'}
                 ${bill.status === 'paid' ? ' ✅' : bill.status === 'todo' ? ' ⏰' : ''}
               </div>
               <div class="item-details">

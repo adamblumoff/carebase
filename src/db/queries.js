@@ -160,13 +160,13 @@ export async function deleteAppointment(id) {
 // ========== BILLS ==========
 
 export async function createBill(itemId, data) {
-  const { statementDate, amountCents, dueDate, payUrl, status } = data;
+  const { statementDate, amount, dueDate, payUrl, status } = data;
   const taskKey = generateToken(16);
 
   const result = await db.query(
-    `INSERT INTO bills (item_id, statement_date, amount_cents, due_date, pay_url, status, task_key)
+    `INSERT INTO bills (item_id, statement_date, amount, due_date, pay_url, status, task_key)
      VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-    [itemId, statementDate, amountCents, dueDate, payUrl, status || 'todo', taskKey]
+    [itemId, statementDate, amount, dueDate, payUrl, status || 'todo', taskKey]
   );
   return result.rows[0];
 }
@@ -193,13 +193,13 @@ export async function getUpcomingBills(recipientId, startDate, endDate) {
 }
 
 export async function updateBill(id, data) {
-  const { statementDate, amountCents, dueDate, payUrl, status } = data;
+  const { statementDate, amount, dueDate, payUrl, status } = data;
   const result = await db.query(
     `UPDATE bills
-     SET statement_date = $1, amount_cents = $2, due_date = $3, pay_url = $4, status = $5
+     SET statement_date = $1, amount = $2, due_date = $3, pay_url = $4, status = $5
      WHERE id = $6
      RETURNING *`,
-    [statementDate, amountCents, dueDate, payUrl, status, id]
+    [statementDate, amount, dueDate, payUrl, status, id]
   );
   return result.rows[0];
 }

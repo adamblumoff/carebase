@@ -70,7 +70,7 @@ router.post('/:itemId/reclassify', requireAuth, async (req, res) => {
       // Force create bill even if parser couldn't extract all fields
       const billData = parsed.billData || {
         statementDate: null,
-        amountCents: null,
+        amount: null,
         dueDate: null,
         payUrl: null,
         status: 'todo'

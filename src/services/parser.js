@@ -152,11 +152,11 @@ export function extractBill(text, subject) {
   const combined = `${subject}\n${text}`;
 
   // Extract amount
-  let amountCents = null;
+  let amount = null;
   const moneyMatch = combined.match(/\$(\d+(?:,\d{3})*(?:\.\d{2})?)/);
   if (moneyMatch) {
     const amountStr = moneyMatch[1].replace(/,/g, '');
-    amountCents = Math.round(parseFloat(amountStr) * 100);
+    amount = parseFloat(amountStr);
   }
 
   // Extract due date
@@ -188,7 +188,7 @@ export function extractBill(text, subject) {
 
   return {
     statementDate,
-    amountCents,
+    amount,
     dueDate,
     payUrl,
     status: 'todo'

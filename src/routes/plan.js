@@ -136,10 +136,10 @@ router.post('/bill/:id/update', async (req, res) => {
     }
 
     const { id } = req.params;
-    const { amountCents, dueDate, statementDate, payUrl, status } = req.body;
+    const { amount, dueDate, statementDate, payUrl, status } = req.body;
 
     await updateBill(id, {
-      amountCents: amountCents ? parseInt(amountCents) : null,
+      amount: amount ? parseFloat(amount) : null,
       dueDate: dueDate || null,
       statementDate: statementDate || null,
       payUrl: payUrl || null,

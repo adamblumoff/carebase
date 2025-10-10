@@ -171,8 +171,8 @@
                     <div class="flex-1">
                       <div class="flex items-center gap-3">
                         <h3 class="font-semibold text-lg text-gray-900">
-                          <% if (bill.amount_cents) { %>
-                            $<%= (bill.amount_cents / 100).toFixed(2) %>
+                          <% if (bill.amount) { %>
+                            $<%= parseFloat(bill.amount).toFixed(2) %>
                           <% } else { %>
                             Bill
                           <% } %>
@@ -238,9 +238,9 @@
                     <form action="/plan/bill/<%= bill.id %>/update" method="POST">
                       <div class="space-y-4">
                         <div>
-                          <label class="block text-sm font-medium text-gray-700">Amount (cents)</label>
-                          <input type="number" name="amountCents" value="<%= bill.amount_cents || '' %>" class="mt-1 block w-full rounded border-gray-300 shadow-sm px-3 py-2 border">
-                          <p class="text-xs text-gray-500 mt-1">Enter amount in cents (e.g., 14550 for $145.50)</p>
+                          <label class="block text-sm font-medium text-gray-700">Amount</label>
+                          <input type="number" name="amount" value="<%= bill.amount || '' %>" step="0.01" min="0" class="mt-1 block w-full rounded border-gray-300 shadow-sm px-3 py-2 border">
+                          <p class="text-xs text-gray-500 mt-1">Enter amount in dollars (e.g., 145.50)</p>
                         </div>
                         <div class="grid grid-cols-2 gap-4">
                           <div>

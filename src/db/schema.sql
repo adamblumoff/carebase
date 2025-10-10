@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS bills (
   id SERIAL PRIMARY KEY,
   item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE UNIQUE,
   statement_date DATE,
-  amount_cents INTEGER,
+  amount DECIMAL(10, 2),
   due_date DATE,
   pay_url TEXT,
   status VARCHAR(20) NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'paid', 'ignore')),

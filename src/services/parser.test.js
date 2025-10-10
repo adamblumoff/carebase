@@ -79,7 +79,7 @@ test('Parser: extracts bill data correctly', () => {
 
   const bill = extractBill(text, subject);
 
-  assert.strictEqual(bill.amountCents, 14550, 'Should extract amount in cents');
+  assert.strictEqual(bill.amount, 145.50, 'Should extract amount in dollars');
   assert.ok(bill.payUrl && bill.payUrl.includes('billing.example.com'), 'Should extract payment URL');
   assert.strictEqual(bill.status, 'todo');
 });
