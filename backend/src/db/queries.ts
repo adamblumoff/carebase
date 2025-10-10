@@ -312,6 +312,11 @@ export async function updateAppointment(id: number, data: AppointmentUpdateReque
   return appointmentRowToAppointment(result.rows[0]);
 }
 
+export async function getAppointmentById(id: number): Promise<Appointment | undefined> {
+  const result = await db.query('SELECT * FROM appointments WHERE id = $1', [id]);
+  return result.rows[0] ? appointmentRowToAppointment(result.rows[0]) : undefined;
+}
+
 export async function deleteAppointment(id: number): Promise<void> {
   await db.query('DELETE FROM appointments WHERE id = $1', [id]);
 }
@@ -361,6 +366,11 @@ export async function updateBill(id: number, data: BillUpdateRequest): Promise<B
     [statementDate, amount, dueDate, payUrl, status, id]
   );
   return billRowToBill(result.rows[0]);
+}
+
+export async function getBillById(id: number): Promise<Bill | undefined> {
+  const result = await db.query('SELECT * FROM bills WHERE id = $1', [id]);
+  return result.rows[0] ? billRowToBill(result.rows[0]) : undefined;
 }
 
 export async function deleteBill(id: number): Promise<void> {
