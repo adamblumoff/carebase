@@ -1,0 +1,158 @@
+/**
+ * Shared TypeScript types for Carebase
+ * Used by both backend and mobile apps
+ */
+
+// ========== USERS ==========
+
+export interface User {
+  id: number;
+  email: string;
+  googleId: string;
+  forwardingAddress: string;
+  planSecret: string;
+  createdAt: Date;
+}
+
+// ========== RECIPIENTS ==========
+
+export interface Recipient {
+  id: number;
+  userId: number;
+  displayName: string;
+  createdAt: Date;
+}
+
+// ========== SOURCES ==========
+
+export type SourceKind = 'email' | 'upload';
+
+export interface Source {
+  id: number;
+  recipientId: number;
+  kind: SourceKind;
+  externalId: string | null;
+  sender: string | null;
+  subject: string | null;
+  shortExcerpt: string | null;
+  storageKey: string | null;
+  createdAt: Date;
+}
+
+// ========== ITEMS ==========
+
+export type ItemType = 'appointment' | 'bill' | 'noise';
+
+export interface Item {
+  id: number;
+  recipientId: number;
+  sourceId: number;
+  detectedType: ItemType;
+  confidence: number; // 0.0 to 1.0
+  createdAt: Date;
+}
+
+// ========== APPOINTMENTS ==========
+
+export interface Appointment {
+  id: number;
+  itemId: number;
+  startLocal: Date;
+  endLocal: Date;
+  location: string | null;
+  prepNote: string | null;
+  summary: string;
+  icsToken: string;
+  createdAt: Date;
+}
+
+// ========== BILLS ==========
+
+export type BillStatus = 'todo' | 'paid' | 'ignore';
+
+export interface Bill {
+  id: number;
+  itemId: number;
+  statementDate: Date | null;
+  amount: number | null; // Decimal amount in dollars
+  dueDate: Date | null;
+  payUrl: string | null;
+  status: BillStatus;
+  taskKey: string;
+  createdAt: Date;
+}
+
+// ========== AUDIT ==========
+
+export interface AuditLog {
+  id: number;
+  itemId: number | null;
+  action: string;
+  meta: Record<string, any>;
+  createdAt: Date;
+}
+
+// ========== API REQUEST/RESPONSE TYPES ==========
+
+export interface AppointmentCreateRequest {
+  startLocal: string; // ISO string
+  endLocal: string; // ISO string
+  location?: string;
+  prepNote?: string;
+  summary: string;
+}
+
+export interface AppointmentUpdateRequest {
+  startLocal?: string;
+  endLocal?: string;
+  location?: string;
+  prepNote?: string;
+  summary?: string;
+}
+
+export interface BillCreateRequest {
+  statementDate?: string; // ISO string (date only)
+  amount?: number;
+  dueDate?: string; // ISO string (date only)
+  payUrl?: string;
+  status?: BillStatus;
+}
+
+export interface BillUpdateRequest {
+  statementDate?: string;
+  amount?: number;
+  dueDate?: string;
+  payUrl?: string;
+  status?: BillStatus;
+}
+
+export interface ReclassifyRequest {
+  newType: ItemType;
+}
+
+// ========== API RESPONSES ==========
+
+export interface UserResponse {
+  user: User;
+  recipient: Recipient;
+}
+
+export interface AppointmentListResponse {
+  appointments: Appointment[];
+}
+
+export interface BillListResponse {
+  bills: Bill[];
+}
+
+export interface ReviewItemResponse {
+  item: Item;
+  source: Source;
+}
+
+export interface ReviewListResponse {
+  items: Array<{
+    item: Item;
+    source: Source;
+  }>;
+}
