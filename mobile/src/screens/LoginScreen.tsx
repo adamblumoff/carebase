@@ -8,6 +8,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
+import * as AuthSession from 'expo-auth-session';
 import apiClient from '../api/client';
 import { API_ENDPOINTS } from '../config';
 import { GOOGLE_CLIENT_ID } from '../config';
@@ -20,19 +21,32 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 export default function LoginScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(false);
 
-  // Configure Google Auth
-  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
+  // Configure Google Auth with backend callback
+  const redirectUri = 'http://localhost:3000/api/auth/google/mobile/callback';
+  console.log('Redirect URI:', redirectUri);
+  console.log('Google Client IDs:', GOOGLE_CLIENT_ID);
+
+  const [request, response, promptAsync] = Google.useAuthRequest({
     clientId: GOOGLE_CLIENT_ID.web,
     iosClientId: GOOGLE_CLIENT_ID.ios,
     androidClientId: GOOGLE_CLIENT_ID.android,
+    redirectUri: redirectUri,
   });
+  console.log('OAuth request created:', request?.url);
 
   // Handle auth response
   useEffect(() => {
     if (response?.type === 'success') {
-      const { id_token } = response.params;
-      handleGoogleSignIn(id_token);
+      // Backend redirects back with id_token in params
+      const idToken = response.params.id_token;
+      if (idToken) {
+        handleGoogleSignIn(idToken);
+      } else {
+        Alert.alert('Error', 'No ID token received');
+        setLoading(false);
+      }
     } else if (response?.type === 'error') {
+      console.error('OAuth error:', response.error);
       Alert.alert('Error', 'Failed to sign in with Google');
       setLoading(false);
     } else if (response?.type === 'cancel') {

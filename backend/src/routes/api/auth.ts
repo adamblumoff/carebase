@@ -58,6 +58,63 @@ router.get('/user', (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/auth/google/mobile/callback
+ * OAuth callback for mobile - exchanges code for ID token and redirects back to app
+ */
+router.get('/google/mobile/callback', async (req: Request, res: Response) => {
+  try {
+    const { code } = req.query;
+
+    if (!code) {
+      return res.status(400).send('Authorization code required');
+    }
+
+    // Exchange authorization code for tokens
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code: code as string,
+        client_id: process.env.GOOGLE_CLIENT_ID!,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+        redirect_uri: `http://localhost:3000/api/auth/google/mobile/callback`,
+        grant_type: 'authorization_code',
+      }),
+    });
+
+    const tokens = await tokenResponse.json();
+
+    if (!tokens.id_token) {
+      return res.status(400).send('Failed to get ID token');
+    }
+
+    // Send HTML page that redirects to the app via custom scheme
+    const appRedirect = `carebase://redirect?id_token=${tokens.id_token}`;
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Signing in...</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <meta http-equiv="refresh" content="0;url=${appRedirect}">
+        </head>
+        <body style="font-family: system-ui; text-align: center; padding: 40px;">
+          <h2>Signing you in...</h2>
+          <p>Redirecting to app...</p>
+          <p><a href="${appRedirect}">Click here if you're not redirected</a></p>
+          <script>
+            window.location.href = '${appRedirect}';
+          </script>
+        </body>
+      </html>
+    `);
+  } catch (error) {
+    console.error('Mobile OAuth callback error:', error);
+    res.status(500).send('Authentication failed');
+  }
+});
+
+/**
  * POST /api/auth/google
  * Exchange Google ID token for session
  */

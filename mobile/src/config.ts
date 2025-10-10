@@ -6,7 +6,7 @@
 // For development on physical device, use your computer's local IP
 // For emulator/simulator, use localhost
 export const API_BASE_URL = __DEV__
-  ? 'http://localhost:3000' // Change to http://192.168.x.x:3000 for physical device
+  ? 'http://172.27.88.132:3000' // Local IP for physical device
   : 'https://your-production-url.com';
 
 // Google OAuth configuration
