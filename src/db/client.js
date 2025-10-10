@@ -1,5 +1,4 @@
 import pg from 'pg';
-import 'dotenv/config';
 
 const { Pool } = pg;
 
@@ -57,4 +56,12 @@ export async function getClient() {
   return client;
 }
 
-export default { query, getClient, pool };
+/**
+ * End the pool (for cleanup in tests)
+ * @returns {Promise} - Pool end
+ */
+export async function end() {
+  return pool.end();
+}
+
+export default { query, getClient, pool, end };
