@@ -25,6 +25,7 @@ export const API_ENDPOINTS = {
   checkSession: '/api/auth/session',
   logout: '/api/auth/logout',
   getUserInfo: '/api/auth/user',
+  exchangeGoogleToken: '/api/auth/google',
 
   // Plan
   getPlan: '/api/plan',

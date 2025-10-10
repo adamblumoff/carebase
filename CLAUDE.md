@@ -83,3 +83,4 @@ Word boundaries matter:
 - Test coverage for all features
 - Don't change unrelated code
 - Consider trade-offs before big decisions
+- never start expo bash process
