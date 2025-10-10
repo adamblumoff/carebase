@@ -1,7 +1,8 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import { createSource, createItem, createAppointment, createBill, createAuditLog, findUserById } from '../db/queries.js';
 import { parseSource } from '../services/parser.js';
 import { storeText } from '../services/storage.js';
+import type { Source } from '@carebase/shared';
 
 const router = express.Router();
 
@@ -10,7 +11,7 @@ const router = express.Router();
  * Expects: { From, To, Subject, TextBody, MessageID }
  * Also supports Resend format for backward compatibility
  */
-router.post('/inbound-email', async (req, res) => {
+router.post('/inbound-email', async (req: Request, res: Response) => {
   try {
     // Handle both Postmark (capitalized) and Resend (lowercase) formats
     const from = req.body.From || req.body.from;
@@ -64,9 +65,9 @@ router.post('/inbound-email', async (req, res) => {
 
 /**
  * Process source and create item
- * @param {Object} source - Source record
+ * @param source - Source record
  */
-async function processSource(source) {
+async function processSource(source: Source): Promise<void> {
   const parsed = parseSource(source);
   const { classification, appointmentData, billData } = parsed;
 

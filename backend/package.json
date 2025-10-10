@@ -5,10 +5,10 @@
   "main": "src/server.js",
   "type": "module",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --import ./preload-env.js --watch src/server.js",
-    "db:migrate": "node --import ./preload-env.js scripts/migrate-to-decimal-amounts.js",
-    "test": "node --test src/**/*.test.js"
+    "start": "tsx src/server.ts",
+    "dev": "node --import ./preload-env.js tsx --watch src/server.ts",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "test": "tsx --test src/**/*.test.ts"
   },
   "keywords": [
     "healthcare",
@@ -29,5 +29,17 @@
     "passport-google-oauth20": "^2.0.0",
     "pg": "^8.11.3",
     "resend": "^3.5.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/express-session": "^1.18.2",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^24.7.1",
+    "@types/node-cron": "^3.0.11",
+    "@types/passport": "^1.0.17",
+    "@types/passport-google-oauth20": "^2.0.16",
+    "@types/pg": "^8.15.5",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
   }
 }

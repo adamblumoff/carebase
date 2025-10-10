@@ -1,14 +1,16 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import { getLowConfidenceItems, reclassifyItem, findItemById, findSourceById } from '../db/queries.js';
 import { parseSource } from '../services/parser.js';
 import { createAppointment, createBill, createAuditLog } from '../db/queries.js';
+import type { ItemType } from '@carebase/shared';
 
 const router = express.Router();
 
 // Middleware to require authentication
-function requireAuth(req, res, next) {
+function requireAuth(req: Request, res: Response, next: NextFunction): void {
   if (!req.user) {
-    return res.redirect('/auth/google');
+    res.redirect('/auth/google');
+    return;
   }
   next();
 }
@@ -16,7 +18,7 @@ function requireAuth(req, res, next) {
 /**
  * GET /review - Show items needing review
  */
-router.get('/', requireAuth, async (req, res) => {
+router.get('/', requireAuth, async (req: Request, res: Response) => {
   try {
     const items = await getLowConfidenceItems();
 
@@ -33,7 +35,7 @@ router.get('/', requireAuth, async (req, res) => {
 /**
  * POST /review/:itemId/reclassify - Reclassify an item
  */
-router.post('/:itemId/reclassify', requireAuth, async (req, res) => {
+router.post('/:itemId/reclassify', requireAuth, async (req: Request, res: Response) => {
   try {
     const { itemId } = req.params;
     const { newType } = req.body; // 'appointment', 'bill', or 'noise'
@@ -43,7 +45,7 @@ router.post('/:itemId/reclassify', requireAuth, async (req, res) => {
     }
 
     // Get item and source
-    const item = await findItemById(itemId);
+    const item = await findItemById(parseInt(itemId));
     if (!item) {
       return res.status(404).json({ error: 'Item not found' });
     }
@@ -51,7 +53,7 @@ router.post('/:itemId/reclassify', requireAuth, async (req, res) => {
     const source = await findSourceById(item.source_id);
 
     // Reclassify item (deletes old appointment/bill)
-    await reclassifyItem(itemId, newType);
+    await reclassifyItem(parseInt(itemId), newType as ItemType);
 
     // Recreate appointment or bill based on new type
     if (newType === 'appointment') {
@@ -60,29 +62,29 @@ router.post('/:itemId/reclassify', requireAuth, async (req, res) => {
       const appointmentData = parsed.appointmentData || {
         startLocal: new Date().toISOString(),
         endLocal: new Date(Date.now() + 3600000).toISOString(), // 1 hour later
-        location: null,
-        prepNote: null,
+        location: undefined,
+        prepNote: undefined,
         summary: source.subject || 'Appointment (needs review)'
       };
-      await createAppointment(itemId, appointmentData);
+      await createAppointment(parseInt(itemId), appointmentData);
     } else if (newType === 'bill') {
       const parsed = parseSource(source);
       // Force create bill even if parser couldn't extract all fields
       const billData = parsed.billData || {
-        statementDate: null,
-        amount: null,
-        dueDate: null,
-        payUrl: null,
-        status: 'todo'
+        statementDate: undefined,
+        amount: undefined,
+        dueDate: undefined,
+        payUrl: undefined,
+        status: 'todo' as const
       };
-      await createBill(itemId, billData);
+      await createBill(parseInt(itemId), billData);
     }
 
     // Log manual reclassification
-    await createAuditLog(itemId, 'manual_reclassify', {
-      oldType: item.detected_type,
+    await createAuditLog(parseInt(itemId), 'manual_reclassify', {
+      oldType: item.detectedType,
       newType,
-      userId: req.user.id
+      userId: req.user!.id
     });
 
     res.json({ success: true });

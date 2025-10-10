@@ -60,8 +60,8 @@ test('Parser: extracts appointment data correctly', () => {
   assert.ok(appointment.startLocal, 'Should have start time');
   assert.ok(appointment.endLocal, 'Should have end time');
   assert.strictEqual(appointment.summary, 'Appointment Reminder');
-  assert.ok(appointment.location.includes('Valley Medical'), 'Should extract location');
-  assert.ok(appointment.prepNote.includes('15 minutes early'), 'Should extract prep note');
+  assert.ok(appointment.location && appointment.location.includes('Valley Medical'), 'Should extract location');
+  assert.ok(appointment.prepNote && appointment.prepNote.includes('15 minutes early'), 'Should extract prep note');
 });
 
 // Test bill extraction
@@ -87,13 +87,20 @@ test('Parser: extracts bill data correctly', () => {
 // Test full parse flow
 test('Parser: parseSource creates correct structure for appointment', () => {
   const source = {
+    id: 1,
+    recipientId: 1,
+    kind: 'email' as const,
+    externalId: null,
+    sender: null,
     subject: 'Appointment Reminder - Dr. Smith',
-    short_excerpt: `
+    shortExcerpt: `
       Your appointment is scheduled for:
       Date: Monday, October 14, 2025
       Time: 2:30 PM
       Location: Valley Medical Center
-    `
+    `,
+    storageKey: null,
+    createdAt: new Date()
   };
 
   const result = parseSource(source);
@@ -105,12 +112,19 @@ test('Parser: parseSource creates correct structure for appointment', () => {
 
 test('Parser: parseSource creates correct structure for bill', () => {
   const source = {
+    id: 2,
+    recipientId: 1,
+    kind: 'email' as const,
+    externalId: null,
+    sender: null,
     subject: 'Medical Bill Statement',
-    short_excerpt: `
+    shortExcerpt: `
       Amount Due: $145.50
       Due Date: October 25, 2025
       Pay online at: https://billing.example.com/pay
-    `
+    `,
+    storageKey: null,
+    createdAt: new Date()
   };
 
   const result = parseSource(source);

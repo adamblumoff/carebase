@@ -10,10 +10,10 @@ const __dirname = dirname(__filename);
 const STORAGE_DIR = join(__dirname, '../../uploads');
 
 // Ensure storage directory exists
-async function ensureStorageDir() {
+async function ensureStorageDir(): Promise<void> {
   try {
     await mkdir(STORAGE_DIR, { recursive: true });
-  } catch (error) {
+  } catch (error: any) {
     if (error.code !== 'EEXIST') {
       throw error;
     }
@@ -22,10 +22,10 @@ async function ensureStorageDir() {
 
 /**
  * Store text content to filesystem
- * @param {string} content - Text content to store
- * @returns {Promise<string>} - Storage key
+ * @param content - Text content to store
+ * @returns Storage key
  */
-export async function storeText(content) {
+export async function storeText(content: string): Promise<string> {
   await ensureStorageDir();
 
   const key = crypto.randomBytes(16).toString('hex');
@@ -37,21 +37,21 @@ export async function storeText(content) {
 
 /**
  * Retrieve text content from filesystem
- * @param {string} key - Storage key
- * @returns {Promise<string>} - Text content
+ * @param key - Storage key
+ * @returns Text content
  */
-export async function retrieveText(key) {
+export async function retrieveText(key: string): Promise<string> {
   const filePath = join(STORAGE_DIR, `${key}.txt`);
   return await readFile(filePath, 'utf8');
 }
 
 /**
  * Store binary file to filesystem
- * @param {Buffer} buffer - File buffer
- * @param {string} ext - File extension
- * @returns {Promise<string>} - Storage key
+ * @param buffer - File buffer
+ * @param ext - File extension
+ * @returns Storage key
  */
-export async function storeFile(buffer, ext = 'bin') {
+export async function storeFile(buffer: Buffer, ext: string = 'bin'): Promise<string> {
   await ensureStorageDir();
 
   const key = crypto.randomBytes(16).toString('hex');
@@ -63,10 +63,10 @@ export async function storeFile(buffer, ext = 'bin') {
 
 /**
  * Retrieve file from filesystem
- * @param {string} key - Storage key
- * @returns {Promise<Buffer>} - File buffer
+ * @param key - Storage key
+ * @returns File buffer
  */
-export async function retrieveFile(key) {
+export async function retrieveFile(key: string): Promise<Buffer> {
   const filePath = join(STORAGE_DIR, key);
   return await readFile(filePath);
 }

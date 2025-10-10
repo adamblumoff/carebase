@@ -6,7 +6,7 @@ import { sendDigestEmail } from '../services/email.js';
 /**
  * Send Friday digest to all users
  */
-async function sendFridayDigests() {
+async function sendFridayDigests(): Promise<void> {
   try {
     console.log('Starting Friday digest job...');
 
@@ -74,7 +74,7 @@ async function sendFridayDigests() {
  * Schedule Friday digest job
  * Runs every Friday at 9 AM (cron: 0 9 * * 5)
  */
-export function scheduleFridayDigest() {
+export function scheduleFridayDigest(): void {
   // Run every Friday at 9 AM
   cron.schedule('0 9 * * 5', () => {
     console.log('Friday digest cron triggered');
@@ -89,6 +89,6 @@ export function scheduleFridayDigest() {
 /**
  * Run digest immediately (for testing)
  */
-export async function runDigestNow() {
+export async function runDigestNow(): Promise<void> {
   await sendFridayDigests();
 }

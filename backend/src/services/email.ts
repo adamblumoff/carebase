@@ -2,12 +2,36 @@ import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+interface DigestAppointment {
+  summary: string;
+  start_local: Date | string;
+  location?: string | null;
+  prep_note?: string | null;
+}
+
+interface DigestBill {
+  amount?: number | null;
+  due_date?: Date | string | null;
+  status: string;
+}
+
+interface DigestRecipient {
+  display_name: string;
+}
+
+interface DigestEmailData {
+  recipient: DigestRecipient;
+  appointments: DigestAppointment[];
+  bills: DigestBill[];
+  planUrl: string;
+}
+
 /**
  * Generate HTML email for Friday digest
- * @param {Object} data - Email data
- * @returns {string} - HTML content
+ * @param data - Email data
+ * @returns HTML content
  */
-function generateDigestHTML(data) {
+function generateDigestHTML(data: DigestEmailData): string {
   const { recipient, appointments, bills, planUrl } = data;
 
   return `
@@ -67,7 +91,7 @@ function generateDigestHTML(data) {
           : bills.map(bill => `
             <div class="item">
               <div class="item-title">
-                ${bill.amount ? `$${parseFloat(bill.amount).toFixed(2)}` : 'Bill'}
+                ${bill.amount ? `$${parseFloat(bill.amount.toString()).toFixed(2)}` : 'Bill'}
                 ${bill.status === 'paid' ? ' ✅' : bill.status === 'todo' ? ' ⏰' : ''}
               </div>
               <div class="item-details">
@@ -94,11 +118,11 @@ function generateDigestHTML(data) {
 
 /**
  * Send Friday digest email
- * @param {string} to - Recipient email
- * @param {Object} data - Email data (recipient, appointments, bills, planUrl)
- * @returns {Promise} - Resend response
+ * @param to - Recipient email
+ * @param data - Email data (recipient, appointments, bills, planUrl)
+ * @returns Resend response
  */
-export async function sendDigestEmail(to, data) {
+export async function sendDigestEmail(to: string, data: DigestEmailData): Promise<any> {
   const html = generateDigestHTML(data);
 
   const result = await resend.emails.send({

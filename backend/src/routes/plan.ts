@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import { ensureAuthenticated, ensureRecipient } from '../middleware/auth.js';
 import {
   getUpcomingAppointments,
@@ -11,13 +11,14 @@ import {
   findRecipientById
 } from '../db/queries.js';
 import db from '../db/client.js';
+import type { BillStatus } from '@carebase/shared';
 
 const router = express.Router();
 
 /**
  * Get plan page - authenticated or via secret token
  */
-router.get('/', async (req, res) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
     let recipient = null;
     let user = null;
@@ -83,7 +84,7 @@ router.get('/', async (req, res) => {
 /**
  * Update appointment
  */
-router.post('/appointment/:id/update', async (req, res) => {
+router.post('/appointment/:id/update', async (req: Request, res: Response) => {
   try {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ error: 'Unauthorized' });
@@ -92,7 +93,7 @@ router.post('/appointment/:id/update', async (req, res) => {
     const { id } = req.params;
     const { summary, startLocal, endLocal, location, prepNote } = req.body;
 
-    await updateAppointment(id, {
+    await updateAppointment(parseInt(id), {
       summary,
       startLocal,
       endLocal,
@@ -110,14 +111,14 @@ router.post('/appointment/:id/update', async (req, res) => {
 /**
  * Delete appointment
  */
-router.post('/appointment/:id/delete', async (req, res) => {
+router.post('/appointment/:id/delete', async (req: Request, res: Response) => {
   try {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
     const { id } = req.params;
-    await deleteAppointment(id);
+    await deleteAppointment(parseInt(id));
 
     res.redirect('/plan');
   } catch (error) {
@@ -129,7 +130,7 @@ router.post('/appointment/:id/delete', async (req, res) => {
 /**
  * Update bill
  */
-router.post('/bill/:id/update', async (req, res) => {
+router.post('/bill/:id/update', async (req: Request, res: Response) => {
   try {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ error: 'Unauthorized' });
@@ -138,12 +139,12 @@ router.post('/bill/:id/update', async (req, res) => {
     const { id } = req.params;
     const { amount, dueDate, statementDate, payUrl, status } = req.body;
 
-    await updateBill(id, {
-      amount: amount ? parseFloat(amount) : null,
-      dueDate: dueDate || null,
-      statementDate: statementDate || null,
-      payUrl: payUrl || null,
-      status: status || 'todo'
+    await updateBill(parseInt(id), {
+      amount: amount ? parseFloat(amount) : undefined,
+      dueDate: dueDate || undefined,
+      statementDate: statementDate || undefined,
+      payUrl: payUrl || undefined,
+      status: (status as BillStatus) || 'todo'
     });
 
     res.redirect('/plan');
@@ -156,14 +157,14 @@ router.post('/bill/:id/update', async (req, res) => {
 /**
  * Delete bill
  */
-router.post('/bill/:id/delete', async (req, res) => {
+router.post('/bill/:id/delete', async (req: Request, res: Response) => {
   try {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
     const { id } = req.params;
-    await deleteBill(id);
+    await deleteBill(parseInt(id));
 
     res.redirect('/plan');
   } catch (error) {

@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import multer from 'multer';
 import { ensureAuthenticated, ensureRecipient } from '../middleware/auth.js';
 import { createSource } from '../db/queries.js';
@@ -27,7 +27,7 @@ const upload = multer({
  * Upload photo of bill
  * POST /upload/photo
  */
-router.post('/photo', ensureAuthenticated, ensureRecipient, upload.single('photo'), async (req, res) => {
+router.post('/photo', ensureAuthenticated, ensureRecipient, upload.single('photo'), async (req: Request, res: Response) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });

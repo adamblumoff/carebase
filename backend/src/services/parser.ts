@@ -2,6 +2,8 @@
  * Rules-based parser for classifying and extracting data from email/upload sources
  */
 
+import type { ItemType, Source, AppointmentCreateRequest, BillCreateRequest } from '@carebase/shared';
+
 // Keywords and patterns for classification
 const APPOINTMENT_KEYWORDS = [
   'appointment', 'visit', 'checkup', 'exam', 'consultation',
@@ -31,12 +33,17 @@ const MONEY_PATTERNS = [
   /\b\d+(?:,\d{3})*(?:\.\d{2})?\s*(?:dollars?|USD)\b/gi
 ];
 
+interface ClassificationResult {
+  type: ItemType;
+  confidence: number;
+}
+
 /**
  * Classify text as appointment, bill, or noise
- * @param {string} text - Text to classify
- * @returns {Object} - { type: string, confidence: number }
+ * @param text - Text to classify
+ * @returns { type: string, confidence: number }
  */
-export function classifyText(text) {
+export function classifyText(text: string): ClassificationResult {
   const lowerText = text.toLowerCase();
 
   // Count keyword matches
@@ -70,15 +77,15 @@ export function classifyText(text) {
 
 /**
  * Extract appointment data from text
- * @param {string} text - Source text
- * @param {string} subject - Email subject or title
- * @returns {Object} - Appointment data
+ * @param text - Source text
+ * @param subject - Email subject or title
+ * @returns Appointment data
  */
-export function extractAppointment(text, subject) {
+export function extractAppointment(text: string, subject: string): AppointmentCreateRequest {
   const combined = `${subject}\n${text}`;
 
   // Extract date
-  let dateStr = null;
+  let dateStr: string | null = null;
   for (const pattern of DATE_PATTERNS) {
     const match = combined.match(pattern);
     if (match) {
@@ -88,7 +95,7 @@ export function extractAppointment(text, subject) {
   }
 
   // Extract time
-  let timeStr = null;
+  let timeStr: string | null = null;
   for (const pattern of TIME_PATTERNS) {
     const match = combined.match(pattern);
     if (match) {
@@ -124,11 +131,11 @@ export function extractAppointment(text, subject) {
 
   // Extract location (look for address-like patterns or clinic names)
   const locationMatch = combined.match(/(?:location:|address:|(?:^|\s)at\s)\s*([^\n]{10,80})/i);
-  const location = locationMatch ? locationMatch[1].trim() : null;
+  const location = locationMatch ? locationMatch[1].trim() : undefined;
 
   // Extract prep note (look for "bring", "prepare", "remember")
   const prepMatch = combined.match(/(?:bring|prepare|remember|arrive|check-in)[\s:]+([^\n]{10,100})/i);
-  const prepNote = prepMatch ? prepMatch[1].trim() : null;
+  const prepNote = prepMatch ? prepMatch[1].trim() : undefined;
 
   // Generate summary from subject or first line
   const summary = subject || text.split('\n')[0].substring(0, 100);
@@ -144,15 +151,15 @@ export function extractAppointment(text, subject) {
 
 /**
  * Extract bill data from text
- * @param {string} text - Source text
- * @param {string} subject - Email subject or title
- * @returns {Object} - Bill data
+ * @param text - Source text
+ * @param subject - Email subject or title
+ * @returns Bill data
  */
-export function extractBill(text, subject) {
+export function extractBill(text: string, subject: string): BillCreateRequest {
   const combined = `${subject}\n${text}`;
 
   // Extract amount
-  let amount = null;
+  let amount: number | undefined = undefined;
   const moneyMatch = combined.match(/\$(\d+(?:,\d{3})*(?:\.\d{2})?)/);
   if (moneyMatch) {
     const amountStr = moneyMatch[1].replace(/,/g, '');
@@ -160,7 +167,7 @@ export function extractBill(text, subject) {
   }
 
   // Extract due date
-  let dueDate = null;
+  let dueDate: string | undefined = undefined;
   const dueDateMatch = combined.match(/(?:due|pay by|payment due)[\s:]+([^\n]{5,30})/i);
   if (dueDateMatch) {
     try {
@@ -171,7 +178,7 @@ export function extractBill(text, subject) {
   }
 
   // Extract statement date
-  let statementDate = null;
+  let statementDate: string | undefined = undefined;
   const stmtMatch = combined.match(/(?:statement date|date)[\s:]+([^\n]{5,30})/i);
   if (stmtMatch) {
     try {
@@ -184,7 +191,7 @@ export function extractBill(text, subject) {
   // Extract payment URL
   const urlMatch = combined.match(/(?:pay at|payment link|pay online)[\s:]+(\S+)/i) ||
                    combined.match(/(https?:\/\/[^\s]+(?:pay|bill|invoice)[^\s]*)/i);
-  const payUrl = urlMatch ? urlMatch[1] : null;
+  const payUrl = urlMatch ? urlMatch[1] : undefined;
 
   return {
     statementDate,
@@ -195,19 +202,25 @@ export function extractBill(text, subject) {
   };
 }
 
+interface ParseResult {
+  classification: ClassificationResult;
+  appointmentData: AppointmentCreateRequest | null;
+  billData: BillCreateRequest | null;
+}
+
 /**
  * Parse source and create appropriate item
- * @param {Object} source - Source record from database
- * @returns {Object} - { classification, appointmentData, billData }
+ * @param source - Source record from database
+ * @returns { classification, appointmentData, billData }
  */
-export function parseSource(source) {
-  const text = source.short_excerpt || '';
+export function parseSource(source: Source): ParseResult {
+  const text = source.shortExcerpt || '';
   const subject = source.subject || '';
 
   const classification = classifyText(`${subject}\n${text}`);
 
-  let appointmentData = null;
-  let billData = null;
+  let appointmentData: AppointmentCreateRequest | null = null;
+  let billData: BillCreateRequest | null = null;
 
   if (classification.type === 'appointment') {
     appointmentData = extractAppointment(text, subject);

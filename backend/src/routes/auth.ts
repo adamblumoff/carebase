@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import passport from '../auth/passport.js';
 import { createRecipient, findRecipientsByUserId } from '../db/queries.js';
 
@@ -11,8 +11,12 @@ router.get('/google', passport.authenticate('google', { scope: ['profile', 'emai
 router.get(
   '/google/callback',
   passport.authenticate('google', { failureRedirect: '/' }),
-  async (req, res) => {
+  async (req: Request, res: Response) => {
     try {
+      if (!req.user) {
+        return res.redirect('/');
+      }
+
       // Create default recipient if this is a new user
       const recipients = await findRecipientsByUserId(req.user.id);
 
@@ -29,7 +33,7 @@ router.get(
 );
 
 // Logout
-router.get('/logout', (req, res) => {
+router.get('/logout', (req: Request, res: Response) => {
   req.logout((err) => {
     if (err) {
       console.error('Logout error:', err);

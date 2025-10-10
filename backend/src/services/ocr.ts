@@ -4,10 +4,10 @@
 
 /**
  * Extract text from image using Google Cloud Vision
- * @param {Buffer} imageBuffer - Image file buffer
- * @returns {Promise<string>} - Extracted text
+ * @param imageBuffer - Image file buffer
+ * @returns Extracted text
  */
-export async function extractTextFromImage(imageBuffer) {
+export async function extractTextFromImage(imageBuffer: Buffer): Promise<string> {
   try {
     // Check if Google Cloud credentials are configured
     if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
@@ -42,11 +42,11 @@ export async function extractTextFromImage(imageBuffer) {
 
 /**
  * Extract short excerpt from OCR text (first few lines)
- * @param {string} text - Full OCR text
- * @param {number} maxLength - Maximum length (default 500)
- * @returns {string} - Short excerpt
+ * @param text - Full OCR text
+ * @param maxLength - Maximum length (default 500)
+ * @returns Short excerpt
  */
-export function getShortExcerpt(text, maxLength = 500) {
+export function getShortExcerpt(text: string, maxLength: number = 500): string {
   if (!text) return '';
 
   // Take first N characters or first few lines

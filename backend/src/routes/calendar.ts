@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import { findAppointmentByIcsToken } from '../db/queries.js';
 import { generateICS } from '../services/ics.js';
 
@@ -8,7 +8,7 @@ const router = express.Router();
  * Serve ICS file by token
  * GET /calendar/:token.ics
  */
-router.get('/:token.ics', async (req, res) => {
+router.get('/:token.ics', async (req: Request, res: Response) => {
   try {
     const { token } = req.params;
 

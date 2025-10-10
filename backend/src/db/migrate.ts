@@ -6,7 +6,7 @@ import db from './client.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-async function migrate() {
+async function migrate(): Promise<void> {
   try {
     console.log('Running database migrations...');
 
