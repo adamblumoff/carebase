@@ -1,20 +1,9 @@
-import dotenv from 'dotenv';
-import { existsSync } from 'fs';
 import express from 'express';
 import session from 'express-session';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
-// Load environment variables
-// .env.local for local development, Railway injects env vars directly
-if (existsSync('.env.local')) {
-  dotenv.config({ path: '.env.local' });
-  console.log('📝 Loaded .env.local (local development)');
-} else {
-  console.log('☁️  Using Railway environment variables (production)');
-}
-
-// NOW import everything else after env vars are loaded
+// Environment variables loaded via preload-env.js (for dev) or Railway (for production)
 import passportConfig from './auth/passport.js';
 import authRoutes from './routes/auth.js';
 import webhookRoutes from './routes/webhook.js';
