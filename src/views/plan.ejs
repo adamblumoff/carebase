@@ -104,11 +104,27 @@
                         <div class="grid grid-cols-2 gap-4">
                           <div>
                             <label class="block text-sm font-medium text-gray-700">Start Time</label>
-                            <input type="datetime-local" name="startLocal" value="<%= new Date(appt.start_local).toISOString().slice(0, 16) %>" class="mt-1 block w-full rounded border-gray-300 shadow-sm px-3 py-2 border">
+                            <%
+                              const startDate = new Date(appt.start_local);
+                              const startLocalStr = startDate.getFullYear() + '-' +
+                                String(startDate.getMonth() + 1).padStart(2, '0') + '-' +
+                                String(startDate.getDate()).padStart(2, '0') + 'T' +
+                                String(startDate.getHours()).padStart(2, '0') + ':' +
+                                String(startDate.getMinutes()).padStart(2, '0');
+                            %>
+                            <input type="datetime-local" name="startLocal" value="<%= startLocalStr %>" class="mt-1 block w-full rounded border-gray-300 shadow-sm px-3 py-2 border">
                           </div>
                           <div>
                             <label class="block text-sm font-medium text-gray-700">End Time</label>
-                            <input type="datetime-local" name="endLocal" value="<%= new Date(appt.end_local).toISOString().slice(0, 16) %>" class="mt-1 block w-full rounded border-gray-300 shadow-sm px-3 py-2 border">
+                            <%
+                              const endDate = new Date(appt.end_local);
+                              const endLocalStr = endDate.getFullYear() + '-' +
+                                String(endDate.getMonth() + 1).padStart(2, '0') + '-' +
+                                String(endDate.getDate()).padStart(2, '0') + 'T' +
+                                String(endDate.getHours()).padStart(2, '0') + ':' +
+                                String(endDate.getMinutes()).padStart(2, '0');
+                            %>
+                            <input type="datetime-local" name="endLocal" value="<%= endLocalStr %>" class="mt-1 block w-full rounded border-gray-300 shadow-sm px-3 py-2 border">
                           </div>
                         </div>
                         <div>
