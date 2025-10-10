@@ -2,6 +2,7 @@
  * API client for making requests to the backend
  */
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config';
 
 export const apiClient = axios.create({
@@ -13,10 +14,22 @@ export const apiClient = axios.create({
   },
 });
 
-// Request interceptor
+// Request interceptor - add session ID from AsyncStorage to Cookie header
 apiClient.interceptors.request.use(
-  (config) => {
+  async (config) => {
     console.log(`[API] ${config.method?.toUpperCase()} ${config.url}`);
+
+    // Get session ID from AsyncStorage and add it as a cookie header
+    try {
+      const sessionId = await AsyncStorage.getItem('sessionId');
+      if (sessionId) {
+        config.headers.Cookie = `connect.sid=${sessionId}`;
+        console.log('[API] Added session cookie to request');
+      }
+    } catch (error) {
+      console.error('[API] Failed to get session ID:', error);
+    }
+
     return config;
   },
   (error) => {

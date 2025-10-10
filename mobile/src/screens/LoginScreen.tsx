@@ -7,7 +7,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import * as WebBrowser from 'expo-web-browser';
-import CookieManager from '@react-native-cookies/cookies';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../api/client';
 import { API_ENDPOINTS, API_BASE_URL } from '../config';
 
@@ -42,18 +42,12 @@ export default function LoginScreen({ navigation }: Props) {
         if (sessionId) {
           console.log('Received session ID:', sessionId);
 
-          // Set the session cookie so axios can use it
+          // Store session ID in AsyncStorage so axios interceptor can use it
           try {
-            const baseUrl = new URL(API_BASE_URL);
-            await CookieManager.set(baseUrl.origin, {
-              name: 'connect.sid',
-              value: sessionId,
-              path: '/',
-              domain: baseUrl.hostname,
-            });
-            console.log('Session cookie set successfully');
-          } catch (cookieError) {
-            console.error('Failed to set session cookie:', cookieError);
+            await AsyncStorage.setItem('sessionId', sessionId);
+            console.log('Session ID stored successfully');
+          } catch (storageError) {
+            console.error('Failed to store session ID:', storageError);
           }
         }
 
