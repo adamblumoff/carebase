@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "tsx src/server.ts",
-    "dev": "node --import ./preload-env.js tsx --watch src/server.ts",
+    "dev": "tsx watch src/server.ts",
     "db:migrate": "tsx src/db/migrate.ts",
     "test": "tsx --test src/**/*.test.ts"
   },
