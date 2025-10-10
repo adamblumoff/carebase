@@ -32,13 +32,29 @@ export default function LoginScreen({ navigation }: Props) {
       console.log('WebBrowser result:', result);
 
       if (result.type === 'success') {
-        // Try to get cookies from the browser session
-        try {
-          const baseUrl = new URL(API_BASE_URL);
-          const cookies = await CookieManager.get(baseUrl.origin);
-          console.log('Cookies after OAuth:', cookies);
-        } catch (cookieError) {
-          console.warn('Could not fetch cookies:', cookieError);
+        // Extract session ID from the redirect URL
+        const url = result.url;
+        console.log('Success URL:', url);
+
+        const params = new URLSearchParams(url.split('?')[1]);
+        const sessionId = params.get('sessionId');
+
+        if (sessionId) {
+          console.log('Received session ID:', sessionId);
+
+          // Set the session cookie so axios can use it
+          try {
+            const baseUrl = new URL(API_BASE_URL);
+            await CookieManager.set(baseUrl.origin, {
+              name: 'connect.sid',
+              value: sessionId,
+              path: '/',
+              domain: baseUrl.hostname,
+            });
+            console.log('Session cookie set successfully');
+          } catch (cookieError) {
+            console.error('Failed to set session cookie:', cookieError);
+          }
         }
 
         // Check if we're now authenticated by checking session
@@ -51,7 +67,7 @@ export default function LoginScreen({ navigation }: Props) {
           navigation.replace('Plan');
         } else {
           console.error('Session not authenticated');
-          Alert.alert('Error', 'Authentication succeeded but session was not created. Cookies may not be shared between browser and app.');
+          Alert.alert('Error', 'Authentication succeeded but session was not created.');
           setLoading(false);
         }
       } else if (result.type === 'cancel') {

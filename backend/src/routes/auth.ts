@@ -36,8 +36,11 @@ router.get(
       if (isMobile) {
         // Clear mobile flag from session
         delete req.session!.mobile;
-        // Redirect back to mobile app
-        res.redirect('carebase://auth/success');
+
+        // Pass session cookie name in the redirect so mobile can use it
+        // The session ID is in req.sessionID
+        const sessionId = req.sessionID;
+        res.redirect(`carebase://auth/success?sessionId=${encodeURIComponent(sessionId)}`);
       } else {
         // Redirect to web app
         res.redirect('/plan');
