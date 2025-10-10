@@ -5,9 +5,15 @@ import { createRecipient, findRecipientsByUserId } from '../db/queries.js';
 const router = express.Router();
 
 // Initiate Google OAuth
-router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+router.get('/google', (req: Request, res: Response, next) => {
+  // Store mobile flag in session if present
+  if (req.query.mobile === 'true') {
+    req.session!.mobile = true;
+  }
+  passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
+});
 
-// Google OAuth callback (web)
+// Google OAuth callback (web and mobile)
 router.get(
   '/google/callback',
   passport.authenticate('google', { failureRedirect: '/' }),
@@ -24,7 +30,18 @@ router.get(
         await createRecipient(req.user.id, 'My Care Recipient');
       }
 
-      res.redirect('/plan');
+      // Check if this is a mobile request (from the mobile app)
+      const isMobile = req.session?.mobile;
+
+      if (isMobile) {
+        // Clear mobile flag from session
+        delete req.session!.mobile;
+        // Redirect back to mobile app
+        res.redirect('carebase://auth/success');
+      } else {
+        // Redirect to web app
+        res.redirect('/plan');
+      }
     } catch (error) {
       console.error('Error creating default recipient:', error);
       res.redirect('/');

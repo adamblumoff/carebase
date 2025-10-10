@@ -1,17 +1,14 @@
 /**
  * Login Screen
- * Google OAuth Sign In
+ * Google OAuth Sign In using WebBrowser and Passport backend
  */
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, Alert, Linking } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, Alert } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
-import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
-import * as AuthSession from 'expo-auth-session';
 import apiClient from '../api/client';
 import { API_ENDPOINTS, API_BASE_URL } from '../config';
-import { GOOGLE_CLIENT_ID } from '../config';
 
 // Required for web browser to close properly after auth
 WebBrowser.maybeCompleteAuthSession();
@@ -21,101 +18,39 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 export default function LoginScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(false);
 
-  // Configure Google Auth with backend callback
-  // Must use localhost (not IP) as Google OAuth doesn't allow IP addresses
-  // For Android: run `adb reverse tcp:3000 tcp:3000` to forward localhost to dev machine
-  const redirectUri = 'http://localhost:3000/api/auth/google/mobile/callback';
-  console.log('Redirect URI:', redirectUri);
-  console.log('Google Client IDs:', GOOGLE_CLIENT_ID);
-
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    clientId: GOOGLE_CLIENT_ID.web,
-    iosClientId: GOOGLE_CLIENT_ID.ios,
-    androidClientId: GOOGLE_CLIENT_ID.android,
-    redirectUri: redirectUri,
-  });
-  console.log('OAuth request created:', request?.url);
-
-  // Handle deep link from backend OAuth callback
-  useEffect(() => {
-    const handleDeepLink = (event: { url: string }) => {
-      console.log('Deep link received:', event.url);
-
-      // Parse the deep link URL: carebase://redirect?id_token=...
-      const url = event.url;
-      if (url.startsWith('carebase://redirect')) {
-        const params = new URLSearchParams(url.split('?')[1]);
-        const idToken = params.get('id_token');
-
-        if (idToken) {
-          handleGoogleSignIn(idToken);
-        } else {
-          Alert.alert('Error', 'No ID token received from authentication');
-          setLoading(false);
-        }
-      }
-    };
-
-    // Listen for deep links
-    const subscription = Linking.addEventListener('url', handleDeepLink);
-
-    // Check if app was opened with a deep link
-    Linking.getInitialURL().then((url) => {
-      if (url) {
-        handleDeepLink({ url });
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, []);
-
-  // Handle auth response (fallback for direct OAuth flow)
-  useEffect(() => {
-    if (response?.type === 'success') {
-      // Backend redirects back with id_token in params
-      const idToken = response.params.id_token;
-      if (idToken) {
-        handleGoogleSignIn(idToken);
-      } else {
-        Alert.alert('Error', 'No ID token received');
-        setLoading(false);
-      }
-    } else if (response?.type === 'error') {
-      console.error('OAuth error:', response.error);
-      Alert.alert('Error', 'Failed to sign in with Google');
-      setLoading(false);
-    } else if (response?.type === 'cancel') {
-      setLoading(false);
-    }
-  }, [response]);
-
-  const handleGoogleSignIn = async (idToken: string) => {
+  const handleLogin = async () => {
     setLoading(true);
     try {
-      // Exchange Google token for our session
-      const result = await apiClient.post(API_ENDPOINTS.exchangeGoogleToken || '/api/auth/google', {
-        idToken
-      });
+      // Open OAuth flow in browser - uses Passport's built-in OAuth handling
+      // Backend will handle the OAuth dance and create a session
+      const result = await WebBrowser.openAuthSessionAsync(
+        `${API_BASE_URL}/auth/google?mobile=true`,
+        'carebase://'
+      );
 
-      if (result.data.success) {
-        // Navigate to main app
-        navigation.replace('Plan');
+      console.log('WebBrowser result:', result);
+
+      if (result.type === 'success') {
+        // Check if we're now authenticated by checking session
+        const sessionCheck = await apiClient.get(API_ENDPOINTS.checkSession);
+
+        if (sessionCheck.data.authenticated) {
+          navigation.replace('Plan');
+        } else {
+          Alert.alert('Error', 'Authentication succeeded but session was not created');
+          setLoading(false);
+        }
+      } else if (result.type === 'cancel') {
+        setLoading(false);
       } else {
-        Alert.alert('Error', 'Failed to create session');
+        Alert.alert('Error', 'Authentication failed');
+        setLoading(false);
       }
     } catch (error: any) {
       console.error('Sign in error:', error);
-      Alert.alert('Error', error.response?.data?.error || 'Failed to sign in');
-    } finally {
+      Alert.alert('Error', error.message || 'Failed to sign in');
       setLoading(false);
     }
-  };
-
-  const handleLogin = () => {
-    setLoading(true);
-    promptAsync();
   };
 
   const handleContinueWithoutAuth = () => {
