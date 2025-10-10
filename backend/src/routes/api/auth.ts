@@ -69,10 +69,9 @@ router.get('/google/mobile/callback', async (req: Request, res: Response) => {
       return res.status(400).send('Authorization code required');
     }
 
-    // Construct the redirect URI from the request
-    const protocol = req.protocol;
-    const host = req.get('host');
-    const redirectUri = `${protocol}://${host}/api/auth/google/mobile/callback`;
+    // Must use localhost:3000 to match what was sent to Google OAuth
+    // (Google doesn't allow IP addresses in redirect URIs)
+    const redirectUri = 'http://localhost:3000/api/auth/google/mobile/callback';
 
     // Exchange authorization code for tokens
     const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {

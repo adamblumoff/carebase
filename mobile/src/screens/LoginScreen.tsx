@@ -22,7 +22,9 @@ export default function LoginScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(false);
 
   // Configure Google Auth with backend callback
-  const redirectUri = `${API_BASE_URL}/api/auth/google/mobile/callback`;
+  // Must use localhost (not IP) as Google OAuth doesn't allow IP addresses
+  // For Android: run `adb reverse tcp:3000 tcp:3000` to forward localhost to dev machine
+  const redirectUri = 'http://localhost:3000/api/auth/google/mobile/callback';
   console.log('Redirect URI:', redirectUri);
   console.log('Google Client IDs:', GOOGLE_CLIENT_ID);
 
