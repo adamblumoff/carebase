@@ -3,14 +3,14 @@
  * Google OAuth Sign In
  */
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, Alert, Linking } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import apiClient from '../api/client';
-import { API_ENDPOINTS } from '../config';
+import { API_ENDPOINTS, API_BASE_URL } from '../config';
 import { GOOGLE_CLIENT_ID } from '../config';
 
 // Required for web browser to close properly after auth
@@ -22,7 +22,7 @@ export default function LoginScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(false);
 
   // Configure Google Auth with backend callback
-  const redirectUri = 'http://localhost:3000/api/auth/google/mobile/callback';
+  const redirectUri = `${API_BASE_URL}/api/auth/google/mobile/callback`;
   console.log('Redirect URI:', redirectUri);
   console.log('Google Client IDs:', GOOGLE_CLIENT_ID);
 
@@ -34,7 +34,42 @@ export default function LoginScreen({ navigation }: Props) {
   });
   console.log('OAuth request created:', request?.url);
 
-  // Handle auth response
+  // Handle deep link from backend OAuth callback
+  useEffect(() => {
+    const handleDeepLink = (event: { url: string }) => {
+      console.log('Deep link received:', event.url);
+
+      // Parse the deep link URL: carebase://redirect?id_token=...
+      const url = event.url;
+      if (url.startsWith('carebase://redirect')) {
+        const params = new URLSearchParams(url.split('?')[1]);
+        const idToken = params.get('id_token');
+
+        if (idToken) {
+          handleGoogleSignIn(idToken);
+        } else {
+          Alert.alert('Error', 'No ID token received from authentication');
+          setLoading(false);
+        }
+      }
+    };
+
+    // Listen for deep links
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+
+    // Check if app was opened with a deep link
+    Linking.getInitialURL().then((url) => {
+      if (url) {
+        handleDeepLink({ url });
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  // Handle auth response (fallback for direct OAuth flow)
   useEffect(() => {
     if (response?.type === 'success') {
       // Backend redirects back with id_token in params
