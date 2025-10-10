@@ -1,25 +1,15 @@
-// Load environment variables FIRST, before any other imports
-import dotenv from 'dotenv';
-import { existsSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// Try root first, then backend directory
-const envPath = existsSync(join(__dirname, '../../.env.local'))
-  ? join(__dirname, '../../.env.local')
-  : join(__dirname, '../.env.local');
-
-if (existsSync(envPath)) {
-  dotenv.config({ path: envPath });
-  console.log('📝 Loaded environment from', envPath);
-}
+// Load environment variables FIRST
+import './env.js';
 
 // Now import everything else
 import express, { Request, Response } from 'express';
 import session from 'express-session';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 import passportConfig from './auth/passport.js';
 import authRoutes from './routes/auth.js';
 import webhookRoutes from './routes/webhook.js';

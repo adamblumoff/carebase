@@ -27,8 +27,5 @@
   "license": "UNLICENSED",
   "devDependencies": {
     "concurrently": "^8.2.2"
-  },
-  "overrides": {
-    "react": "19.1.0"
   }
 }
