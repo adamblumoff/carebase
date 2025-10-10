@@ -141,6 +141,22 @@ export async function getUpcomingAppointments(recipientId, startDate, endDate) {
   return result.rows;
 }
 
+export async function updateAppointment(id, data) {
+  const { startLocal, endLocal, location, prepNote, summary } = data;
+  const result = await db.query(
+    `UPDATE appointments
+     SET start_local = $1, end_local = $2, location = $3, prep_note = $4, summary = $5
+     WHERE id = $6
+     RETURNING *`,
+    [startLocal, endLocal, location, prepNote, summary, id]
+  );
+  return result.rows[0];
+}
+
+export async function deleteAppointment(id) {
+  await db.query('DELETE FROM appointments WHERE id = $1', [id]);
+}
+
 // ========== BILLS ==========
 
 export async function createBill(itemId, data) {
@@ -174,6 +190,22 @@ export async function getUpcomingBills(recipientId, startDate, endDate) {
     [recipientId, startDate, endDate]
   );
   return result.rows;
+}
+
+export async function updateBill(id, data) {
+  const { statementDate, amountCents, dueDate, payUrl, status } = data;
+  const result = await db.query(
+    `UPDATE bills
+     SET statement_date = $1, amount_cents = $2, due_date = $3, pay_url = $4, status = $5
+     WHERE id = $6
+     RETURNING *`,
+    [statementDate, amountCents, dueDate, payUrl, status, id]
+  );
+  return result.rows[0];
+}
+
+export async function deleteBill(id) {
+  await db.query('DELETE FROM bills WHERE id = $1', [id]);
 }
 
 // ========== AUDIT ==========

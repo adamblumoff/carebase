@@ -38,41 +38,99 @@
         <% } else { %>
           <div class="space-y-4">
             <% appointments.forEach(appt => { %>
-              <div class="bg-white rounded-lg shadow p-6">
-                <div class="flex justify-between items-start">
-                  <div class="flex-1">
-                    <h3 class="font-semibold text-lg text-gray-900"><%= appt.summary %></h3>
-                    <div class="mt-2 space-y-1 text-sm text-gray-600">
-                      <p>
-                        <span class="font-medium">When:</span>
-                        <%= new Date(appt.start_local).toLocaleDateString('en-US', {
-                          weekday: 'long',
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric'
-                        }) %>
-                        at
-                        <%= new Date(appt.start_local).toLocaleTimeString('en-US', {
-                          hour: 'numeric',
-                          minute: '2-digit',
-                          hour12: true
-                        }) %>
-                      </p>
-                      <% if (appt.location) { %>
-                        <p><span class="font-medium">Where:</span> <%= appt.location %></p>
-                      <% } %>
-                      <% if (appt.prep_note) { %>
-                        <p><span class="font-medium">Prepare:</span> <%= appt.prep_note %></p>
+              <div class="bg-white rounded-lg shadow p-6" id="appt-<%= appt.id %>">
+                <!-- View Mode -->
+                <div id="appt-view-<%= appt.id %>">
+                  <div class="flex justify-between items-start">
+                    <div class="flex-1">
+                      <h3 class="font-semibold text-lg text-gray-900"><%= appt.summary %></h3>
+                      <div class="mt-2 space-y-1 text-sm text-gray-600">
+                        <p>
+                          <span class="font-medium">When:</span>
+                          <%= new Date(appt.start_local).toLocaleDateString('en-US', {
+                            weekday: 'long',
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          }) %>
+                          at
+                          <%= new Date(appt.start_local).toLocaleTimeString('en-US', {
+                            hour: 'numeric',
+                            minute: '2-digit',
+                            hour12: true
+                          }) %>
+                        </p>
+                        <% if (appt.location) { %>
+                          <p><span class="font-medium">Where:</span> <%= appt.location %></p>
+                        <% } %>
+                        <% if (appt.prep_note) { %>
+                          <p><span class="font-medium">Prepare:</span> <%= appt.prep_note %></p>
+                        <% } %>
+                      </div>
+                    </div>
+                    <div class="ml-4 flex flex-col gap-2">
+                      <a
+                        href="<%= baseUrl %>/calendar/<%= appt.ics_token %>.ics"
+                        class="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 text-center"
+                      >
+                        Add to Calendar
+                      </a>
+                      <% if (user) { %>
+                        <button
+                          onclick="toggleEdit('appt', <%= appt.id %>)"
+                          class="bg-gray-500 text-white px-4 py-2 rounded text-sm hover:bg-gray-600"
+                        >
+                          Edit
+                        </button>
+                        <form action="/plan/appointment/<%= appt.id %>/delete" method="POST" onsubmit="return confirm('Delete this appointment?')">
+                          <button type="submit" class="w-full bg-red-500 text-white px-4 py-2 rounded text-sm hover:bg-red-600">
+                            Delete
+                          </button>
+                        </form>
                       <% } %>
                     </div>
                   </div>
-                  <a
-                    href="<%= baseUrl %>/calendar/<%= appt.ics_token %>.ics"
-                    class="ml-4 bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
-                  >
-                    Add to Calendar
-                  </a>
                 </div>
+
+                <!-- Edit Mode -->
+                <% if (user) { %>
+                  <div id="appt-edit-<%= appt.id %>" class="hidden">
+                    <form action="/plan/appointment/<%= appt.id %>/update" method="POST">
+                      <div class="space-y-4">
+                        <div>
+                          <label class="block text-sm font-medium text-gray-700">Summary</label>
+                          <input type="text" name="summary" value="<%= appt.summary %>" class="mt-1 block w-full rounded border-gray-300 shadow-sm px-3 py-2 border">
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                          <div>
+                            <label class="block text-sm font-medium text-gray-700">Start Time</label>
+                            <input type="datetime-local" name="startLocal" value="<%= appt.start_local.slice(0, 16) %>" class="mt-1 block w-full rounded border-gray-300 shadow-sm px-3 py-2 border">
+                          </div>
+                          <div>
+                            <label class="block text-sm font-medium text-gray-700">End Time</label>
+                            <input type="datetime-local" name="endLocal" value="<%= appt.end_local.slice(0, 16) %>" class="mt-1 block w-full rounded border-gray-300 shadow-sm px-3 py-2 border">
+                          </div>
+                        </div>
+                        <div>
+                          <label class="block text-sm font-medium text-gray-700">Location</label>
+                          <input type="text" name="location" value="<%= appt.location || '' %>" class="mt-1 block w-full rounded border-gray-300 shadow-sm px-3 py-2 border">
+                        </div>
+                        <div>
+                          <label class="block text-sm font-medium text-gray-700">Prep Note</label>
+                          <textarea name="prepNote" rows="2" class="mt-1 block w-full rounded border-gray-300 shadow-sm px-3 py-2 border"><%= appt.prep_note || '' %></textarea>
+                        </div>
+                        <div class="flex gap-2">
+                          <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700">
+                            Save
+                          </button>
+                          <button type="button" onclick="toggleEdit('appt', <%= appt.id %>)" class="bg-gray-500 text-white px-4 py-2 rounded text-sm hover:bg-gray-600">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </form>
+                  </div>
+                <% } %>
               </div>
             <% }) %>
           </div>
@@ -90,55 +148,118 @@
         <% } else { %>
           <div class="space-y-4">
             <% bills.forEach(bill => { %>
-              <div class="bg-white rounded-lg shadow p-6">
-                <div class="flex justify-between items-start">
-                  <div class="flex-1">
-                    <div class="flex items-center gap-3">
-                      <h3 class="font-semibold text-lg text-gray-900">
-                        <% if (bill.amount_cents) { %>
-                          $<%= (bill.amount_cents / 100).toFixed(2) %>
-                        <% } else { %>
-                          Bill
+              <div class="bg-white rounded-lg shadow p-6" id="bill-<%= bill.id %>">
+                <!-- View Mode -->
+                <div id="bill-view-<%= bill.id %>">
+                  <div class="flex justify-between items-start">
+                    <div class="flex-1">
+                      <div class="flex items-center gap-3">
+                        <h3 class="font-semibold text-lg text-gray-900">
+                          <% if (bill.amount_cents) { %>
+                            $<%= (bill.amount_cents / 100).toFixed(2) %>
+                          <% } else { %>
+                            Bill
+                          <% } %>
+                        </h3>
+                        <span class="px-2 py-1 text-xs rounded <%= bill.status === 'paid' ? 'bg-green-100 text-green-800' : bill.status === 'ignore' ? 'bg-gray-100 text-gray-600' : 'bg-yellow-100 text-yellow-800' %>">
+                          <%= bill.status %>
+                        </span>
+                      </div>
+                      <div class="mt-2 space-y-1 text-sm text-gray-600">
+                        <% if (bill.due_date) { %>
+                          <p>
+                            <span class="font-medium">Due:</span>
+                            <%= new Date(bill.due_date).toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric'
+                            }) %>
+                          </p>
                         <% } %>
-                      </h3>
-                      <span class="px-2 py-1 text-xs rounded <%= bill.status === 'paid' ? 'bg-green-100 text-green-800' : bill.status === 'ignore' ? 'bg-gray-100 text-gray-600' : 'bg-yellow-100 text-yellow-800' %>">
-                        <%= bill.status %>
-                      </span>
+                        <% if (bill.statement_date) { %>
+                          <p>
+                            <span class="font-medium">Statement Date:</span>
+                            <%= new Date(bill.statement_date).toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric'
+                            }) %>
+                          </p>
+                        <% } %>
+                      </div>
                     </div>
-                    <div class="mt-2 space-y-1 text-sm text-gray-600">
-                      <% if (bill.due_date) { %>
-                        <p>
-                          <span class="font-medium">Due:</span>
-                          <%= new Date(bill.due_date).toLocaleDateString('en-US', {
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric'
-                          }) %>
-                        </p>
+                    <div class="ml-4 flex flex-col gap-2">
+                      <% if (bill.pay_url && bill.status === 'todo') { %>
+                        <a
+                          href="<%= bill.pay_url %>"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 text-center"
+                        >
+                          Pay Now
+                        </a>
                       <% } %>
-                      <% if (bill.statement_date) { %>
-                        <p>
-                          <span class="font-medium">Statement Date:</span>
-                          <%= new Date(bill.statement_date).toLocaleDateString('en-US', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric'
-                          }) %>
-                        </p>
+                      <% if (user) { %>
+                        <button
+                          onclick="toggleEdit('bill', <%= bill.id %>)"
+                          class="bg-gray-500 text-white px-4 py-2 rounded text-sm hover:bg-gray-600"
+                        >
+                          Edit
+                        </button>
+                        <form action="/plan/bill/<%= bill.id %>/delete" method="POST" onsubmit="return confirm('Delete this bill?')">
+                          <button type="submit" class="w-full bg-red-500 text-white px-4 py-2 rounded text-sm hover:bg-red-600">
+                            Delete
+                          </button>
+                        </form>
                       <% } %>
                     </div>
                   </div>
-                  <% if (bill.pay_url && bill.status === 'todo') { %>
-                    <a
-                      href="<%= bill.pay_url %>"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="ml-4 bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700"
-                    >
-                      Pay Now
-                    </a>
-                  <% } %>
                 </div>
+
+                <!-- Edit Mode -->
+                <% if (user) { %>
+                  <div id="bill-edit-<%= bill.id %>" class="hidden">
+                    <form action="/plan/bill/<%= bill.id %>/update" method="POST">
+                      <div class="space-y-4">
+                        <div>
+                          <label class="block text-sm font-medium text-gray-700">Amount (cents)</label>
+                          <input type="number" name="amountCents" value="<%= bill.amount_cents || '' %>" class="mt-1 block w-full rounded border-gray-300 shadow-sm px-3 py-2 border">
+                          <p class="text-xs text-gray-500 mt-1">Enter amount in cents (e.g., 14550 for $145.50)</p>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                          <div>
+                            <label class="block text-sm font-medium text-gray-700">Due Date</label>
+                            <input type="date" name="dueDate" value="<%= bill.due_date || '' %>" class="mt-1 block w-full rounded border-gray-300 shadow-sm px-3 py-2 border">
+                          </div>
+                          <div>
+                            <label class="block text-sm font-medium text-gray-700">Statement Date</label>
+                            <input type="date" name="statementDate" value="<%= bill.statement_date || '' %>" class="mt-1 block w-full rounded border-gray-300 shadow-sm px-3 py-2 border">
+                          </div>
+                        </div>
+                        <div>
+                          <label class="block text-sm font-medium text-gray-700">Payment URL</label>
+                          <input type="url" name="payUrl" value="<%= bill.pay_url || '' %>" class="mt-1 block w-full rounded border-gray-300 shadow-sm px-3 py-2 border">
+                        </div>
+                        <div>
+                          <label class="block text-sm font-medium text-gray-700">Status</label>
+                          <select name="status" class="mt-1 block w-full rounded border-gray-300 shadow-sm px-3 py-2 border">
+                            <option value="todo" <%= bill.status === 'todo' ? 'selected' : '' %>>To Do</option>
+                            <option value="paid" <%= bill.status === 'paid' ? 'selected' : '' %>>Paid</option>
+                            <option value="ignore" <%= bill.status === 'ignore' ? 'selected' : '' %>>Ignore</option>
+                          </select>
+                        </div>
+                        <div class="flex gap-2">
+                          <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700">
+                            Save
+                          </button>
+                          <button type="button" onclick="toggleEdit('bill', <%= bill.id %>)" class="bg-gray-500 text-white px-4 py-2 rounded text-sm hover:bg-gray-600">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </form>
+                  </div>
+                <% } %>
               </div>
             <% }) %>
           </div>
@@ -146,5 +267,17 @@
       </div>
     </div>
   </div>
+
+  <script>
+    function toggleEdit(type, id) {
+      const viewEl = document.getElementById(`${type}-view-${id}`);
+      const editEl = document.getElementById(`${type}-edit-${id}`);
+
+      if (viewEl && editEl) {
+        viewEl.classList.toggle('hidden');
+        editEl.classList.toggle('hidden');
+      }
+    }
+  </script>
 </body>
 </html>

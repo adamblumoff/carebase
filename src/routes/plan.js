@@ -1,6 +1,15 @@
 import express from 'express';
 import { ensureAuthenticated, ensureRecipient } from '../middleware/auth.js';
-import { getUpcomingAppointments, getUpcomingBills, findUserById, findRecipientById } from '../db/queries.js';
+import {
+  getUpcomingAppointments,
+  getUpcomingBills,
+  updateAppointment,
+  updateBill,
+  deleteAppointment,
+  deleteBill,
+  findUserById,
+  findRecipientById
+} from '../db/queries.js';
 import db from '../db/client.js';
 
 const router = express.Router();
@@ -68,6 +77,98 @@ router.get('/', async (req, res) => {
   } catch (error) {
     console.error('Plan page error:', error);
     res.status(500).send('Error loading plan');
+  }
+});
+
+/**
+ * Update appointment
+ */
+router.post('/appointment/:id/update', async (req, res) => {
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { id } = req.params;
+    const { summary, startLocal, endLocal, location, prepNote } = req.body;
+
+    await updateAppointment(id, {
+      summary,
+      startLocal,
+      endLocal,
+      location,
+      prepNote
+    });
+
+    res.redirect('/plan');
+  } catch (error) {
+    console.error('Update appointment error:', error);
+    res.status(500).send('Error updating appointment');
+  }
+});
+
+/**
+ * Delete appointment
+ */
+router.post('/appointment/:id/delete', async (req, res) => {
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { id } = req.params;
+    await deleteAppointment(id);
+
+    res.redirect('/plan');
+  } catch (error) {
+    console.error('Delete appointment error:', error);
+    res.status(500).send('Error deleting appointment');
+  }
+});
+
+/**
+ * Update bill
+ */
+router.post('/bill/:id/update', async (req, res) => {
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { id } = req.params;
+    const { amountCents, dueDate, statementDate, payUrl, status } = req.body;
+
+    await updateBill(id, {
+      amountCents: amountCents ? parseInt(amountCents) : null,
+      dueDate: dueDate || null,
+      statementDate: statementDate || null,
+      payUrl: payUrl || null,
+      status: status || 'todo'
+    });
+
+    res.redirect('/plan');
+  } catch (error) {
+    console.error('Update bill error:', error);
+    res.status(500).send('Error updating bill');
+  }
+});
+
+/**
+ * Delete bill
+ */
+router.post('/bill/:id/delete', async (req, res) => {
+  try {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { id } = req.params;
+    await deleteBill(id);
+
+    res.redirect('/plan');
+  } catch (error) {
+    console.error('Delete bill error:', error);
+    res.status(500).send('Error deleting bill');
   }
 });
 
