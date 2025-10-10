@@ -5,15 +5,13 @@ import session from 'express-session';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
-// Load environment variables FIRST before any other imports
-// .env.local takes precedence over .env for local development
+// Load environment variables
+// .env.local for local development, Railway injects env vars directly
 if (existsSync('.env.local')) {
-  dotenv.config({ path: '.env.local', override: true });
-  console.log('Loaded .env.local (development mode)');
-  console.log('Callback URL:', process.env.GOOGLE_CALLBACK_URL);
+  dotenv.config({ path: '.env.local' });
+  console.log('📝 Loaded .env.local (local development)');
 } else {
-  dotenv.config();
-  console.log('Loaded .env (production mode)');
+  console.log('☁️  Using Railway environment variables (production)');
 }
 
 // NOW import everything else after env vars are loaded
