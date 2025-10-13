@@ -3,13 +3,14 @@
  * Google OAuth Sign In using WebBrowser and Passport backend
  */
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, SafeAreaView, ScrollView } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import * as WebBrowser from 'expo-web-browser';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../api/client';
 import { API_ENDPOINTS, API_BASE_URL } from '../config';
+import { palette, spacing, radius, shadow } from '../theme';
 
 // Required for web browser to close properly after auth
 WebBrowser.maybeCompleteAuthSession();
@@ -114,119 +115,196 @@ export default function LoginScreen({ navigation }: Props) {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.logo}>Carebase</Text>
-        <Text style={styles.tagline}>Healthcare coordination made simple</Text>
+    <SafeAreaView style={styles.safe}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+        bounces={false}
+      >
+        <View style={styles.hero}>
+          <Text style={styles.brand}>Carebase</Text>
+          <Text style={styles.headline}>Your care command center</Text>
+          <Text style={styles.subheadline}>
+            Track appointments, bills, and prep notes in one guided weekly view.
+          </Text>
 
-        <View style={styles.card}>
-          <Text style={styles.title}>Welcome!</Text>
-          <Text style={styles.subtitle}>
-            Get your weekly plan: Show Up (appointments) and Pay (bills).
+          <View style={styles.badgeRow}>
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>Show up on time</Text>
+            </View>
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>Never miss a payment</Text>
+            </View>
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>Share with family</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={[styles.card, shadow.card]}>
+          <Text style={styles.cardTitle}>Sign in with your Google account</Text>
+          <Text style={styles.cardSubtitle}>
+            We’ll securely connect to your Carebase backend and keep your plan synced across devices.
           </Text>
 
           <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
+            style={[styles.primaryButton, loading && styles.primaryButtonDisabled]}
             onPress={handleLogin}
             disabled={loading}
+            activeOpacity={0.9}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.buttonText}>Sign in with Google</Text>
+              <Text style={styles.primaryButtonText}>Continue with Google</Text>
             )}
           </TouchableOpacity>
 
+          <Text style={styles.helperText}>
+            You’ll be returned to the app after approving Google sign-in.
+          </Text>
+
           {__DEV__ && (
-            <TouchableOpacity style={styles.linkButton} onPress={handleContinueWithoutAuth}>
-              <Text style={styles.linkText}>Continue without signing in (Dev)</Text>
+            <TouchableOpacity style={styles.secondaryButton} onPress={handleContinueWithoutAuth}>
+              <Text style={styles.secondaryButtonText}>Continue without signing in (dev)</Text>
             </TouchableOpacity>
           )}
         </View>
 
-        <Text style={styles.footer}>
-          Forward emails to your unique address and we'll automatically organize them.
-        </Text>
-      </View>
-    </View>
+        <View style={styles.footer}>
+          <Text style={styles.footerTitle}>How it works</Text>
+          <Text style={styles.footerText}>
+            • Forward healthcare emails to your Carebase inbox{'\n'}
+            • We extract visits and bills into a weekly checklist{'\n'}
+            • Share the plan so everyone shows up prepared
+          </Text>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: palette.surfaceMuted,
   },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
+  scrollContent: {
+    paddingBottom: spacing(6),
   },
-  logo: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    color: '#2563eb',
-    textAlign: 'center',
-    marginBottom: 8,
+  hero: {
+    backgroundColor: palette.canvas,
+    paddingHorizontal: spacing(3),
+    paddingTop: spacing(6),
+    paddingBottom: spacing(5),
+    borderBottomLeftRadius: radius.lg,
+    borderBottomRightRadius: radius.lg,
   },
-  tagline: {
-    fontSize: 16,
-    color: '#64748b',
-    textAlign: 'center',
-    marginBottom: 48,
+  brand: {
+    color: palette.accent,
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1e293b',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#64748b',
-    lineHeight: 20,
-    marginBottom: 24,
-  },
-  button: {
-    backgroundColor: '#2563eb',
-    borderRadius: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
+  headline: {
     color: '#fff',
+    fontSize: 34,
+    fontWeight: '700',
+    marginTop: spacing(1),
+  },
+  subheadline: {
+    color: '#e2e8f0',
     fontSize: 16,
+    lineHeight: 24,
+    marginTop: spacing(1.5),
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing(1),
+    marginTop: spacing(3),
+  },
+  badge: {
+    backgroundColor: 'rgba(148, 163, 184, 0.18)',
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing(1.5),
+    paddingVertical: spacing(0.75),
+  },
+  badgeText: {
+    color: '#e2e8f0',
+    fontSize: 13,
     fontWeight: '600',
   },
-  linkButton: {
-    paddingVertical: 12,
+  card: {
+    backgroundColor: palette.surface,
+    borderRadius: radius.md,
+    marginHorizontal: spacing(3),
+    marginTop: -spacing(3),
+    padding: spacing(3),
+  },
+  cardTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: palette.textPrimary,
+  },
+  cardSubtitle: {
+    fontSize: 14,
+    color: palette.textSecondary,
+    lineHeight: 20,
+    marginTop: spacing(1.5),
+  },
+  primaryButton: {
+    marginTop: spacing(3),
+    backgroundColor: palette.primary,
+    borderRadius: radius.sm,
+    paddingVertical: spacing(1.75),
     alignItems: 'center',
   },
-  linkText: {
-    color: '#2563eb',
+  primaryButtonDisabled: {
+    opacity: 0.7,
+  },
+  primaryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  helperText: {
+    marginTop: spacing(1.5),
+    color: palette.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  secondaryButton: {
+    marginTop: spacing(2.5),
+    paddingVertical: spacing(1.5),
+    alignItems: 'center',
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: palette.textMuted,
+  },
+  secondaryButtonText: {
+    color: palette.textSecondary,
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   footer: {
-    marginTop: 32,
-    fontSize: 12,
-    color: '#94a3b8',
-    textAlign: 'center',
-    lineHeight: 18,
+    marginTop: spacing(4),
+    paddingHorizontal: spacing(3),
+    paddingBottom: spacing(5),
+  },
+  footerTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: palette.textPrimary,
+    marginBottom: spacing(1),
+  },
+  footerText: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: palette.textSecondary,
   },
 });

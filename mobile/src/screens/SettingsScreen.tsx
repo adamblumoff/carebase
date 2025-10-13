@@ -1,24 +1,32 @@
 /**
  * Settings Screen
- * User account and app settings
+ * Streamlined account and app preferences UI
  */
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import {
+  SafeAreaView,
+  ScrollView,
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Alert,
+} from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { API_BASE_URL } from '../config';
+import { palette, spacing, radius, shadow } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
 export default function SettingsScreen({ navigation }: Props) {
   const handleLogout = () => {
-    Alert.alert('Logout', 'Are you sure you want to log out?', [
+    Alert.alert('Log out', 'Are you sure you want to sign out of Carebase?', [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Logout',
+        text: 'Log out',
         style: 'destructive',
         onPress: () => {
-          // Navigate back to login
           navigation.replace('Login');
         },
       },
@@ -26,142 +34,183 @@ export default function SettingsScreen({ navigation }: Props) {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account</Text>
+    <SafeAreaView style={styles.safe}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        bounces={false}
+      >
+        <View style={[styles.headerCard, shadow.card]}>
+          <Text style={styles.headerEyebrow}>Account</Text>
+          <Text style={styles.headerTitle}>Carebase Companion</Text>
+          <Text style={styles.headerSubtitle}>
+            Manage how we gather care info and keep your plan in sync.
+          </Text>
+        </View>
 
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Inbox routing</Text>
           <View style={styles.card}>
-            <Text style={styles.label}>Forwarding Address</Text>
-            <Text style={styles.value}>user-123-abc@inbound.carebase.app</Text>
-            <Text style={styles.hint}>
-              Forward emails to this address to automatically capture appointments and bills
+            <Text style={styles.cardLabel}>Forwarding address</Text>
+            <Text style={styles.cardValue}>user-123-abc@inbound.carebase.app</Text>
+            <Text style={styles.cardHint}>
+              Forward healthcare emails here so Carebase can build your weekly checklist.
             </Text>
           </View>
 
-          <TouchableOpacity style={styles.settingButton}>
-            <Text style={styles.settingButtonText}>Manage Email Rules</Text>
-            <Text style={styles.settingButtonChevron}>›</Text>
+          <TouchableOpacity style={styles.chevronRow}>
+            <Text style={styles.chevronText}>Manage email rules</Text>
+            <Text style={styles.chevronIcon}>›</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Preferences</Text>
-
-          <TouchableOpacity style={styles.settingButton}>
-            <Text style={styles.settingButtonText}>Notifications</Text>
-            <Text style={styles.settingButtonChevron}>›</Text>
+          <Text style={styles.sectionTitle}>App preferences</Text>
+          <TouchableOpacity style={styles.chevronRow}>
+            <Text style={styles.chevronText}>Notifications</Text>
+            <Text style={styles.chevronSubtext}>Weekly digest</Text>
+            <Text style={styles.chevronIcon}>›</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity style={styles.settingButton}>
-            <Text style={styles.settingButtonText}>Week Start Day</Text>
-            <Text style={styles.settingButtonValue}>Sunday</Text>
-            <Text style={styles.settingButtonChevron}>›</Text>
+          <TouchableOpacity style={styles.chevronRow}>
+            <Text style={styles.chevronText}>Week start day</Text>
+            <Text style={styles.chevronSubtext}>Sunday</Text>
+            <Text style={styles.chevronIcon}>›</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>About</Text>
-
+          <Text style={styles.sectionTitle}>System</Text>
           <View style={styles.card}>
-            <Text style={styles.label}>Version</Text>
-            <Text style={styles.value}>0.1.0 (Beta)</Text>
+            <Text style={styles.cardLabel}>Version</Text>
+            <Text style={styles.cardValue}>0.1.0 (beta)</Text>
+            <Text style={styles.cardLabel}>API base URL</Text>
+            <Text style={styles.cardValue}>{API_BASE_URL}</Text>
           </View>
-
-          <TouchableOpacity style={styles.settingButton}>
-            <Text style={styles.settingButtonText}>Privacy Policy</Text>
-            <Text style={styles.settingButtonChevron}>›</Text>
+          <TouchableOpacity style={styles.chevronRow}>
+            <Text style={styles.chevronText}>Privacy policy</Text>
+            <Text style={styles.chevronIcon}>›</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity style={styles.settingButton}>
-            <Text style={styles.settingButtonText}>Terms of Service</Text>
-            <Text style={styles.settingButtonChevron}>›</Text>
+          <TouchableOpacity style={styles.chevronRow}>
+            <Text style={styles.chevronText}>Terms of service</Text>
+            <Text style={styles.chevronIcon}>›</Text>
           </TouchableOpacity>
         </View>
 
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutButtonText}>Log Out</Text>
+          <Text style={styles.logoutButtonText}>Log out</Text>
         </TouchableOpacity>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: palette.surfaceMuted,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
   },
   content: {
-    padding: 20,
+    padding: spacing(3),
+    paddingBottom: spacing(6),
+  },
+  headerCard: {
+    backgroundColor: palette.canvas,
+    borderRadius: radius.lg,
+    padding: spacing(3),
+    marginBottom: spacing(3),
+  },
+  headerEyebrow: {
+    color: palette.accent,
+    fontSize: 12,
+    textTransform: 'uppercase',
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  headerTitle: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: '700',
+    marginTop: spacing(0.5),
+  },
+  headerSubtitle: {
+    color: '#cbd5f5',
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: spacing(1.5),
   },
   section: {
-    marginBottom: 32,
+    marginTop: spacing(3),
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1e293b',
-    marginBottom: 12,
+    fontSize: 16,
+    fontWeight: '700',
+    color: palette.textPrimary,
+    marginBottom: spacing(1.5),
   },
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 8,
+    backgroundColor: palette.surface,
+    borderRadius: radius.md,
+    padding: spacing(2.5),
+    ...shadow.card,
+    marginBottom: spacing(2),
   },
-  label: {
+  cardLabel: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#64748b',
     textTransform: 'uppercase',
-    marginBottom: 4,
+    fontWeight: '600',
+    color: palette.textMuted,
+    marginTop: spacing(1),
   },
-  value: {
-    fontSize: 16,
-    color: '#1e293b',
-    marginBottom: 4,
+  cardValue: {
+    fontSize: 15,
+    color: palette.textPrimary,
+    marginTop: spacing(0.5),
   },
-  hint: {
+  cardHint: {
     fontSize: 13,
-    color: '#94a3b8',
-    lineHeight: 18,
+    color: palette.textSecondary,
+    marginTop: spacing(1.5),
+    lineHeight: 20,
   },
-  settingButton: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 8,
+  chevronRow: {
+    backgroundColor: palette.surface,
+    borderRadius: radius.md,
+    paddingVertical: spacing(2),
+    paddingHorizontal: spacing(2.5),
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    marginBottom: spacing(1.5),
+    ...shadow.card,
   },
-  settingButtonText: {
-    fontSize: 16,
-    color: '#1e293b',
+  chevronText: {
+    fontSize: 15,
+    color: palette.textPrimary,
+    fontWeight: '600',
     flex: 1,
   },
-  settingButtonValue: {
-    fontSize: 14,
-    color: '#64748b',
-    marginRight: 8,
+  chevronSubtext: {
+    fontSize: 13,
+    color: palette.textMuted,
+    marginRight: spacing(1),
   },
-  settingButtonChevron: {
-    fontSize: 20,
-    color: '#cbd5e1',
+  chevronIcon: {
+    fontSize: 22,
+    color: palette.textMuted,
   },
   logoutButton: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 20,
+    marginTop: spacing(4),
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: '#ef4444',
+    borderColor: palette.danger,
+    paddingVertical: spacing(1.75),
+    alignItems: 'center',
   },
   logoutButtonText: {
-    color: '#ef4444',
-    fontSize: 16,
-    fontWeight: '600',
+    color: palette.danger,
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

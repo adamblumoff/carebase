@@ -5,6 +5,7 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { Appointment, Bill } from '@carebase/shared';
+import { palette } from '../theme';
 
 // Screens
 import LoginScreen from '../screens/LoginScreen';
@@ -32,7 +33,7 @@ export default function AppNavigator() {
         initialRouteName="Login"
         screenOptions={{
           headerStyle: {
-            backgroundColor: '#2563eb',
+            backgroundColor: palette.canvas,
           },
           headerTintColor: '#fff',
           headerTitleStyle: {

@@ -1,59 +1,61 @@
 /**
  * Bill Detail Screen
- * View and manage bill details
+ * Redesigned bill overview with actionable controls
  */
 import React, { useState } from 'react';
 import {
+  SafeAreaView,
+  ScrollView,
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
-  Linking,
   Alert,
+  Linking,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import apiClient from '../api/client';
 import { API_ENDPOINTS } from '../config';
+import { palette, spacing, radius, shadow } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'BillDetail'>;
 
 export default function BillDetailScreen({ route, navigation }: Props) {
   const { bill } = route.params;
   const [currentBill, setCurrentBill] = useState(bill);
-  const [loading, setLoading] = useState(false);
+  const [updating, setUpdating] = useState(false);
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return 'Not available';
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
-      month: 'long',
+      weekday: 'short',
+      month: 'short',
       day: 'numeric',
       year: 'numeric',
     });
   };
 
-  const formatCurrency = (amount: number) => {
-    return `$${amount.toFixed(2)}`;
+  const formatCurrency = (amount: number | null | undefined) => {
+    if (amount === null || amount === undefined) return 'Unknown amount';
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+    }).format(amount);
   };
 
   const handleMarkPaid = async () => {
-    setLoading(true);
+    setUpdating(true);
     try {
       const response = await apiClient.post(API_ENDPOINTS.markBillPaid(currentBill.id));
       setCurrentBill(response.data);
-      Alert.alert('Success', 'Bill marked as paid');
+      Alert.alert('Done', 'Bill marked as paid');
     } catch (error) {
       Alert.alert('Error', 'Failed to mark bill as paid');
       console.error('Mark bill paid error:', error);
     } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePayOnline = () => {
-    if (currentBill.payUrl) {
-      Linking.openURL(currentBill.payUrl);
+      setUpdating(false);
     }
   };
 
@@ -75,175 +77,233 @@ export default function BillDetailScreen({ route, navigation }: Props) {
     ]);
   };
 
+  const handleOpenPayLink = () => {
+    if (currentBill.payUrl) {
+      Linking.openURL(currentBill.payUrl);
+    }
+  };
+
   const isPaid = currentBill.status === 'paid';
+  const isIgnored = currentBill.status === 'ignore';
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.amountCard}>
-          <Text style={styles.amountLabel}>Amount Due</Text>
-          <Text style={styles.amount}>
-            {currentBill.amount ? formatCurrency(currentBill.amount) : 'Unknown'}
-          </Text>
-          {currentBill.status && (
-            <Text
-              style={[
-                styles.status,
-                isPaid && styles.statusPaid,
-                currentBill.status === 'ignore' && styles.statusIgnored,
-              ]}
-            >
-              {currentBill.status.toUpperCase()}
+    <SafeAreaView style={styles.safe}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        bounces={false}
+      >
+        <View style={[styles.summaryCard, shadow.card]}>
+          <View
+            style={[
+              styles.summaryAccent,
+              { backgroundColor: isPaid ? palette.success : palette.warning },
+            ]}
+          />
+          <View style={styles.summaryBody}>
+            <Text style={styles.summaryLabel}>Amount due</Text>
+            <Text style={styles.summaryAmount}>{formatCurrency(currentBill.amount ?? null)}</Text>
+            <Text style={styles.summaryStatus}>
+              Status:{' '}
+              <Text
+                style={[
+                  styles.statusValue,
+                  isPaid && styles.statusValuePaid,
+                  isIgnored && styles.statusValueMuted,
+                ]}
+              >
+                {currentBill.status}
+              </Text>
             </Text>
-          )}
+          </View>
         </View>
 
-        {currentBill.dueDate && (
-          <View style={styles.infoCard}>
-            <Text style={styles.infoLabel}>Due Date</Text>
-            <Text style={styles.infoValue}>
-              {formatDate(currentBill.dueDate)}
-            </Text>
+        <View style={styles.infoGrid}>
+          <View style={styles.infoItem}>
+            <Text style={styles.infoLabel}>Due date</Text>
+            <Text style={styles.infoValue}>{formatDate(currentBill.dueDate)}</Text>
           </View>
-        )}
-
-        {currentBill.statementDate && (
-          <View style={styles.infoCard}>
-            <Text style={styles.infoLabel}>Statement Date</Text>
-            <Text style={styles.infoValue}>
-              {formatDate(currentBill.statementDate)}
-            </Text>
+          <View style={styles.infoItem}>
+            <Text style={styles.infoLabel}>Statement</Text>
+            <Text style={styles.infoValue}>{formatDate(currentBill.statementDate)}</Text>
           </View>
-        )}
+        </View>
 
-        {currentBill.payUrl && (
-          <TouchableOpacity
-            style={[styles.button, styles.buttonPrimary]}
-            onPress={handlePayOnline}
-          >
-            <Text style={styles.buttonPrimaryText}>💳 Pay Online</Text>
+        <View style={styles.actionsCard}>
+          {currentBill.payUrl && (
+            <TouchableOpacity style={styles.primaryButton} onPress={handleOpenPayLink}>
+              <Text style={styles.primaryButtonText}>Pay online</Text>
+            </TouchableOpacity>
+          )}
+
+          {!isPaid && (
+            <TouchableOpacity
+              style={[styles.secondaryButton, updating && styles.secondaryButtonDisabled]}
+              onPress={handleMarkPaid}
+              disabled={updating}
+            >
+              <Text style={styles.secondaryButtonText}>
+                {updating ? 'Updating…' : 'Mark as paid'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity style={styles.dangerButton} onPress={handleDelete}>
+            <Text style={styles.dangerButtonText}>Delete bill</Text>
           </TouchableOpacity>
-        )}
+        </View>
 
-        {!isPaid && (
-          <TouchableOpacity
-            style={[styles.button, styles.buttonSuccess]}
-            onPress={handleMarkPaid}
-            disabled={loading}
-          >
-            <Text style={styles.buttonSuccessText}>
-              {loading ? 'Updating...' : '✓ Mark as Paid'}
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        <TouchableOpacity
-          style={[styles.button, styles.buttonDanger]}
-          onPress={handleDelete}
-        >
-          <Text style={styles.buttonDangerText}>Delete</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+        <View style={styles.noteCard}>
+          <Text style={styles.noteTitle}>Need help?</Text>
+          <Text style={styles.noteBody}>
+            Upload billing statements from the camera tab or forward billing emails to keep this
+            list current. Paid bills stay archived for quick reference.
+          </Text>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: palette.surfaceMuted,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
   },
   content: {
-    padding: 20,
+    padding: spacing(3),
+    paddingBottom: spacing(6),
   },
-  amountCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+  summaryCard: {
+    backgroundColor: palette.surface,
+    borderRadius: radius.lg,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    marginBottom: spacing(3),
   },
-  amountLabel: {
-    fontSize: 14,
-    color: '#64748b',
-    marginBottom: 8,
+  summaryAccent: {
+    width: 6,
   },
-  amount: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: '#1e293b',
-    marginBottom: 8,
+  summaryBody: {
+    flex: 1,
+    padding: spacing(2.5),
   },
-  status: {
+  summaryLabel: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#f59e0b',
     textTransform: 'uppercase',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    backgroundColor: '#fef3c7',
-    borderRadius: 12,
+    fontWeight: '700',
+    color: palette.textMuted,
   },
-  statusPaid: {
-    color: '#10b981',
-    backgroundColor: '#d1fae5',
+  summaryAmount: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: palette.textPrimary,
+    marginTop: spacing(0.5),
   },
-  statusIgnored: {
-    color: '#94a3b8',
-    backgroundColor: '#f1f5f9',
+  summaryStatus: {
+    marginTop: spacing(1),
+    fontSize: 14,
+    color: palette.textSecondary,
   },
-  infoCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+  statusValue: {
+    fontWeight: '700',
+    color: palette.warning,
+    textTransform: 'uppercase',
+  },
+  statusValuePaid: {
+    color: palette.success,
+  },
+  statusValueMuted: {
+    color: palette.textMuted,
+  },
+  infoGrid: {
+    flexDirection: 'row',
+    gap: spacing(2),
+    marginBottom: spacing(3),
+  },
+  infoItem: {
+    flex: 1,
+    backgroundColor: palette.surface,
+    borderRadius: radius.md,
+    padding: spacing(2),
+    ...shadow.card,
   },
   infoLabel: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#64748b',
     textTransform: 'uppercase',
-    marginBottom: 4,
+    fontWeight: '600',
+    color: palette.textMuted,
+    marginBottom: spacing(0.5),
   },
   infoValue: {
     fontSize: 16,
-    color: '#1e293b',
+    color: palette.textPrimary,
   },
-  button: {
-    borderRadius: 8,
-    paddingVertical: 14,
+  actionsCard: {
+    backgroundColor: palette.surface,
+    borderRadius: radius.md,
+    padding: spacing(3),
+    ...shadow.card,
+    marginBottom: spacing(3),
+  },
+  primaryButton: {
+    backgroundColor: palette.primary,
+    borderRadius: radius.sm,
+    paddingVertical: spacing(1.5),
     alignItems: 'center',
-    marginTop: 12,
   },
-  buttonPrimary: {
-    backgroundColor: '#2563eb',
+  primaryButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
   },
-  buttonSuccess: {
-    backgroundColor: '#10b981',
-  },
-  buttonDanger: {
-    backgroundColor: '#fff',
+  secondaryButton: {
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: '#ef4444',
+    borderColor: palette.success,
+    paddingVertical: spacing(1.5),
+    alignItems: 'center',
+    marginTop: spacing(2),
   },
-  buttonPrimaryText: {
-    color: '#fff',
-    fontSize: 16,
+  secondaryButtonDisabled: {
+    opacity: 0.6,
+  },
+  secondaryButtonText: {
+    color: palette.success,
+    fontSize: 15,
     fontWeight: '600',
   },
-  buttonSuccessText: {
-    color: '#fff',
-    fontSize: 16,
+  dangerButton: {
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: palette.danger,
+    paddingVertical: spacing(1.5),
+    alignItems: 'center',
+    marginTop: spacing(2),
+  },
+  dangerButtonText: {
+    color: palette.danger,
+    fontSize: 15,
     fontWeight: '600',
   },
-  buttonDangerText: {
-    color: '#ef4444',
+  noteCard: {
+    backgroundColor: palette.surface,
+    borderRadius: radius.md,
+    padding: spacing(3),
+    ...shadow.card,
+  },
+  noteTitle: {
     fontSize: 16,
     fontWeight: '600',
+    color: palette.textPrimary,
+    marginBottom: spacing(1),
+  },
+  noteBody: {
+    fontSize: 14,
+    color: palette.textSecondary,
+    lineHeight: 20,
   },
 });

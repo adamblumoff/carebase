@@ -1,14 +1,24 @@
 /**
  * Camera Screen
- * Scan bills using camera or photo library
+ * Redesigned capture flow for scanning bills
  */
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, ActivityIndicator } from 'react-native';
+import {
+  SafeAreaView,
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import * as ImagePicker from 'expo-image-picker';
 import apiClient from '../api/client';
 import { API_ENDPOINTS } from '../config';
+import { palette, spacing, radius, shadow } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Camera'>;
 
@@ -19,7 +29,7 @@ export default function CameraScreen({ navigation }: Props) {
   const requestPermissions = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Camera permission is required to scan bills');
+      Alert.alert('Permission required', 'Camera access is needed to scan bills.');
       return false;
     }
     return true;
@@ -32,7 +42,7 @@ export default function CameraScreen({ navigation }: Props) {
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
-      quality: 0.8,
+      quality: 0.85,
     });
 
     if (!result.canceled && result.assets[0]) {
@@ -44,7 +54,7 @@ export default function CameraScreen({ navigation }: Props) {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
-      quality: 0.8,
+      quality: 0.85,
     });
 
     if (!result.canceled && result.assets[0]) {
@@ -57,37 +67,25 @@ export default function CameraScreen({ navigation }: Props) {
 
     setUploading(true);
     try {
-      // Create form data
       const formData = new FormData();
-
-      // Get filename from URI
       const filename = imageUri.split('/').pop() || 'photo.jpg';
       const match = /\.(\w+)$/.exec(filename);
       const type = match ? `image/${match[1]}` : 'image/jpeg';
 
-      // Append image to form data
       formData.append('photo', {
         uri: imageUri,
         name: filename,
         type,
       } as any);
 
-      // Upload
       const response = await apiClient.post(API_ENDPOINTS.uploadPhoto, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
 
       Alert.alert(
-        'Success',
-        `Bill uploaded successfully! Type: ${response.data.classification.type}`,
-        [
-          {
-            text: 'OK',
-            onPress: () => navigation.goBack(),
-          },
-        ]
+        'Uploaded',
+        `Captured a ${response.data.classification.type} document.`,
+        [{ text: 'View plan', onPress: () => navigation.goBack() }]
       );
     } catch (error: any) {
       console.error('Upload error:', error);
@@ -98,137 +96,154 @@ export default function CameraScreen({ navigation }: Props) {
   };
 
   return (
-    <View style={styles.container}>
-      {imageUri ? (
-        <View style={styles.previewContainer}>
-          <Image source={{ uri: imageUri }} style={styles.preview} />
-
-          <View style={styles.actions}>
-            <TouchableOpacity
-              style={[styles.button, styles.buttonSecondary]}
-              onPress={() => setImageUri(null)}
-            >
-              <Text style={styles.buttonSecondaryText}>Retake</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.button, styles.buttonPrimary]}
-              onPress={handleUpload}
-              disabled={uploading}
-            >
-              {uploading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.buttonPrimaryText}>Upload</Text>
-              )}
-            </TouchableOpacity>
+    <SafeAreaView style={styles.safe}>
+      <View style={styles.container}>
+        {imageUri ? (
+          <View style={[styles.previewCard, shadow.card]}>
+            <Image source={{ uri: imageUri }} style={styles.preview} />
+            <View style={styles.previewFooter}>
+              <TouchableOpacity style={styles.secondaryButton} onPress={() => setImageUri(null)}>
+                <Text style={styles.secondaryButtonText}>Retake</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.primaryButton, uploading && styles.primaryButtonDisabled]}
+                onPress={handleUpload}
+                disabled={uploading}
+              >
+                {uploading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.primaryButtonText}>Upload & process</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      ) : (
-        <View style={styles.content}>
-          <Text style={styles.title}>Scan a Bill</Text>
-          <Text style={styles.subtitle}>
-            Take a photo of your medical bill and we'll automatically extract the details
-          </Text>
+        ) : (
+          <View style={styles.content}>
+            <Text style={styles.title}>Scan a bill</Text>
+            <Text style={styles.subtitle}>
+              Capture a clear photo of the statement to pull in amounts, due dates, and providers.
+            </Text>
 
-          <TouchableOpacity style={styles.cameraButton} onPress={handleTakePhoto}>
-            <Text style={styles.cameraIcon}>📷</Text>
-            <Text style={styles.cameraButtonText}>Take Photo</Text>
-          </TouchableOpacity>
+            <TouchableOpacity style={styles.heroAction} onPress={handleTakePhoto}>
+              <Text style={styles.heroActionIcon}>📷</Text>
+              <Text style={styles.heroActionText}>Take a photo</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity style={styles.libraryButton} onPress={handleChoosePhoto}>
-            <Text style={styles.libraryButtonText}>Choose from Library</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
+            <TouchableOpacity style={styles.secondaryButton} onPress={handleChoosePhoto}>
+              <Text style={styles.secondaryButtonText}>Choose from library</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.helperText}>
+              Tip: place the document on a flat surface with good lighting. Avoid glare for best
+              results.
+            </Text>
+          </View>
+        )}
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: palette.surfaceMuted,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    padding: spacing(3),
   },
   content: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    justifyContent: 'center',
   },
   title: {
     fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 8,
+    fontWeight: '700',
+    color: palette.textPrimary,
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 16,
-    color: '#cbd5e1',
+    marginTop: spacing(1.5),
+    fontSize: 15,
+    color: palette.textSecondary,
     textAlign: 'center',
-    marginBottom: 48,
-    lineHeight: 24,
+    lineHeight: 22,
   },
-  cameraButton: {
-    backgroundColor: '#2563eb',
-    borderRadius: 16,
-    paddingVertical: 20,
-    paddingHorizontal: 40,
+  heroAction: {
+    marginTop: spacing(4),
+    backgroundColor: palette.primary,
+    borderRadius: radius.lg,
+    paddingVertical: spacing(2),
+    paddingHorizontal: spacing(3),
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
-    minWidth: 200,
+    justifyContent: 'center',
+    ...shadow.card,
   },
-  cameraIcon: {
-    fontSize: 48,
-    marginBottom: 8,
-  },
-  cameraButtonText: {
+  heroActionIcon: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 20,
+    marginRight: spacing(1),
+  },
+  heroActionText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  secondaryButton: {
+    marginTop: spacing(2),
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: palette.textMuted,
+    paddingVertical: spacing(1.5),
+    paddingHorizontal: spacing(3),
+    alignItems: 'center',
+  },
+  secondaryButtonText: {
+    color: palette.textSecondary,
+    fontSize: 15,
     fontWeight: '600',
   },
-  libraryButton: {
-    paddingVertical: 12,
+  helperText: {
+    marginTop: spacing(3),
+    fontSize: 13,
+    color: palette.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
   },
-  libraryButtonText: {
-    color: '#3b82f6',
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  previewContainer: {
+  previewCard: {
     flex: 1,
+    backgroundColor: palette.surface,
+    borderRadius: radius.lg,
+    padding: spacing(2),
+    justifyContent: 'space-between',
+    ...shadow.card,
   },
   preview: {
-    flex: 1,
-    resizeMode: 'contain',
+    width: '100%',
+    height: '80%',
+    borderRadius: radius.md,
   },
-  actions: {
+  previewFooter: {
     flexDirection: 'row',
-    gap: 12,
-    padding: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    gap: spacing(2),
   },
-  button: {
+  primaryButton: {
     flex: 1,
-    borderRadius: 8,
-    paddingVertical: 14,
+    backgroundColor: palette.primary,
+    borderRadius: radius.sm,
+    paddingVertical: spacing(1.5),
     alignItems: 'center',
   },
-  buttonPrimary: {
-    backgroundColor: '#2563eb',
+  primaryButtonDisabled: {
+    opacity: 0.7,
   },
-  buttonSecondary: {
-    backgroundColor: '#374151',
-  },
-  buttonPrimaryText: {
+  primaryButtonText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  buttonSecondaryText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });
