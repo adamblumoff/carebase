@@ -84,13 +84,16 @@ export default function CameraScreen({ navigation }: Props) {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      const { classification, extracted } = response.data;
+      const { classification, extracted, overdue } = response.data;
       const details: string[] = [];
       if (extracted?.amount) {
         details.push(`Amount due: ${formatCurrency(extracted.amount)}`);
       }
       if (extracted?.dueDate) {
         details.push(`Due date: ${extracted.dueDate}`);
+      }
+      if (overdue) {
+        details.push('Status: overdue');
       }
 
       const message = details.length > 0

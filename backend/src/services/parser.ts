@@ -30,9 +30,111 @@ const DATE_PATTERNS = [
 ];
 
 const MONEY_PATTERNS = [
-  /\$\d+(?:,\d{3})*(?:\.\d{2})?/g,
+  /\$\s?\d+(?:,\d{3})*(?:\.\d{2})?/g,
   /\b\d+(?:,\d{3})*(?:\.\d{2})?\s*(?:dollars?|USD)\b/gi
 ];
+
+const BILL_AMOUNT_KEYWORDS = [
+  'amount due',
+  'total due',
+  'balance due',
+  'please pay',
+  'pay this amount',
+  'total charges',
+  'balance',
+  'statement total'
+];
+
+const DUE_DATE_KEYWORDS = ['due date', 'date due', 'pay by', 'payment due', 'due on', 'pay on'];
+const STATEMENT_DATE_KEYWORDS = ['statement date', 'billing date', 'service date', 'date of service'];
+
+interface AmountCandidate {
+  value: number;
+  score: number;
+}
+
+function findBestAmount(text: string): number | undefined {
+  const candidates: AmountCandidate[] = [];
+  for (const match of text.matchAll(/\$?\s*\d+(?:,\d{3})*(?:\.\d{2})?/g)) {
+    const original = match[0];
+    const raw = original.replace(/[^0-9.]/g, '');
+    const value = parseFloat(raw);
+    if (Number.isNaN(value)) continue;
+    const idx = match.index ?? 0;
+    const contextStart = Math.max(0, idx - 40);
+    const contextEnd = Math.min(text.length, idx + match[0].length + 40);
+    const context = text.slice(contextStart, contextEnd).toLowerCase();
+
+    const hasCurrencyIndicator =
+      original.includes('$') ||
+      original.toLowerCase().includes('usd') ||
+      original.toLowerCase().includes('dollar') ||
+      original.includes('.');
+
+    if (!hasCurrencyIndicator && !BILL_AMOUNT_KEYWORDS.some((kw) => context.includes(kw))) {
+      continue;
+    }
+
+    const prevChar = idx > 0 ? text[idx - 1] : '';
+    const nextChar = idx + original.length < text.length ? text[idx + original.length] : '';
+
+    if (!original.includes('$') && (context.includes('date') || prevChar === '/' || nextChar === '/')) {
+      continue;
+    }
+
+    let score = 0;
+    if (BILL_AMOUNT_KEYWORDS.some((kw) => context.includes(kw))) score += 3;
+    if (context.includes('please pay') || context.includes('pay this amount')) score += 2;
+    if (context.includes('amount due')) score += 2;
+    if (context.includes('due')) score += 1;
+    if (context.includes('balance')) score += 1.5;
+    if (context.includes('total')) score += 0.5;
+    if (value >= 50) score += 0.5;
+    candidates.push({ value, score });
+  }
+
+  if (candidates.length === 0) return undefined;
+  candidates.sort((a, b) => b.score - a.score || b.value - a.value);
+  return candidates[0].value;
+}
+
+function findDateWithContext(text: string, patterns: RegExp[], keywords: string[] = []): string | undefined {
+  for (const pattern of patterns) {
+    pattern.lastIndex = 0;
+    const match = pattern.exec(text);
+    if (!match) continue;
+    const context = match[1] ?? match[0];
+    const parsed = chrono.parseDate(context);
+    if (parsed) {
+      return parsed.toISOString().split('T')[0];
+    }
+  }
+
+  if (keywords.length > 0) {
+    const lower = text.toLowerCase();
+    for (const keyword of keywords) {
+      let idx = lower.indexOf(keyword);
+      while (idx !== -1) {
+        const slice = text.slice(Math.max(0, idx), Math.min(text.length, idx + keyword.length + 60));
+        const parsed = chrono.parseDate(slice);
+        if (parsed) {
+          return parsed.toISOString().split('T')[0];
+        }
+        idx = lower.indexOf(keyword, idx + keyword.length);
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function isPastDate(isoDate?: string): boolean {
+  if (!isoDate) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const candidate = new Date(isoDate);
+  return candidate < today;
+}
 
 interface ClassificationResult {
   type: ItemType;
@@ -159,40 +261,16 @@ export function extractAppointment(text: string, subject: string): AppointmentCr
 export function extractBill(text: string, subject: string): BillCreateRequest {
   const combined = `${subject}\n${text}`;
 
-  // Extract amount
-  let amount: number | undefined = undefined;
-  const amountMatch =
-    combined.match(/(?:amount due|total due|balance due|total|payment due)[^\d$]{0,20}\$?(\d+(?:,\d{3})*(?:\.\d{2})?)/i) ||
-    combined.match(/\$\s?(\d+(?:,\d{3})*(?:\.\d{2})?)/);
-  if (amountMatch) {
-    const amountStr = amountMatch[1].replace(/,/g, '');
-    const parsedAmount = parseFloat(amountStr);
-    if (!Number.isNaN(parsedAmount)) {
-      amount = parsedAmount;
-    }
-  }
+  const amount = findBestAmount(combined);
 
-  // Extract due date
-  const parseDateToISO = (value: string | null | undefined): string | undefined => {
-    if (!value) return undefined;
-    const parsed = chrono.parseDate(value);
-    if (!parsed) return undefined;
-    return parsed.toISOString().split('T')[0];
-  };
+  const dueDate = findDateWithContext(combined, [
+    /(?:due date|date due|pay by|payment due|due on|pay on)[^\n]{0,50}/i
+  ], DUE_DATE_KEYWORDS);
 
-  let dueDate: string | undefined = undefined;
-  const dueDateContext =
-    combined.match(/(?:due date|pay by|payment due|on or before)[^\n]{0,50}/i)?.[0] ||
-    combined.match(/due[\s:]+[^\n]{5,40}/i)?.[0];
-  dueDate = parseDateToISO(dueDateContext);
+  const statementDate = findDateWithContext(combined, [
+    /(?:statement date|service date|billing date)[^\n]{0,40}/i
+  ], STATEMENT_DATE_KEYWORDS);
 
-  // Extract statement date
-  let statementDate: string | undefined = undefined;
-  const stmtContext =
-    combined.match(/(?:statement date|service date|billing date)[^\n]{0,40}/i)?.[0];
-  statementDate = parseDateToISO(stmtContext);
-
-  // Extract payment URL
   const urlMatch = combined.match(/(?:pay at|payment link|pay online)[\s:]+(\S+)/i) ||
                    combined.match(/(https?:\/\/[^\s]+(?:pay|bill|invoice)[^\s]*)/i);
   const payUrl = urlMatch ? urlMatch[1] : undefined;
@@ -210,6 +288,7 @@ interface ParseResult {
   classification: ClassificationResult;
   appointmentData: AppointmentCreateRequest | null;
   billData: BillCreateRequest | null;
+  billOverdue: boolean;
 }
 
 /**
@@ -240,9 +319,11 @@ export function parseSource(source: Source, fullText?: string): ParseResult {
 
   let appointmentData: AppointmentCreateRequest | null = null;
   let billData: BillCreateRequest | null = null;
+  let billOverdue = false;
 
   if (classification.type === 'bill') {
     billData = billCandidate;
+    billOverdue = isPastDate(billCandidate.dueDate);
   } else if (classification.type === 'appointment') {
     appointmentData = appointmentCandidate;
   }
@@ -250,6 +331,7 @@ export function parseSource(source: Source, fullText?: string): ParseResult {
   return {
     classification,
     appointmentData,
-    billData
+    billData,
+    billOverdue
   };
 }

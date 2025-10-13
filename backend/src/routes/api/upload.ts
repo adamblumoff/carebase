@@ -76,7 +76,7 @@ router.post('/photo', upload.single('photo'), async (req: Request, res: Response
 
     // Parse source using full OCR text for classification/extraction
     const parsed = parseSource(source, ocrText);
-    const { classification, appointmentData, billData } = parsed;
+    const { classification, billData, billOverdue } = parsed;
 
     // Create item
     const item = await createItem(
@@ -99,6 +99,7 @@ router.post('/photo', upload.single('photo'), async (req: Request, res: Response
       source: 'photo_upload',
       ocr: true,
       extractedBill: parsed.billData,
+      overdue: billOverdue,
       ocrSnippet: ocrText.substring(0, 2000)
     });
 
@@ -116,6 +117,7 @@ router.post('/photo', upload.single('photo'), async (req: Request, res: Response
       },
       bill: createdBill,
       extracted: parsed.billData,
+      overdue: billOverdue,
       ocrText: ocrText.substring(0, 200) // Return first 200 chars for debugging
     });
   } catch (error) {

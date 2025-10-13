@@ -94,6 +94,46 @@ test('Parser: extracts bill data correctly', () => {
   assert.strictEqual(bill.status, 'todo');
 });
 
+test('Parser: extracts realistic bill fields from OCR text', () => {
+  const text = `
+    ALINA HEALTH HOSPITAL STATEMENT
+    STATEMENT DATE 03/28/2013
+    PLEASE PAY THIS AMOUNT $419.07
+    DATE DUE 04/18/2013
+    TOTAL CHARGES $654.80
+    BALANCE: $419.07
+    PAY ONLINE AT HTTPS://WWW.ALINAHEALTH.ORG/PAYHOSPITALBILL
+  `;
+  const bill = extractBill(text, 'Hospital Statement');
+  assert.strictEqual(bill.amount, 419.07);
+  assert.strictEqual(bill.dueDate, '2013-04-18');
+  assert.strictEqual(bill.statementDate, '2013-03-28');
+});
+
+test('Parser: parseSource marks overdue bills', () => {
+  const source = {
+    id: 99,
+    recipientId: 1,
+    kind: 'upload' as const,
+    externalId: null,
+    sender: null,
+    subject: 'Past due statement',
+    shortExcerpt: 'Balance due $419.07',
+    storageKey: null,
+    createdAt: new Date()
+  };
+
+  const fullText = `
+    PLEASE PAY THIS AMOUNT $419.07
+    DATE DUE 04/18/2013
+  `;
+
+  const result = parseSource(source, fullText);
+
+  assert.strictEqual(result.classification.type, 'bill');
+  assert.strictEqual(result.billOverdue, true);
+});
+
 // Test full parse flow
 test('Parser: parseSource creates correct structure for appointment', () => {
   const source = {
@@ -118,6 +158,7 @@ test('Parser: parseSource creates correct structure for appointment', () => {
   assert.strictEqual(result.classification.type, 'appointment');
   assert.ok(result.appointmentData, 'Should have appointment data');
   assert.strictEqual(result.billData, null, 'Should not have bill data');
+  assert.strictEqual(result.billOverdue, false);
 });
 
 test('Parser: parseSource creates correct structure for bill', () => {
@@ -142,6 +183,7 @@ test('Parser: parseSource creates correct structure for bill', () => {
   assert.strictEqual(result.classification.type, 'bill');
   assert.ok(result.billData, 'Should have bill data');
   assert.strictEqual(result.appointmentData, null, 'Should not have appointment data');
+  assert.strictEqual(result.billOverdue, false);
 });
 
 test('Parser: prefers full text when provided', () => {
@@ -159,9 +201,9 @@ test('Parser: prefers full text when provided', () => {
 
   const fullText = `
     City Hospital Billing Statement
-    Statement Date: September 20, 2025
+    Statement Date: September 20, 2125
     Amount Due: $240.75
-    Pay by: October 5, 2025
+    Pay by: October 5, 2125
   `;
 
   const result = parseSource(source, fullText);
@@ -169,5 +211,6 @@ test('Parser: prefers full text when provided', () => {
   assert.strictEqual(result.classification.type, 'bill');
   assert.ok(result.billData);
   assert.strictEqual(result.billData?.amount, 240.75);
-  assert.strictEqual(result.billData?.dueDate, '2025-10-05');
+  assert.strictEqual(result.billData?.dueDate, '2125-10-05');
+  assert.strictEqual(result.billOverdue, false);
 });

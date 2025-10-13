@@ -65,7 +65,7 @@ router.post('/photo', ensureAuthenticated, ensureRecipient, upload.single('photo
     const { createItem, createAppointment, createBill, createAuditLog } = await import('../db/queries.js');
 
     const parsed = parseSource(source, ocrText);
-    const { classification, appointmentData, billData } = parsed;
+    const { classification, appointmentData, billData, billOverdue } = parsed;
 
     // Create item
     const item = await createItem(
@@ -89,6 +89,7 @@ router.post('/photo', ensureAuthenticated, ensureRecipient, upload.single('photo
       source: 'photo_upload',
       ocr: true,
       extractedBill: billData,
+      overdue: billOverdue,
       ocrSnippet: ocrText.substring(0, 2000)
     });
 
