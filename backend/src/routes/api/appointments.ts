@@ -62,15 +62,30 @@ router.patch('/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Appointment not found' });
     }
 
-    const updateData: AppointmentUpdateRequest = {
-      summary: summary ?? existing.summary,
-      startLocal: startLocal ?? formatTimestampForDb(existing.startLocal),
-      endLocal: endLocal ?? formatTimestampForDb(existing.endLocal),
-      location: location !== undefined ? location : existing.location ?? undefined,
-      prepNote: prepNote !== undefined ? prepNote : existing.prepNote ?? undefined,
-    };
+    const updates: AppointmentUpdateRequest = {};
+    if (summary !== undefined) {
+      updates.summary = summary;
+    }
+    if (startLocal !== undefined) {
+      updates.startLocal = startLocal;
+    }
+    if (endLocal !== undefined) {
+      updates.endLocal = endLocal;
+    }
+    if (location !== undefined) {
+      updates.location = location;
+    }
+    if (prepNote !== undefined) {
+      updates.prepNote = prepNote;
+    }
 
-    const updated = await updateAppointment(parseInt(id), user.id, updateData);
+    const updated = await updateAppointment(parseInt(id), user.id, {
+      summary: updates.summary ?? existing.summary,
+      startLocal: updates.startLocal ?? formatTimestampForDb(existing.startLocal),
+      endLocal: updates.endLocal ?? formatTimestampForDb(existing.endLocal),
+      location: updates.location ?? existing.location ?? undefined,
+      prepNote: updates.prepNote ?? existing.prepNote ?? undefined,
+    });
 
     res.json(updated);
   } catch (error) {

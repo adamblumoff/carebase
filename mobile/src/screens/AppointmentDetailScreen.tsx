@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
+  TextInput,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -58,6 +59,9 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
   const [currentAppointment, setCurrentAppointment] = useState(appointment);
   const [startDateTime, setStartDateTime] = useState(parseServerDate(appointment.startLocal));
   const [pendingStart, setPendingStart] = useState(parseServerDate(appointment.startLocal));
+  const [pendingSummary, setPendingSummary] = useState(appointment.summary);
+  const [pendingLocation, setPendingLocation] = useState(appointment.location || '');
+  const [pendingNote, setPendingNote] = useState(appointment.prepNote || '');
   const [editing, setEditing] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
@@ -76,6 +80,9 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
       const response = await apiClient.patch(API_ENDPOINTS.updateAppointment(appointment.id), {
         startLocal: formatForPayload(pendingStart),
         endLocal: formatForPayload(end),
+        summary: pendingSummary,
+        location: pendingLocation || undefined,
+        prepNote: pendingNote || undefined,
       });
 
       const updated = response.data;
@@ -83,6 +90,9 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
       const updatedStart = parseServerDate(updated.startLocal);
       setStartDateTime(updatedStart);
       setPendingStart(updatedStart);
+      setPendingSummary(updated.summary);
+      setPendingLocation(updated.location || '');
+      setPendingNote(updated.prepNote || '');
       Alert.alert('Saved', 'Appointment updated successfully');
       setShowDatePicker(false);
       setShowTimePicker(false);
@@ -119,6 +129,9 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
 
   const handleCancelEdit = () => {
     setPendingStart(new Date(startDateTime));
+    setPendingSummary(currentAppointment.summary);
+    setPendingLocation(currentAppointment.location || '');
+    setPendingNote(currentAppointment.prepNote || '');
     setEditing(false);
     setShowDatePicker(false);
     setShowTimePicker(false);
@@ -148,6 +161,24 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
 
         {editing ? (
           <View style={styles.formCard}>
+            <Text style={styles.formLabel}>Title</Text>
+            <TextInput
+              style={styles.textInput}
+              value={pendingSummary}
+              onChangeText={setPendingSummary}
+              placeholder="Appointment title"
+              placeholderTextColor={palette.textMuted}
+            />
+
+            <Text style={styles.formLabel}>Location</Text>
+            <TextInput
+              style={styles.textInput}
+              value={pendingLocation}
+              onChangeText={setPendingLocation}
+              placeholder="Location (optional)"
+              placeholderTextColor={palette.textMuted}
+            />
+
             <Text style={styles.formLabel}>Start date</Text>
             <TouchableOpacity
               style={styles.selectorRow}
@@ -171,6 +202,17 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
               <Text style={styles.selectorValue}>{formatDisplayTime(pendingStart)}</Text>
               <Text style={styles.selectorHint}>Change</Text>
             </TouchableOpacity>
+
+            <Text style={styles.formLabel}>Prep notes</Text>
+            <TextInput
+              style={[styles.textInput, styles.textArea]}
+              value={pendingNote}
+              onChangeText={setPendingNote}
+              placeholder="Preparation notes (optional)"
+              placeholderTextColor={palette.textMuted}
+              multiline
+              numberOfLines={3}
+            />
 
             <View style={styles.buttonRow}>
               <TouchableOpacity
@@ -308,6 +350,20 @@ const styles = StyleSheet.create({
     color: palette.textSecondary,
     marginBottom: spacing(0.5),
     textTransform: 'uppercase',
+  },
+  textInput: {
+    backgroundColor: palette.surfaceMuted,
+    borderRadius: radius.sm,
+    paddingVertical: spacing(1.25),
+    paddingHorizontal: spacing(2),
+    borderWidth: 1,
+    borderColor: '#dbe7d7',
+    fontSize: 16,
+    color: palette.textPrimary,
+    marginBottom: spacing(2),
+  },
+  textArea: {
+    textAlignVertical: 'top',
   },
   selectorRow: {
     backgroundColor: palette.surfaceMuted,
