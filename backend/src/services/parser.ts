@@ -264,11 +264,11 @@ export function extractBill(text: string, subject: string): BillCreateRequest {
   const amount = findBestAmount(combined);
 
   const dueDate = findDateWithContext(combined, [
-    /(?:due date|date due|pay by|payment due|due on|pay on)[^\n]{0,50}/i
+    /(?:due date|date due|pay by|payment due|due on|pay on)[\s:]{0,10}([\s\S]{0,50})/i
   ], DUE_DATE_KEYWORDS);
 
   const statementDate = findDateWithContext(combined, [
-    /(?:statement date|service date|billing date)[^\n]{0,40}/i
+    /(?:statement date|service date|billing date)[\s:]{0,10}([\s\S]{0,40})/i
   ], STATEMENT_DATE_KEYWORDS);
 
   const urlMatch = combined.match(/(?:pay at|payment link|pay online)[\s:]+(\S+)/i) ||

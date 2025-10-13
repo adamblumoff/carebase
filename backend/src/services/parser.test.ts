@@ -80,7 +80,8 @@ test('Parser: extracts bill data correctly', () => {
 
     Statement Date: 10/1/2025
     Amount Due: $145.50
-    Pay by: 10/25/2025
+    Pay by:
+    10/25/2025
 
     Pay online: https://billing.example.com/pay?account=12345
   `;
@@ -99,7 +100,8 @@ test('Parser: extracts realistic bill fields from OCR text', () => {
     ALINA HEALTH HOSPITAL STATEMENT
     STATEMENT DATE 03/28/2013
     PLEASE PAY THIS AMOUNT $419.07
-    DATE DUE 04/18/2013
+    DATE DUE
+    04/18/2013
     TOTAL CHARGES $654.80
     BALANCE: $419.07
     PAY ONLINE AT HTTPS://WWW.ALINAHEALTH.ORG/PAYHOSPITALBILL
