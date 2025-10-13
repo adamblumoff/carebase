@@ -35,9 +35,10 @@ export default function AppNavigator() {
           headerStyle: {
             backgroundColor: palette.canvas,
           },
-          headerTintColor: '#fff',
+          headerTintColor: palette.textPrimary,
           headerTitleStyle: {
             fontWeight: 'bold',
+            color: palette.textPrimary,
           },
         }}
       >
