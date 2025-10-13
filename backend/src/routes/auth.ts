@@ -1,16 +1,20 @@
 import express, { Request, Response } from 'express';
 import passport from '../auth/passport.js';
 import { createRecipient, findRecipientsByUserId } from '../db/queries.js';
+import { issueMobileLoginToken } from '../auth/mobileTokenService.js';
+import type { User } from '@carebase/shared';
 
 const router = express.Router();
 
 // Initiate Google OAuth
 router.get('/google', (req: Request, res: Response, next) => {
-  // Store mobile flag in session if present
-  if (req.query.mobile === 'true') {
-    req.session!.mobile = true;
-  }
-  passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
+  const isMobile = req.query.mobile === 'true';
+  const state = isMobile ? 'mobile' : undefined;
+
+  passport.authenticate('google', {
+    scope: ['profile', 'email'],
+    state
+  })(req, res, next);
 });
 
 // Google OAuth callback (web and mobile)
@@ -30,17 +34,16 @@ router.get(
         await createRecipient(req.user.id, 'My Care Recipient');
       }
 
-      // Check if this is a mobile request (from the mobile app)
-      const isMobile = req.session?.mobile;
+      // Decide redirect target based on OAuth state param or legacy session flag
+      const isMobile = req.query.state === 'mobile' || req.session?.mobile === true;
 
       if (isMobile) {
-        // Clear mobile flag from session
-        delete req.session!.mobile;
-
-        // Pass session cookie name in the redirect so mobile can use it
-        // The session ID is in req.sessionID
-        const sessionId = req.sessionID;
-        res.redirect(`carebase://auth/success?sessionId=${encodeURIComponent(sessionId)}`);
+        if (req.session?.mobile) {
+          delete req.session.mobile;
+        }
+        const loginToken = issueMobileLoginToken(req.user as User);
+        const redirectUrl = `carebase://auth/success?loginToken=${encodeURIComponent(loginToken)}`;
+        res.redirect(redirectUrl);
       } else {
         // Redirect to web app
         res.redirect('/plan');
@@ -48,40 +51,6 @@ router.get(
     } catch (error) {
       console.error('Error creating default recipient:', error);
       res.redirect('/');
-    }
-  }
-);
-
-// Google OAuth callback for mobile (returns JSON)
-router.get(
-  '/google/callback/mobile',
-  passport.authenticate('google', { failureRedirect: '/', session: true }),
-  async (req: Request, res: Response) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({ error: 'Authentication failed' });
-      }
-
-      // Create default recipient if this is a new user
-      const recipients = await findRecipientsByUserId(req.user.id);
-
-      if (recipients.length === 0) {
-        await createRecipient(req.user.id, 'My Care Recipient');
-      }
-
-      // Return user data as JSON for mobile
-      res.json({
-        success: true,
-        user: {
-          id: req.user.id,
-          email: req.user.email,
-          forwardingAddress: req.user.forwardingAddress,
-          planSecret: req.user.planSecret
-        }
-      });
-    } catch (error) {
-      console.error('Error in mobile auth callback:', error);
-      res.status(500).json({ error: 'Internal server error' });
     }
   }
 );

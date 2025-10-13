@@ -45,6 +45,7 @@ INBOUND_EMAIL_DOMAIN=inbound.yourapp.com
 
 # App
 SESSION_SECRET=random-secret
+MOBILE_AUTH_SECRET=another-random-secret
 NODE_ENV=development
 BASE_URL=http://localhost:3000
 ```

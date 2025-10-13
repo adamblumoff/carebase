@@ -2,7 +2,8 @@
  * Mobile API: Authentication endpoints
  */
 import express, { Request, Response } from 'express';
-import { findUserByGoogleId, createUser, findRecipientsByUserId, createRecipient } from '../../db/queries.js';
+import { verifyMobileLoginToken, issueMobileAccessToken } from '../../auth/mobileTokenService.js';
+import { findUserById } from '../../db/queries.js';
 import type { User } from '@carebase/shared';
 
 const router = express.Router();
@@ -12,14 +13,16 @@ const router = express.Router();
  * Check if user is authenticated and return user data
  */
 router.get('/session', (req: Request, res: Response) => {
-  if (req.isAuthenticated() && req.user) {
+  const user = req.user as User | undefined;
+
+  if (user) {
     return res.json({
       authenticated: true,
       user: {
-        id: req.user.id,
-        email: req.user.email,
-        forwardingAddress: req.user.forwardingAddress,
-        planSecret: req.user.planSecret
+        id: user.id,
+        email: user.email,
+        forwardingAddress: user.forwardingAddress,
+        planSecret: user.planSecret
       }
     });
   }
@@ -45,136 +48,55 @@ router.post('/logout', (req: Request, res: Response) => {
  * Get current user info (requires authentication)
  */
 router.get('/user', (req: Request, res: Response) => {
-  if (!req.isAuthenticated()) {
+  const user = req.user as User | undefined;
+  if (!user) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
 
   res.json({
-    id: req.user.id,
-    email: req.user.email,
-    forwardingAddress: req.user.forwardingAddress,
-    planSecret: req.user.planSecret
+    id: user.id,
+    email: user.email,
+    forwardingAddress: user.forwardingAddress,
+    planSecret: user.planSecret
   });
 });
 
 /**
- * GET /api/auth/google/mobile/callback
- * OAuth callback for mobile - exchanges code for ID token and redirects back to app
+ * POST /api/auth/mobile-login
+ * Exchange a one-time login token (created during Google OAuth) for an access token
  */
-router.get('/google/mobile/callback', async (req: Request, res: Response) => {
+router.post('/mobile-login', async (req: Request, res: Response) => {
   try {
-    const { code } = req.query;
-
-    if (!code) {
-      return res.status(400).send('Authorization code required');
+    const { authToken } = req.body as { authToken?: string };
+    if (!authToken) {
+      return res.status(400).json({ error: 'authToken required' });
     }
 
-    // Must use localhost:3000 to match what was sent to Google OAuth
-    // (Google doesn't allow IP addresses in redirect URIs)
-    const redirectUri = 'http://localhost:3000/api/auth/google/mobile/callback';
-
-    // Exchange authorization code for tokens
-    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        code: code as string,
-        client_id: process.env.GOOGLE_CLIENT_ID!,
-        client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-        redirect_uri: redirectUri,
-        grant_type: 'authorization_code',
-      }),
-    });
-
-    const tokens = await tokenResponse.json();
-
-    if (!tokens.id_token) {
-      return res.status(400).send('Failed to get ID token');
+    const payload = verifyMobileLoginToken(authToken);
+    if (!payload) {
+      return res.status(401).json({ error: 'invalid or expired token' });
     }
 
-    // Send HTML page that redirects to the app via custom scheme
-    const appRedirect = `carebase://redirect?id_token=${tokens.id_token}`;
-    res.send(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Signing in...</title>
-          <meta name="viewport" content="width=device-width, initial-scale=1">
-          <meta http-equiv="refresh" content="0;url=${appRedirect}">
-        </head>
-        <body style="font-family: system-ui; text-align: center; padding: 40px;">
-          <h2>Signing you in...</h2>
-          <p>Redirecting to app...</p>
-          <p><a href="${appRedirect}">Click here if you're not redirected</a></p>
-          <script>
-            window.location.href = '${appRedirect}';
-          </script>
-        </body>
-      </html>
-    `);
-  } catch (error) {
-    console.error('Mobile OAuth callback error:', error);
-    res.status(500).send('Authentication failed');
-  }
-});
-
-/**
- * POST /api/auth/google
- * Exchange Google ID token for session
- */
-router.post('/google', async (req: Request, res: Response) => {
-  try {
-    const { idToken } = req.body;
-
-    if (!idToken) {
-      return res.status(400).json({ error: 'ID token required' });
-    }
-
-    // Verify the Google ID token
-    const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
-    const tokenInfo = await response.json();
-
-    if (!response.ok || tokenInfo.error) {
-      return res.status(401).json({ error: 'Invalid Google token' });
-    }
-
-    // Check if token is for our app
-    if (tokenInfo.aud !== process.env.GOOGLE_CLIENT_ID) {
-      return res.status(401).json({ error: 'Token not for this app' });
-    }
-
-    const { sub: googleId, email } = tokenInfo;
-
-    // Find or create user
-    let user = await findUserByGoogleId(googleId);
-
+    const user = await findUserById(payload.sub);
     if (!user) {
-      user = await createUser(email, googleId);
-
-      // Create default recipient for new user
-      await createRecipient(user.id, 'My Care Recipient');
+      return res.status(404).json({ error: 'user not found' });
     }
 
-    // Create session
-    req.login(user, (err) => {
-      if (err) {
-        console.error('Session creation error:', err);
-        return res.status(500).json({ error: 'Failed to create session' });
-      }
+    const accessToken = issueMobileAccessToken(user as User);
 
-      res.json({
-        success: true,
-        user: {
-          id: user.id,
-          email: user.email,
-          forwardingAddress: user.forwardingAddress,
-          planSecret: user.planSecret
-        }
-      });
+    res.json({
+      authenticated: true,
+      accessToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        forwardingAddress: user.forwardingAddress,
+        planSecret: user.planSecret
+      }
     });
   } catch (error) {
-    console.error('Google auth error:', error);
-    res.status(500).json({ error: 'Authentication failed' });
+    console.error('Mobile login exchange error:', error);
+    res.status(500).json({ error: 'internal error' });
   }
 });
 

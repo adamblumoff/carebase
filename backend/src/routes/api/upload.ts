@@ -7,6 +7,7 @@ import { createSource, createItem, createBill, createAuditLog, findRecipientsByU
 import { extractTextFromImage, getShortExcerpt } from '../../services/ocr.js';
 import { storeFile } from '../../services/storage.js';
 import { parseSource } from '../../services/parser.js';
+import type { User } from '@carebase/shared';
 
 const router = express.Router();
 
@@ -32,15 +33,14 @@ const upload = multer({
  */
 router.post('/photo', upload.single('photo'), async (req: Request, res: Response) => {
   try {
-    if (!req.isAuthenticated()) {
+    const user = req.user as User | undefined;
+    if (!user) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
-
-    const user = req.user;
 
     // Get recipient
     const recipients = await findRecipientsByUserId(user.id);

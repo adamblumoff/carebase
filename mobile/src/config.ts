@@ -3,10 +3,10 @@
  */
 
 // API base URL - change this to your backend URL
-// For development on physical device, use your computer's local IP
+// For development on physical device, use ngrok tunnel
 // For emulator/simulator, use localhost
 export const API_BASE_URL = __DEV__
-  ? 'http://172.27.88.132:3000' // Local IP for physical device
+  ? 'https://nonsegmented-nonconsequentially-ozell.ngrok-free.dev' // Replace with your ngrok URL from step 2
   : 'https://your-production-url.com';
 
 // Google OAuth configuration
@@ -25,7 +25,7 @@ export const API_ENDPOINTS = {
   checkSession: '/api/auth/session',
   logout: '/api/auth/logout',
   getUserInfo: '/api/auth/user',
-  exchangeGoogleToken: '/api/auth/google',
+  mobileLogin: '/api/auth/mobile-login',
 
   // Plan
   getPlan: '/api/plan',

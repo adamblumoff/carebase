@@ -3,7 +3,7 @@
  */
 import express, { Request, Response } from 'express';
 import { getUpcomingAppointments, getUpcomingBills, findRecipientsByUserId } from '../../db/queries.js';
-import type { Appointment, Bill } from '@carebase/shared';
+import type { Appointment, Bill, User } from '@carebase/shared';
 
 const router = express.Router();
 
@@ -15,11 +15,10 @@ const router = express.Router();
  */
 router.get('/', async (req: Request, res: Response) => {
   try {
-    if (!req.isAuthenticated()) {
+    const user = req.user as User | undefined;
+    if (!user) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
-
-    const user = req.user;
     const days = parseInt(req.query.days as string) || 7;
 
     // Get recipient

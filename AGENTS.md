@@ -1,0 +1,16 @@
+# Repository Guidelines
+
+## Project Structure & Module Organization
+Carebase runs as an npm workspaces monorepo. `backend/` hosts the Express + TypeScript API with domain folders under `src/` (auth, routes, services, jobs, views) and maintenance utilities in `scripts/`. `mobile/` is the Expo React Native app; feature logic lives in `src/` while `App.tsx` wires providers and navigation. `shared/` publishes typed constants consumed by both runtimes via workspace imports. Use `tests/` for cross-workspace integration specs and keep ad hoc uploads or OCR fixtures inside `uploads/` so they stay out of source control.
+
+## Build, Test, and Development Commands
+Install dependencies once with `npm install` at the repository root. Run the API locally via `npm run dev:backend` (tsx watch on `src/server.ts`). Launch the mobile app with `npm run dev:mobile`, then select the target platform in the Expo CLI. Execute all workspace tests through `npm test`, or scope to the backend with `npm run test:backend` for faster iteration. Apply migrations using `npm run db:migrate`, and load sample data with `node backend/scripts/add-test-data.js` after authenticating locally.
+
+## Coding Style & Naming Conventions
+Backend and shared code use strict TypeScript with ES modules; keep 2-space indentation, trailing semicolons, and `const` by default. Route files live under `routes/` with hyphenated filenames (`upload.ts`), while exported types stay in `shared/types` using PascalCase interfaces. In the mobile app, components are PascalCase and placed under `src/features/<feature>/<Component>.tsx`. Keep environment bootstrapping imports (see `backend/src/server.ts`) at the top so `env.ts` loads before other modules.
+
+## Testing Guidelines
+Backend unit and integration tests belong next to the code as `*.test.ts` and run via Node’s test runner through tsx. Aim to cover route handlers, job schedulers, and data access helpers; document any external service fakes inside the spec. The `tests/` workspace is reserved for higher-level flows; create self-contained fixtures and clean up generated records. When introducing mobile tests, use Jest with `jest-expo` and snapshot UI states per screen.
+
+## Commit & Pull Request Guidelines
+Commits should stay concise, imperative, and focused (e.g., “Replace cookie manager with AsyncStorage”). Reference issues in the body if applicable and avoid batching unrelated changes. Pull requests need a short summary, testing notes (`npm run test:backend`, simulator screenshots, etc.), call out new env vars, and include migration IDs when schema changes apply.

@@ -17,7 +17,7 @@ const router = express.Router();
  */
 router.get('/:id', async (req: Request, res: Response) => {
   try {
-    if (!req.isAuthenticated()) {
+    if (!req.user) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
@@ -41,7 +41,7 @@ router.get('/:id', async (req: Request, res: Response) => {
  */
 router.patch('/:id', async (req: Request, res: Response) => {
   try {
-    if (!req.isAuthenticated()) {
+    if (!req.user) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
@@ -70,7 +70,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
  */
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
-    if (!req.isAuthenticated()) {
+    if (!req.user) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
@@ -90,7 +90,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
  */
 router.post('/:id/mark-paid', async (req: Request, res: Response) => {
   try {
-    if (!req.isAuthenticated()) {
+    if (!req.user) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 

@@ -8,33 +8,29 @@ import { API_BASE_URL } from '../config';
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000,
-  withCredentials: true, // Send cookies with requests
+  withCredentials: false,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Request interceptor - add session ID from AsyncStorage to Cookie header
 apiClient.interceptors.request.use(
   async (config) => {
     console.log(`[API] ${config.method?.toUpperCase()} ${config.url}`);
 
-    // Get session ID from AsyncStorage and add it as a cookie header
     try {
-      const sessionId = await AsyncStorage.getItem('sessionId');
-      if (sessionId) {
-        config.headers.Cookie = `connect.sid=${sessionId}`;
-        console.log('[API] Added session cookie to request');
+      const accessToken = await AsyncStorage.getItem('accessToken');
+      if (accessToken) {
+        config.headers.Authorization = `Bearer ${accessToken}`;
+        console.log('[API] Added bearer token to request');
       }
     } catch (error) {
-      console.error('[API] Failed to get session ID:', error);
+      console.error('[API] Failed to load access token:', error);
     }
 
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
 // Response interceptor
@@ -46,6 +42,12 @@ apiClient.interceptors.response.use(
   (error) => {
     if (error.response) {
       console.error(`[API] Error: ${error.response.status}`, error.response.data);
+
+      if (error.response.status === 401) {
+        AsyncStorage.removeItem('accessToken').catch(() => {
+          // ignore cleanup errors
+        });
+      }
     } else {
       console.error(`[API] Network error:`, error.message);
     }

@@ -3,7 +3,7 @@
  * Google OAuth Sign In using WebBrowser and Passport backend
  */
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import * as WebBrowser from 'expo-web-browser';
@@ -22,8 +22,7 @@ export default function LoginScreen({ navigation }: Props) {
   const handleLogin = async () => {
     setLoading(true);
     try {
-      // Open OAuth flow in browser - uses Passport's built-in OAuth handling
-      // Backend will handle the OAuth dance and create a session
+      // Open OAuth flow in browser - backend completes Google OAuth and issues a mobile token
       const result = await WebBrowser.openAuthSessionAsync(
         `${API_BASE_URL}/auth/google?mobile=true`,
         'carebase://'
@@ -32,37 +31,64 @@ export default function LoginScreen({ navigation }: Props) {
       console.log('WebBrowser result:', result);
 
       if (result.type === 'success') {
-        // Extract session ID from the redirect URL
+        // Extract login token from the redirect URL
         const url = result.url;
         console.log('Success URL:', url);
 
-        const params = new URLSearchParams(url.split('?')[1]);
-        const sessionId = params.get('sessionId');
+        const params = new URLSearchParams(url.split('?')[1] ?? '');
+        const rawToken = params.get('loginToken');
+        const loginToken = rawToken ? rawToken.replace(/#.*/, '') : null;
 
-        if (sessionId) {
-          console.log('Received session ID:', sessionId);
+        if (!loginToken) {
+          console.error('Missing login token in redirect URL');
+          Alert.alert('Error', 'Authentication failed: missing login token.');
+          setLoading(false);
+          return;
+        }
 
-          // Store session ID in AsyncStorage so axios interceptor can use it
-          try {
-            await AsyncStorage.setItem('sessionId', sessionId);
-            console.log('Session ID stored successfully');
-          } catch (storageError) {
-            console.error('Failed to store session ID:', storageError);
+        console.log('Received login token, exchanging for access token...');
+        try {
+          const exchangeResponse = await apiClient.post(API_ENDPOINTS.mobileLogin, { authToken: loginToken });
+          const { accessToken } = exchangeResponse.data;
+
+          if (!accessToken) {
+            throw new Error('Access token not provided');
           }
+
+          await AsyncStorage.setItem('accessToken', accessToken);
+          await AsyncStorage.removeItem('sessionCookie');
+          console.log('Access token stored successfully');
+        } catch (exchangeError: any) {
+          console.error('Failed to exchange login token:', exchangeError?.response?.data || exchangeError);
+          Alert.alert('Error', 'Authentication failed during session exchange.');
+          setLoading(false);
+          return;
         }
 
         // Check if we're now authenticated by checking session
         console.log('Checking session...');
-        const sessionCheck = await apiClient.get(API_ENDPOINTS.checkSession);
-        console.log('Session check response:', sessionCheck.data);
+        try {
+          const sessionCheck = await apiClient.get(API_ENDPOINTS.checkSession);
+          console.log('Session check response:', sessionCheck.data);
 
-        if (sessionCheck.data.authenticated) {
-          console.log('Session authenticated! Navigating to Plan...');
-          navigation.replace('Plan');
-        } else {
-          console.error('Session not authenticated');
-          Alert.alert('Error', 'Authentication succeeded but session was not created.');
+          if (sessionCheck.data.authenticated) {
+            console.log('Session authenticated! Navigating to Plan...');
+            navigation.replace('Plan');
+          } else {
+            console.error('Session not authenticated');
+            Alert.alert('Error', 'Authentication succeeded but session was not created.');
+            setLoading(false);
+          }
+        } catch (checkError: any) {
+          console.error('Session check error:', checkError);
+          Alert.alert('Error', 'Failed to verify authentication status.');
+          try {
+            await AsyncStorage.removeItem('accessToken');
+          } catch {
+            // ignore cleanup errors
+          }
           setLoading(false);
+          return;
         }
       } else if (result.type === 'cancel') {
         console.log('User cancelled OAuth');

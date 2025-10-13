@@ -27,6 +27,7 @@ import apiBillsRoutes from './routes/api/bills.js';
 import apiUploadRoutes from './routes/api/upload.js';
 
 import { scheduleFridayDigest } from './jobs/digest.js';
+import { attachBearerUser } from './middleware/attachBearerUser.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -51,6 +52,7 @@ app.use(session({
 }));
 app.use(passportConfig.initialize());
 app.use(passportConfig.session());
+app.use(attachBearerUser);
 
 // View engine
 app.set('view engine', 'ejs');
