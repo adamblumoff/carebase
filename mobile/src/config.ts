@@ -2,12 +2,15 @@
  * App configuration
  */
 
-// API base URL - change this to your backend URL
-// For development on physical device, use ngrok tunnel
-// For emulator/simulator, use localhost
-export const API_BASE_URL = __DEV__
-  ? 'https://nonsegmented-nonconsequentially-ozell.ngrok-free.dev' // Replace with your ngrok URL from step 2
-  : 'https://your-production-url.com';
+// API base URL - configurable via Expo env (EXPO_PUBLIC_API_BASE_URL)
+// For development on device, point EXPO_PUBLIC_API_BASE_URL to your ngrok tunnel.
+// Defaults fall back to localhost for emulator/simulator.
+const DEFAULT_DEV_URL = 'http://localhost:3000';
+const DEFAULT_PROD_URL = 'https://your-production-url.com';
+
+export const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_BASE_URL ||
+  (__DEV__ ? DEFAULT_DEV_URL : DEFAULT_PROD_URL);
 
 // Google OAuth configuration
 // Get these from Google Cloud Console

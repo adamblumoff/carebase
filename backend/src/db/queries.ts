@@ -300,25 +300,50 @@ export async function getUpcomingAppointments(recipientId: number, startDate: Da
   return result.rows.map(appointmentRowToAppointment);
 }
 
-export async function updateAppointment(id: number, data: AppointmentUpdateRequest): Promise<Appointment> {
+export async function updateAppointment(id: number, userId: number, data: AppointmentUpdateRequest): Promise<Appointment> {
   const { startLocal, endLocal, location, prepNote, summary } = data;
   const result = await db.query(
-    `UPDATE appointments
+    `UPDATE appointments AS a
      SET start_local = $1, end_local = $2, location = $3, prep_note = $4, summary = $5
-     WHERE id = $6
-     RETURNING *`,
-    [startLocal, endLocal, location, prepNote, summary, id]
+     FROM items i
+     JOIN recipients r ON i.recipient_id = r.id
+     WHERE a.id = $6
+       AND a.item_id = i.id
+       AND r.user_id = $7
+     RETURNING a.*`,
+    [startLocal, endLocal, location, prepNote, summary, id, userId]
   );
+  if (result.rows.length === 0) {
+    throw new Error('Appointment not found');
+  }
   return appointmentRowToAppointment(result.rows[0]);
 }
 
-export async function getAppointmentById(id: number): Promise<Appointment | undefined> {
-  const result = await db.query('SELECT * FROM appointments WHERE id = $1', [id]);
+export async function getAppointmentById(id: number, userId: number): Promise<Appointment | undefined> {
+  const result = await db.query(
+    `SELECT a.*
+     FROM appointments a
+     JOIN items i ON a.item_id = i.id
+     JOIN recipients r ON i.recipient_id = r.id
+     WHERE a.id = $1 AND r.user_id = $2`,
+    [id, userId]
+  );
   return result.rows[0] ? appointmentRowToAppointment(result.rows[0]) : undefined;
 }
 
-export async function deleteAppointment(id: number): Promise<void> {
-  await db.query('DELETE FROM appointments WHERE id = $1', [id]);
+export async function deleteAppointment(id: number, userId: number): Promise<void> {
+  const result = await db.query(
+    `DELETE FROM appointments a
+     USING items i
+     JOIN recipients r ON i.recipient_id = r.id
+     WHERE a.id = $1
+       AND a.item_id = i.id
+       AND r.user_id = $2`,
+    [id, userId]
+  );
+  if (result.rowCount === 0) {
+    throw new Error('Appointment not found');
+  }
 }
 
 // ========== BILLS ==========
@@ -356,25 +381,50 @@ export async function getUpcomingBills(recipientId: number, startDate: Date, end
   return result.rows.map(billRowToBill);
 }
 
-export async function updateBill(id: number, data: BillUpdateRequest): Promise<Bill> {
+export async function updateBill(id: number, userId: number, data: BillUpdateRequest): Promise<Bill> {
   const { statementDate, amount, dueDate, payUrl, status } = data;
   const result = await db.query(
-    `UPDATE bills
+    `UPDATE bills AS b
      SET statement_date = $1, amount = $2, due_date = $3, pay_url = $4, status = $5
-     WHERE id = $6
-     RETURNING *`,
-    [statementDate, amount, dueDate, payUrl, status, id]
+     FROM items i
+     JOIN recipients r ON i.recipient_id = r.id
+     WHERE b.id = $6
+       AND b.item_id = i.id
+       AND r.user_id = $7
+     RETURNING b.*`,
+    [statementDate, amount, dueDate, payUrl, status, id, userId]
   );
+  if (result.rows.length === 0) {
+    throw new Error('Bill not found');
+  }
   return billRowToBill(result.rows[0]);
 }
 
-export async function getBillById(id: number): Promise<Bill | undefined> {
-  const result = await db.query('SELECT * FROM bills WHERE id = $1', [id]);
+export async function getBillById(id: number, userId: number): Promise<Bill | undefined> {
+  const result = await db.query(
+    `SELECT b.*
+     FROM bills b
+     JOIN items i ON b.item_id = i.id
+     JOIN recipients r ON i.recipient_id = r.id
+     WHERE b.id = $1 AND r.user_id = $2`,
+    [id, userId]
+  );
   return result.rows[0] ? billRowToBill(result.rows[0]) : undefined;
 }
 
-export async function deleteBill(id: number): Promise<void> {
-  await db.query('DELETE FROM bills WHERE id = $1', [id]);
+export async function deleteBill(id: number, userId: number): Promise<void> {
+  const result = await db.query(
+    `DELETE FROM bills b
+     USING items i
+     JOIN recipients r ON i.recipient_id = r.id
+     WHERE b.id = $1
+       AND b.item_id = i.id
+       AND r.user_id = $2`,
+    [id, userId]
+  );
+  if (result.rowCount === 0) {
+    throw new Error('Bill not found');
+  }
 }
 
 // ========== AUDIT ==========

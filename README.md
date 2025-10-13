@@ -48,6 +48,9 @@ SESSION_SECRET=random-secret
 MOBILE_AUTH_SECRET=another-random-secret
 NODE_ENV=development
 BASE_URL=http://localhost:3000
+
+# Mobile
+EXPO_PUBLIC_API_BASE_URL=http://localhost:3000
 ```
 
 ## External Services
@@ -81,6 +84,12 @@ npm test --workspace=@carebase/backend
 # Database migration
 npm run db:migrate
 ```
+
+### Mobile Auth Flow
+
+- Google OAuth redirects back to the app with a short-lived `authToken`. The mobile client calls `POST /api/auth/mobile-login` to exchange it for a 7-day bearer `accessToken`.
+- `accessToken` is stored in `AsyncStorage` and attached to every request through the axios interceptor in `mobile/src/api/client.ts`.
+- Configure `MOBILE_AUTH_SECRET` on the backend and `EXPO_PUBLIC_API_BASE_URL` in Expo so both sides agree on token signing and API base URLs.
 
 ## Tech Stack
 

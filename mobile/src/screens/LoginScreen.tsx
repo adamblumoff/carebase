@@ -107,6 +107,9 @@ export default function LoginScreen({ navigation }: Props) {
 
   const handleContinueWithoutAuth = () => {
     // For development/testing only
+    AsyncStorage.removeItem('accessToken').catch(() => {
+      // ignore cleanup errors
+    });
     navigation.replace('Plan');
   };
 

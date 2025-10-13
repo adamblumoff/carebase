@@ -7,7 +7,7 @@ import {
   updateBill,
   deleteBill
 } from '../../db/queries.js';
-import type { BillUpdateData, BillStatus } from '@carebase/shared';
+import type { BillUpdateData, BillStatus, User } from '@carebase/shared';
 
 const router = express.Router();
 
@@ -17,12 +17,13 @@ const router = express.Router();
  */
 router.get('/:id', async (req: Request, res: Response) => {
   try {
-    if (!req.user) {
+    const user = req.user as User | undefined;
+    if (!user) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
     const { id } = req.params;
-    const bill = await getBillById(parseInt(id));
+    const bill = await getBillById(parseInt(id), user.id);
 
     if (!bill) {
       return res.status(404).json({ error: 'Bill not found' });
@@ -41,7 +42,8 @@ router.get('/:id', async (req: Request, res: Response) => {
  */
 router.patch('/:id', async (req: Request, res: Response) => {
   try {
-    if (!req.user) {
+    const user = req.user as User | undefined;
+    if (!user) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
@@ -49,16 +51,19 @@ router.patch('/:id', async (req: Request, res: Response) => {
     const { amount, dueDate, statementDate, payUrl, status } = req.body;
 
     const updateData: BillUpdateData = {};
-    if (amount !== undefined) updateData.amount = parseFloat(amount);
+    if (amount !== undefined && amount !== '') updateData.amount = parseFloat(amount);
     if (dueDate !== undefined) updateData.dueDate = dueDate;
     if (statementDate !== undefined) updateData.statementDate = statementDate;
     if (payUrl !== undefined) updateData.payUrl = payUrl;
     if (status !== undefined) updateData.status = status as BillStatus;
 
-    const updated = await updateBill(parseInt(id), updateData);
+    const updated = await updateBill(parseInt(id), user.id, updateData);
 
     res.json(updated);
   } catch (error) {
+    if (error instanceof Error && error.message === 'Bill not found') {
+      return res.status(404).json({ error: 'Bill not found' });
+    }
     console.error('Update bill error:', error);
     res.status(500).json({ error: 'Failed to update bill' });
   }
@@ -70,15 +75,19 @@ router.patch('/:id', async (req: Request, res: Response) => {
  */
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
-    if (!req.user) {
+    const user = req.user as User | undefined;
+    if (!user) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
     const { id } = req.params;
-    await deleteBill(parseInt(id));
+    await deleteBill(parseInt(id), user.id);
 
     res.json({ success: true });
   } catch (error) {
+    if (error instanceof Error && error.message === 'Bill not found') {
+      return res.status(404).json({ error: 'Bill not found' });
+    }
     console.error('Delete bill error:', error);
     res.status(500).json({ error: 'Failed to delete bill' });
   }
@@ -90,15 +99,19 @@ router.delete('/:id', async (req: Request, res: Response) => {
  */
 router.post('/:id/mark-paid', async (req: Request, res: Response) => {
   try {
-    if (!req.user) {
+    const user = req.user as User | undefined;
+    if (!user) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
     const { id } = req.params;
-    const updated = await updateBill(parseInt(id), { status: 'paid' });
+    const updated = await updateBill(parseInt(id), user.id, { status: 'paid' });
 
     res.json(updated);
   } catch (error) {
+    if (error instanceof Error && error.message === 'Bill not found') {
+      return res.status(404).json({ error: 'Bill not found' });
+    }
     console.error('Mark bill paid error:', error);
     res.status(500).json({ error: 'Failed to mark bill as paid' });
   }

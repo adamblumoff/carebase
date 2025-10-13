@@ -11,7 +11,7 @@ import {
   findRecipientById
 } from '../db/queries.js';
 import db from '../db/client.js';
-import type { BillStatus } from '@carebase/shared';
+import type { BillStatus, User } from '@carebase/shared';
 
 const router = express.Router();
 
@@ -21,11 +21,11 @@ const router = express.Router();
 router.get('/', async (req: Request, res: Response) => {
   try {
     let recipient = null;
-    let user = null;
+    let user: User | null = null;
 
     // Check if authenticated user
     if (req.isAuthenticated()) {
-      user = req.user;
+      user = req.user as User;
       const { findRecipientsByUserId } = await import('../db/queries.js');
       const recipients = await findRecipientsByUserId(user.id);
       recipient = recipients[0];
@@ -93,7 +93,12 @@ router.post('/appointment/:id/update', async (req: Request, res: Response) => {
     const { id } = req.params;
     const { summary, startLocal, endLocal, location, prepNote } = req.body;
 
-    await updateAppointment(parseInt(id), {
+    const user = req.user as User | undefined;
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    await updateAppointment(parseInt(id), user.id, {
       summary,
       startLocal,
       endLocal,
@@ -118,7 +123,12 @@ router.post('/appointment/:id/delete', async (req: Request, res: Response) => {
     }
 
     const { id } = req.params;
-    await deleteAppointment(parseInt(id));
+    const user = req.user as User | undefined;
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    await deleteAppointment(parseInt(id), user.id);
 
     res.redirect('/plan');
   } catch (error) {
@@ -139,7 +149,12 @@ router.post('/bill/:id/update', async (req: Request, res: Response) => {
     const { id } = req.params;
     const { amount, dueDate, statementDate, payUrl, status } = req.body;
 
-    await updateBill(parseInt(id), {
+    const user = req.user as User | undefined;
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    await updateBill(parseInt(id), user.id, {
       amount: amount ? parseFloat(amount) : undefined,
       dueDate: dueDate || undefined,
       statementDate: statementDate || undefined,
@@ -164,7 +179,12 @@ router.post('/bill/:id/delete', async (req: Request, res: Response) => {
     }
 
     const { id } = req.params;
-    await deleteBill(parseInt(id));
+    const user = req.user as User | undefined;
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    await deleteBill(parseInt(id), user.id);
 
     res.redirect('/plan');
   } catch (error) {

@@ -8,7 +8,7 @@ import {
   deleteAppointment,
   findRecipientsByUserId
 } from '../../db/queries.js';
-import type { AppointmentUpdateData } from '@carebase/shared';
+import type { AppointmentUpdateData, User } from '@carebase/shared';
 
 const router = express.Router();
 
@@ -18,12 +18,13 @@ const router = express.Router();
  */
 router.get('/:id', async (req: Request, res: Response) => {
   try {
-    if (!req.user) {
+    const user = req.user as User | undefined;
+    if (!user) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
     const { id } = req.params;
-    const appointment = await getAppointmentById(parseInt(id));
+    const appointment = await getAppointmentById(parseInt(id), user.id);
 
     if (!appointment) {
       return res.status(404).json({ error: 'Appointment not found' });
@@ -42,7 +43,8 @@ router.get('/:id', async (req: Request, res: Response) => {
  */
 router.patch('/:id', async (req: Request, res: Response) => {
   try {
-    if (!req.user) {
+    const user = req.user as User | undefined;
+    if (!user) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
@@ -56,10 +58,13 @@ router.patch('/:id', async (req: Request, res: Response) => {
     if (location !== undefined) updateData.location = location;
     if (prepNote !== undefined) updateData.prepNote = prepNote;
 
-    const updated = await updateAppointment(parseInt(id), updateData);
+    const updated = await updateAppointment(parseInt(id), user.id, updateData);
 
     res.json(updated);
   } catch (error) {
+    if (error instanceof Error && error.message === 'Appointment not found') {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
     console.error('Update appointment error:', error);
     res.status(500).json({ error: 'Failed to update appointment' });
   }
@@ -71,15 +76,19 @@ router.patch('/:id', async (req: Request, res: Response) => {
  */
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
-    if (!req.user) {
+    const user = req.user as User | undefined;
+    if (!user) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
     const { id } = req.params;
-    await deleteAppointment(parseInt(id));
+    await deleteAppointment(parseInt(id), user.id);
 
     res.json({ success: true });
   } catch (error) {
+    if (error instanceof Error && error.message === 'Appointment not found') {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
     console.error('Delete appointment error:', error);
     res.status(500).json({ error: 'Failed to delete appointment' });
   }

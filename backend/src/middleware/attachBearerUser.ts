@@ -25,6 +25,9 @@ export async function attachBearerUser(req: Request, res: Response, next: NextFu
 
     if (user) {
       (req as any).user = user;
+      if (typeof req.isAuthenticated === 'function') {
+        (req as any).isAuthenticated = () => true;
+      }
     }
   } catch (error) {
     console.error('Bearer auth error:', error);
