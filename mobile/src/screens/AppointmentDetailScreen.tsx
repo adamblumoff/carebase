@@ -27,7 +27,7 @@ const pad = (value: number) => value.toString().padStart(2, '0');
 const parseServerDate = (value: string) => new Date(value);
 
 const formatDisplayDateTime = (date: Date) =>
-  return date.toLocaleString('en-US', {
+  date.toLocaleString('en-US', {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
