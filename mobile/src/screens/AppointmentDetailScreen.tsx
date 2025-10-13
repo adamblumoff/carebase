@@ -394,12 +394,12 @@ const styles = StyleSheet.create({
   },
   buttonFlex: {
     flex: 1,
+    alignItems: 'center',
   },
   primaryButton: {
     backgroundColor: palette.primary,
     borderRadius: radius.sm,
     paddingVertical: spacing(1.5),
-    alignItems: 'center',
     marginTop: spacing(3),
   },
   primaryButtonText: {
@@ -412,7 +412,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: palette.textMuted,
     paddingVertical: spacing(1.5),
-    alignItems: 'center',
   },
   secondaryButtonText: {
     color: palette.textSecondary,
