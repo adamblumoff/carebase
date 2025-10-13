@@ -11,6 +11,13 @@ import type { AppointmentUpdateRequest, User } from '@carebase/shared';
 
 const router = express.Router();
 
+function formatTimestampForDb(date: Date): string {
+  const pad = (value: number) => value.toString().padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(
+    date.getMinutes()
+  )}:${pad(date.getSeconds())}`;
+}
+
 /**
  * GET /api/appointments/:id
  * Get a specific appointment
@@ -57,8 +64,8 @@ router.patch('/:id', async (req: Request, res: Response) => {
 
     const updateData: AppointmentUpdateRequest = {
       summary: summary ?? existing.summary,
-      startLocal: startLocal ?? existing.startLocal.toISOString(),
-      endLocal: endLocal ?? existing.endLocal.toISOString(),
+      startLocal: startLocal ?? formatTimestampForDb(existing.startLocal),
+      endLocal: endLocal ?? formatTimestampForDb(existing.endLocal),
       location: location !== undefined ? location : existing.location ?? undefined,
       prepNote: prepNote !== undefined ? prepNote : existing.prepNote ?? undefined,
     };

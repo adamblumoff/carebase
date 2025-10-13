@@ -60,21 +60,23 @@ export default function PlanScreen({ navigation }: Props) {
     fetchPlan();
   }, []);
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-    });
-  };
+const parseServerDate = (value: string) => new Date(value.replace(/Z$/, ''));
 
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-    });
+const formatDate = (dateString: string) => {
+  const date = parseServerDate(dateString);
+  return date.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+};
+
+const formatTime = (dateString: string) => {
+  const date = parseServerDate(dateString);
+  return date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
   };
 
   const formatCurrency = (amount: number) =>

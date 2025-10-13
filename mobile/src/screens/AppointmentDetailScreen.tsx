@@ -1,6 +1,6 @@
 /**
  * Appointment Detail Screen
- * View and edit appointment details with refreshed UI
+ * Update appointment details, including date and time
  */
 import React, { useState } from 'react';
 import {
@@ -21,34 +21,110 @@ import { palette, spacing, radius, shadow } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AppointmentDetail'>;
 
+const pad = (value: number) => value.toString().padStart(2, '0');
+
+const parseServerDate = (value: string) => new Date(value.replace(/Z$/, ''));
+
+const formatDateInput = (date: Date) =>
+  `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+
+const formatTimeInput = (date: Date) => `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+
+const formatDisplayDateTime = (dateString: string) => {
+  const date = parseServerDate(dateString);
+  return date.toLocaleString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+};
+
+const combineDateTime = (dateStr: string, timeStr: string) => {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const [hour, minute] = timeStr.split(':').map(Number);
+  if (
+    Number.isNaN(year) ||
+    Number.isNaN(month) ||
+    Number.isNaN(day) ||
+    Number.isNaN(hour) ||
+    Number.isNaN(minute)
+  ) {
+    return null;
+  }
+  const combined = new Date();
+  combined.setFullYear(year, month - 1, day);
+  combined.setHours(hour, minute, 0, 0);
+  return combined;
+};
+
+const formatForPayload = (date: Date) =>
+  `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours()
+  )}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+
 export default function AppointmentDetailScreen({ route, navigation }: Props) {
   const { appointment } = route.params;
+  const [currentAppointment, setCurrentAppointment] = useState(appointment);
   const [editing, setEditing] = useState(false);
   const [summary, setSummary] = useState(appointment.summary);
   const [location, setLocation] = useState(appointment.location || '');
   const [prepNote, setPrepNote] = useState(appointment.prepNote || '');
+  const [startDateInput, setStartDateInput] = useState(
+    formatDateInput(parseServerDate(appointment.startLocal))
+  );
+  const [startTimeInput, setStartTimeInput] = useState(
+    formatTimeInput(parseServerDate(appointment.startLocal))
+  );
+  const [endDateInput, setEndDateInput] = useState(
+    formatDateInput(parseServerDate(appointment.endLocal))
+  );
+  const [endTimeInput, setEndTimeInput] = useState(
+    formatTimeInput(parseServerDate(appointment.endLocal))
+  );
   const [saving, setSaving] = useState(false);
 
-  const formatDateTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-US', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    });
+  const syncFormFromAppointment = (appt: typeof currentAppointment) => {
+    setSummary(appt.summary);
+    setLocation(appt.location || '');
+    setPrepNote(appt.prepNote || '');
+    const start = parseServerDate(appt.startLocal);
+    const end = parseServerDate(appt.endLocal);
+    setStartDateInput(formatDateInput(start));
+    setStartTimeInput(formatTimeInput(start));
+    setEndDateInput(formatDateInput(end));
+    setEndTimeInput(formatTimeInput(end));
   };
 
   const handleSave = async () => {
+    const start = combineDateTime(startDateInput, startTimeInput);
+    const end = combineDateTime(endDateInput, endTimeInput);
+
+    if (!start || !end) {
+      Alert.alert('Invalid date', 'Please enter a valid start and end time.');
+      return;
+    }
+
+    if (end.getTime() <= start.getTime()) {
+      Alert.alert('Invalid range', 'End time must be after start time.');
+      return;
+    }
+
     setSaving(true);
     try {
-      await apiClient.patch(API_ENDPOINTS.updateAppointment(appointment.id), {
+      const response = await apiClient.patch(API_ENDPOINTS.updateAppointment(appointment.id), {
         summary,
         location: location || undefined,
         prepNote: prepNote || undefined,
+        startLocal: formatForPayload(start),
+        endLocal: formatForPayload(end),
       });
+
+      const updated = response.data;
+      setCurrentAppointment(updated);
+      syncFormFromAppointment(updated);
       Alert.alert('Saved', 'Appointment updated successfully');
       setEditing(false);
     } catch (error) {
@@ -81,6 +157,14 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
     );
   };
 
+  const handleCancelEdit = () => {
+    syncFormFromAppointment(currentAppointment);
+    setEditing(false);
+  };
+
+  const startDisplay = formatDisplayDateTime(currentAppointment.startLocal);
+  const locationDisplay = editing ? location : currentAppointment.location;
+
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView
@@ -92,10 +176,10 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
           <View style={styles.summaryAccent} />
           <View style={styles.summaryBody}>
             <Text style={styles.summaryLabel}>Upcoming visit</Text>
-            <Text style={styles.summaryTitle}>{summary}</Text>
-            <Text style={styles.summaryMeta}>{formatDateTime(appointment.startLocal)}</Text>
-            {location ? (
-              <Text style={styles.summaryMeta}>📍 {location}</Text>
+            <Text style={styles.summaryTitle}>{editing ? summary : currentAppointment.summary}</Text>
+            <Text style={styles.summaryMeta}>{startDisplay}</Text>
+            {locationDisplay ? (
+              <Text style={styles.summaryMeta}>📍 {locationDisplay}</Text>
             ) : null}
           </View>
         </View>
@@ -120,6 +204,46 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
               placeholderTextColor={palette.textMuted}
             />
 
+            <Text style={styles.formLabel}>Start</Text>
+            <View style={styles.row}>
+              <TextInput
+                style={[styles.input, styles.rowInput]}
+                value={startDateInput}
+                onChangeText={setStartDateInput}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={palette.textMuted}
+                keyboardType="numbers-and-punctuation"
+              />
+              <TextInput
+                style={[styles.input, styles.rowInput]}
+                value={startTimeInput}
+                onChangeText={setStartTimeInput}
+                placeholder="HH:MM"
+                placeholderTextColor={palette.textMuted}
+                keyboardType="numbers-and-punctuation"
+              />
+            </View>
+
+            <Text style={styles.formLabel}>End</Text>
+            <View style={styles.row}>
+              <TextInput
+                style={[styles.input, styles.rowInput]}
+                value={endDateInput}
+                onChangeText={setEndDateInput}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={palette.textMuted}
+                keyboardType="numbers-and-punctuation"
+              />
+              <TextInput
+                style={[styles.input, styles.rowInput]}
+                value={endTimeInput}
+                onChangeText={setEndTimeInput}
+                placeholder="HH:MM"
+                placeholderTextColor={palette.textMuted}
+                keyboardType="numbers-and-punctuation"
+              />
+            </View>
+
             <Text style={styles.formLabel}>Prep notes</Text>
             <TextInput
               style={[styles.input, styles.textArea]}
@@ -134,7 +258,7 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
             <View style={styles.buttonRow}>
               <TouchableOpacity
                 style={[styles.secondaryButton, styles.buttonFlex]}
-                onPress={() => setEditing(false)}
+                onPress={handleCancelEdit}
               >
                 <Text style={styles.secondaryButtonText}>Cancel</Text>
               </TouchableOpacity>
@@ -154,15 +278,18 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Prep note</Text>
               <Text
-                style={prepNote ? styles.detailValue : styles.detailValueMuted}
+                style={currentAppointment.prepNote ? styles.detailValue : styles.detailValueMuted}
               >
-                {prepNote || 'Add a reminder for this visit.'}
+                {currentAppointment.prepNote || 'Add a reminder for this visit.'}
               </Text>
             </View>
 
             <TouchableOpacity
               style={styles.primaryButton}
-              onPress={() => setEditing(true)}
+              onPress={() => {
+                syncFormFromAppointment(currentAppointment);
+                setEditing(true);
+              }}
             >
               <Text style={styles.primaryButtonText}>Edit visit details</Text>
             </TouchableOpacity>
@@ -235,17 +362,26 @@ const styles = StyleSheet.create({
   input: {
     backgroundColor: palette.surfaceMuted,
     borderRadius: radius.sm,
-    paddingVertical: spacing(1.5),
+    paddingVertical: spacing(1.25),
     paddingHorizontal: spacing(2),
-    marginBottom: spacing(2),
+    marginBottom: spacing(1.5),
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#dbe7d7',
     fontSize: 16,
     color: palette.textPrimary,
   },
   textArea: {
     height: 112,
     textAlignVertical: 'top',
+  },
+  row: {
+    flexDirection: 'row',
+    gap: spacing(1),
+    marginBottom: spacing(1.5),
+  },
+  rowInput: {
+    flex: 1,
+    marginBottom: 0,
   },
   buttonRow: {
     flexDirection: 'row',
