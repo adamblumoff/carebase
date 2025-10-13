@@ -60,7 +60,7 @@ export default function PlanScreen({ navigation }: Props) {
     fetchPlan();
   }, []);
 
-const parseServerDate = (value: string) => new Date(value.replace(/Z$/, ''));
+const parseServerDate = (value: string) => new Date(value);
 
 const formatDate = (dateString: string) => {
   const date = parseServerDate(dateString);
