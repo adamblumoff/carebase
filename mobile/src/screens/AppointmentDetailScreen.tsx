@@ -394,7 +394,7 @@ const styles = StyleSheet.create({
   },
   buttonFlex: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: 'stretch',
   },
   primaryButton: {
     backgroundColor: palette.primary,
