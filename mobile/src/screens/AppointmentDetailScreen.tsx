@@ -23,7 +23,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'AppointmentDetail'>;
 
 const pad = (value: number) => value.toString().padStart(2, '0');
 
-const parseServerDate = (value: string) => new Date(value.replace(/Z$/, ''));
+const parseServerDate = (value: string) => new Date(value);
 
 const formatDateInput = (date: Date) =>
   `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
