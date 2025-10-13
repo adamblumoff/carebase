@@ -184,7 +184,7 @@ export function extractBill(text: string, subject: string): BillCreateRequest {
   const dueDateContext =
     combined.match(/(?:due date|pay by|payment due|on or before)[^\n]{0,50}/i)?.[0] ||
     combined.match(/due[\s:]+[^\n]{5,40}/i)?.[0];
-  dueDate = parseDateToISO(dueDateContext) ?? parseDateToISO(combined);
+  dueDate = parseDateToISO(dueDateContext);
 
   // Extract statement date
   let statementDate: string | undefined = undefined;
@@ -221,15 +221,30 @@ export function parseSource(source: Source, fullText?: string): ParseResult {
   const text = (fullText && fullText.trim().length > 0) ? fullText : (source.shortExcerpt || '');
   const subject = source.subject || '';
 
-  const classification = classifyText(`${subject}\n${text}`);
+  let classification = classifyText(`${subject}\n${text}`);
+
+  const appointmentCandidate = extractAppointment(text, subject);
+  const billCandidate = extractBill(text, subject);
+
+  const billHasSignal =
+    billCandidate.amount !== undefined ||
+    billCandidate.dueDate !== undefined ||
+    !!billCandidate.payUrl;
+
+  if (billHasSignal && classification.type !== 'bill') {
+    classification = {
+      type: 'bill',
+      confidence: Math.max(classification.confidence, 0.85)
+    };
+  }
 
   let appointmentData: AppointmentCreateRequest | null = null;
   let billData: BillCreateRequest | null = null;
 
-  if (classification.type === 'appointment') {
-    appointmentData = extractAppointment(text, subject);
-  } else if (classification.type === 'bill') {
-    billData = extractBill(text, subject);
+  if (classification.type === 'bill') {
+    billData = billCandidate;
+  } else if (classification.type === 'appointment') {
+    appointmentData = appointmentCandidate;
   }
 
   return {

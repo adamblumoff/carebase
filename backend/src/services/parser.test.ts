@@ -33,6 +33,15 @@ test('Parser: classifies bill emails correctly', () => {
   assert.ok(result.confidence > 0.7, 'Confidence should be > 70%');
 });
 
+test('Parser: overrides to bill when monetary signals present', () => {
+  const text = `Here is your balance.
+    Total Due $245.10
+    Payment due on 05/01/2026.
+  `;
+  const result = classifyText(text);
+  assert.strictEqual(result.type, 'bill');
+});
+
 test('Parser: classifies noise correctly', () => {
   const noiseText = `
     Hello! Just wanted to say hi and see how you're doing.
