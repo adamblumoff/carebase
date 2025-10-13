@@ -62,7 +62,7 @@ router.post('/photo', upload.single('photo'), async (req: Request, res: Response
       // Continue even if OCR fails
     }
 
-    // Get short excerpt
+    // Get short excerpt for quick display, but keep full text for parsing
     const shortExcerpt = getShortExcerpt(ocrText);
 
     // Create source record
@@ -74,8 +74,8 @@ router.post('/photo', upload.single('photo'), async (req: Request, res: Response
       storageKey
     });
 
-    // Parse source
-    const parsed = parseSource(source);
+    // Parse source using full OCR text for classification/extraction
+    const parsed = parseSource(source, ocrText);
     const { classification, appointmentData, billData } = parsed;
 
     // Create item
@@ -97,7 +97,9 @@ router.post('/photo', upload.single('photo'), async (req: Request, res: Response
       type: classification.type,
       confidence: classification.confidence,
       source: 'photo_upload',
-      ocr: true
+      ocr: true,
+      extractedBill: parsed.billData,
+      ocrSnippet: ocrText.substring(0, 2000)
     });
 
     console.log(`Created ${classification.type} from photo upload with confidence ${classification.confidence}`);
@@ -113,6 +115,7 @@ router.post('/photo', upload.single('photo'), async (req: Request, res: Response
         type: item.type
       },
       bill: createdBill,
+      extracted: parsed.billData,
       ocrText: ocrText.substring(0, 200) // Return first 200 chars for debugging
     });
   } catch (error) {

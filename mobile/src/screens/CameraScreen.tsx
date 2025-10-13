@@ -25,6 +25,8 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Camera'>;
 export default function CameraScreen({ navigation }: Props) {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 
   const requestPermissions = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -82,11 +84,20 @@ export default function CameraScreen({ navigation }: Props) {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      Alert.alert(
-        'Uploaded',
-        `Captured a ${response.data.classification.type} document.`,
-        [{ text: 'View plan', onPress: () => navigation.goBack() }]
-      );
+      const { classification, extracted } = response.data;
+      const details: string[] = [];
+      if (extracted?.amount) {
+        details.push(`Amount due: ${formatCurrency(extracted.amount)}`);
+      }
+      if (extracted?.dueDate) {
+        details.push(`Due date: ${extracted.dueDate}`);
+      }
+
+      const message = details.length > 0
+        ? `Captured a ${classification.type} document.\n${details.join('\n')}`
+        : `Captured a ${classification.type} document.`;
+
+      Alert.alert('Uploaded', message, [{ text: 'View plan', onPress: () => navigation.goBack() }]);
     } catch (error: any) {
       console.error('Upload error:', error);
       Alert.alert('Error', error.response?.data?.error || 'Failed to upload photo');

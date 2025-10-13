@@ -39,6 +39,11 @@ GOOGLE_CLIENT_ID=your-client-id
 GOOGLE_CLIENT_SECRET=your-secret
 GOOGLE_CALLBACK_URL=http://localhost:3000/auth/google/callback
 
+# OCR (Google Cloud Vision)
+GOOGLE_APPLICATION_CREDENTIALS=./service-account-key.json
+OCR_PROVIDER=google
+OCR_CONFIDENCE_THRESHOLD=0.5
+
 # Email (Postmark)
 RESEND_API_KEY=your-key
 INBOUND_EMAIL_DOMAIN=inbound.yourapp.com

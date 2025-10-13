@@ -3,6 +3,7 @@
  */
 
 import type { ItemType, Source, AppointmentCreateRequest, BillCreateRequest } from '@carebase/shared';
+import * as chrono from 'chrono-node';
 
 // Keywords and patterns for classification
 const APPOINTMENT_KEYWORDS = [
@@ -160,33 +161,36 @@ export function extractBill(text: string, subject: string): BillCreateRequest {
 
   // Extract amount
   let amount: number | undefined = undefined;
-  const moneyMatch = combined.match(/\$(\d+(?:,\d{3})*(?:\.\d{2})?)/);
-  if (moneyMatch) {
-    const amountStr = moneyMatch[1].replace(/,/g, '');
-    amount = parseFloat(amountStr);
+  const amountMatch =
+    combined.match(/(?:amount due|total due|balance due|total|payment due)[^\d$]{0,20}\$?(\d+(?:,\d{3})*(?:\.\d{2})?)/i) ||
+    combined.match(/\$\s?(\d+(?:,\d{3})*(?:\.\d{2})?)/);
+  if (amountMatch) {
+    const amountStr = amountMatch[1].replace(/,/g, '');
+    const parsedAmount = parseFloat(amountStr);
+    if (!Number.isNaN(parsedAmount)) {
+      amount = parsedAmount;
+    }
   }
 
   // Extract due date
+  const parseDateToISO = (value: string | null | undefined): string | undefined => {
+    if (!value) return undefined;
+    const parsed = chrono.parseDate(value);
+    if (!parsed) return undefined;
+    return parsed.toISOString().split('T')[0];
+  };
+
   let dueDate: string | undefined = undefined;
-  const dueDateMatch = combined.match(/(?:due|pay by|payment due)[\s:]+([^\n]{5,30})/i);
-  if (dueDateMatch) {
-    try {
-      dueDate = new Date(dueDateMatch[1].trim()).toISOString().split('T')[0];
-    } catch (e) {
-      console.error('Due date parsing error:', e);
-    }
-  }
+  const dueDateContext =
+    combined.match(/(?:due date|pay by|payment due|on or before)[^\n]{0,50}/i)?.[0] ||
+    combined.match(/due[\s:]+[^\n]{5,40}/i)?.[0];
+  dueDate = parseDateToISO(dueDateContext) ?? parseDateToISO(combined);
 
   // Extract statement date
   let statementDate: string | undefined = undefined;
-  const stmtMatch = combined.match(/(?:statement date|date)[\s:]+([^\n]{5,30})/i);
-  if (stmtMatch) {
-    try {
-      statementDate = new Date(stmtMatch[1].trim()).toISOString().split('T')[0];
-    } catch (e) {
-      console.error('Statement date parsing error:', e);
-    }
-  }
+  const stmtContext =
+    combined.match(/(?:statement date|service date|billing date)[^\n]{0,40}/i)?.[0];
+  statementDate = parseDateToISO(stmtContext);
 
   // Extract payment URL
   const urlMatch = combined.match(/(?:pay at|payment link|pay online)[\s:]+(\S+)/i) ||
@@ -213,8 +217,8 @@ interface ParseResult {
  * @param source - Source record from database
  * @returns { classification, appointmentData, billData }
  */
-export function parseSource(source: Source): ParseResult {
-  const text = source.shortExcerpt || '';
+export function parseSource(source: Source, fullText?: string): ParseResult {
+  const text = (fullText && fullText.trim().length > 0) ? fullText : (source.shortExcerpt || '');
   const subject = source.subject || '';
 
   const classification = classifyText(`${subject}\n${text}`);

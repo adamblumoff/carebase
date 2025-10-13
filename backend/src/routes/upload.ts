@@ -64,7 +64,7 @@ router.post('/photo', ensureAuthenticated, ensureRecipient, upload.single('photo
     const { parseSource } = await import('../services/parser.js');
     const { createItem, createAppointment, createBill, createAuditLog } = await import('../db/queries.js');
 
-    const parsed = parseSource(source);
+    const parsed = parseSource(source, ocrText);
     const { classification, appointmentData, billData } = parsed;
 
     // Create item
@@ -87,7 +87,9 @@ router.post('/photo', ensureAuthenticated, ensureRecipient, upload.single('photo
       type: classification.type,
       confidence: classification.confidence,
       source: 'photo_upload',
-      ocr: true
+      ocr: true,
+      extractedBill: billData,
+      ocrSnippet: ocrText.substring(0, 2000)
     });
 
     console.log(`Created ${classification.type} from photo upload with confidence ${classification.confidence}`);

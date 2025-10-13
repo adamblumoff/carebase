@@ -81,6 +81,7 @@ test('Parser: extracts bill data correctly', () => {
 
   assert.strictEqual(bill.amount, 145.50, 'Should extract amount in dollars');
   assert.ok(bill.payUrl && bill.payUrl.includes('billing.example.com'), 'Should extract payment URL');
+  assert.strictEqual(bill.dueDate, '2025-10-25', 'Should parse due date');
   assert.strictEqual(bill.status, 'todo');
 });
 
@@ -132,4 +133,32 @@ test('Parser: parseSource creates correct structure for bill', () => {
   assert.strictEqual(result.classification.type, 'bill');
   assert.ok(result.billData, 'Should have bill data');
   assert.strictEqual(result.appointmentData, null, 'Should not have appointment data');
+});
+
+test('Parser: prefers full text when provided', () => {
+  const source = {
+    id: 3,
+    recipientId: 1,
+    kind: 'upload' as const,
+    externalId: null,
+    sender: null,
+    subject: 'Bill Snapshot',
+    shortExcerpt: 'Amount Due: $--',
+    storageKey: null,
+    createdAt: new Date()
+  };
+
+  const fullText = `
+    City Hospital Billing Statement
+    Statement Date: September 20, 2025
+    Amount Due: $240.75
+    Pay by: October 5, 2025
+  `;
+
+  const result = parseSource(source, fullText);
+
+  assert.strictEqual(result.classification.type, 'bill');
+  assert.ok(result.billData);
+  assert.strictEqual(result.billData?.amount, 240.75);
+  assert.strictEqual(result.billData?.dueDate, '2025-10-05');
 });
