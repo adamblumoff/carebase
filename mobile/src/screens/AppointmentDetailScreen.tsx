@@ -216,13 +216,13 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
 
             <View style={styles.buttonRow}>
               <TouchableOpacity
-                style={[styles.secondaryButton, styles.buttonFlex]}
+                style={[styles.actionButton, styles.secondaryButton, styles.buttonFlex]}
                 onPress={handleCancelEdit}
               >
                 <Text style={styles.secondaryButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.primaryButton, styles.buttonFlex]}
+                style={[styles.actionButton, styles.primaryButton, styles.buttonFlex]}
                 onPress={handleSave}
                 disabled={saving}
               >
@@ -275,7 +275,7 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
             </View>
 
             <TouchableOpacity
-              style={styles.primaryButton}
+              style={[styles.actionButton, styles.primaryButton]}
               onPress={() => {
                 setPendingStart(new Date(startDateTime));
                 setShowDatePicker(false);
@@ -394,13 +394,16 @@ const styles = StyleSheet.create({
   },
   buttonFlex: {
     flex: 1,
-    alignItems: 'stretch',
+  },
+  actionButton: {
+    borderRadius: radius.sm,
+    paddingVertical: spacing(1.5),
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing(3),
   },
   primaryButton: {
     backgroundColor: palette.primary,
-    borderRadius: radius.sm,
-    paddingVertical: spacing(1.5),
-    marginTop: spacing(3),
   },
   primaryButtonText: {
     color: '#fff',
@@ -408,10 +411,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   secondaryButton: {
-    borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: palette.textMuted,
-    paddingVertical: spacing(1.5),
   },
   secondaryButtonText: {
     color: palette.textSecondary,
@@ -425,6 +426,7 @@ const styles = StyleSheet.create({
     borderColor: palette.danger,
     paddingVertical: spacing(1.5),
     alignItems: 'center',
+    justifyContent: 'center',
   },
   dangerButtonText: {
     color: palette.danger,
