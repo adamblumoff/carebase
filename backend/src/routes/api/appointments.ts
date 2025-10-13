@@ -5,10 +5,9 @@ import express, { Request, Response } from 'express';
 import {
   getAppointmentById,
   updateAppointment,
-  deleteAppointment,
-  findRecipientsByUserId
+  deleteAppointment
 } from '../../db/queries.js';
-import type { AppointmentUpdateData, User } from '@carebase/shared';
+import type { AppointmentUpdateRequest, User } from '@carebase/shared';
 
 const router = express.Router();
 
@@ -51,12 +50,18 @@ router.patch('/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     const { summary, startLocal, endLocal, location, prepNote } = req.body;
 
-    const updateData: AppointmentUpdateData = {};
-    if (summary !== undefined) updateData.summary = summary;
-    if (startLocal !== undefined) updateData.startLocal = startLocal;
-    if (endLocal !== undefined) updateData.endLocal = endLocal;
-    if (location !== undefined) updateData.location = location;
-    if (prepNote !== undefined) updateData.prepNote = prepNote;
+    const existing = await getAppointmentById(parseInt(id), user.id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    const updateData: AppointmentUpdateRequest = {
+      summary: summary ?? existing.summary,
+      startLocal: startLocal ?? existing.startLocal.toISOString(),
+      endLocal: endLocal ?? existing.endLocal.toISOString(),
+      location: location !== undefined ? location : existing.location ?? undefined,
+      prepNote: prepNote !== undefined ? prepNote : existing.prepNote ?? undefined,
+    };
 
     const updated = await updateAppointment(parseInt(id), user.id, updateData);
 
