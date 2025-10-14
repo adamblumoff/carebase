@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   Alert,
   TextInput,
+  Platform,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
