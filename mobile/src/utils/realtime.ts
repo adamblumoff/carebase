@@ -1,4 +1,5 @@
-import { io, Socket } from 'socket.io-client';
+import type { Socket } from 'socket.io-client';
+import { io as createSocket } from 'socket.io-client/dist/socket.io.esm.min.js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config';
 import { emitPlanChanged } from './planEvents';
@@ -24,7 +25,7 @@ async function initSocket(): Promise<void> {
   connecting = true;
 
   const token = await getAuthToken();
-  socket = io(API_BASE_URL, {
+  socket = createSocket(API_BASE_URL, {
     transports: ['websocket'],
     forceNew: false,
     reconnection: true,
@@ -62,4 +63,3 @@ export async function ensureRealtimeConnected(): Promise<void> {
 export function isRealtimeConnected(): boolean {
   return connected;
 }
-
