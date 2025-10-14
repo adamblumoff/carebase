@@ -89,7 +89,7 @@ export default function LoginScreen({ navigation }: Props) {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['left', 'right']}>
       <View style={styles.container}>
         <View style={styles.brandBlock}>
           <Text style={styles.brandName}>Carebase</Text>

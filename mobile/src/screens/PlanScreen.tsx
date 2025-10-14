@@ -219,7 +219,7 @@ const formatTime = (dateString: string) => {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} edges={['left', 'right']}>
         <View style={styles.loadingState}>
           <ActivityIndicator size="large" color={palette.primary} />
           <Text style={styles.loadingText}>Loading your plan…</Text>
@@ -229,7 +229,7 @@ const formatTime = (dateString: string) => {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['left', 'right']}>
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.scrollContent}
