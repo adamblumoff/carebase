@@ -15,6 +15,7 @@ import type {
   BillCreateRequest,
   BillUpdateRequest
 } from '@carebase/shared';
+import { getRealtimeEmitter } from '../services/realtime.js';
 
 let planVersionColumnsEnsured = false;
 let planVersionEnsurePromise: Promise<void> | null = null;
@@ -213,16 +214,22 @@ function sanitizePayUrl(url?: string | null): string | null {
 
 async function touchPlanForItem(itemId: number): Promise<void> {
   await ensurePlanVersionColumns();
-  await db.query(
+  const result = await db.query(
     `UPDATE users u
      SET plan_version = COALESCE(u.plan_version, 0) + 1,
          plan_updated_at = NOW()
     FROM recipients r
-     JOIN items i ON i.recipient_id = r.id
+    JOIN items i ON i.recipient_id = r.id
      WHERE i.id = $1
-       AND r.user_id = u.id`,
+       AND r.user_id = u.id
+     RETURNING u.id`,
     [itemId]
   );
+  const userRow = result.rows[0];
+  if (userRow?.id) {
+    const realtime = getRealtimeEmitter();
+    realtime?.emitPlanUpdate(userRow.id as number);
+  }
 }
 
 export async function touchPlanForUser(userId: number): Promise<void> {
@@ -234,6 +241,8 @@ export async function touchPlanForUser(userId: number): Promise<void> {
      WHERE id = $1`,
     [userId]
   );
+  const realtime = getRealtimeEmitter();
+  realtime?.emitPlanUpdate(userId);
 }
 
 export async function getPlanVersion(userId: number): Promise<{ planVersion: number; planUpdatedAt: Date | null }> {

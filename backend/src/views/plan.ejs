@@ -286,29 +286,53 @@
 
   <script>
     (function() {
-      const pollIntervalMs = 10000;
-      let latestVersion = Number(<%= typeof planVersion === 'number' ? planVersion : 0 %>);
+      const latestVersion = Number(<%= typeof planVersion === 'number' ? planVersion : 0 %>);
       const planToken = <%- JSON.stringify(planToken || null) %>;
       const versionUrl = planToken ? `/plan/version?token=${encodeURIComponent(planToken)}` : '/plan/version';
 
-      async function scheduleCheck() {
-        try {
-          const response = await fetch(versionUrl, { cache: 'no-store' });
-          if (response.ok) {
-            const payload = await response.json();
-            if (typeof payload.planVersion === 'number' && payload.planVersion > latestVersion) {
-              window.location.reload();
-              return;
+      let pollingStarted = false;
+
+      const startPolling = () => {
+        if (pollingStarted) return;
+        pollingStarted = true;
+        const pollIntervalMs = 15000;
+        const checkVersion = async () => {
+          try {
+            const response = await fetch(versionUrl, { cache: 'no-store' });
+            if (response.ok) {
+              const payload = await response.json();
+              if (typeof payload.planVersion === 'number' && payload.planVersion > latestVersion) {
+                window.location.reload();
+                return;
+              }
             }
+          } catch (error) {
+            console.warn('Plan poll failed', error);
           }
-        } catch (error) {
-          console.warn('Plan auto-refresh poll failed', error);
-        }
+          setTimeout(checkVersion, pollIntervalMs);
+        };
+        setTimeout(checkVersion, pollIntervalMs);
+      };
 
-        setTimeout(scheduleCheck, pollIntervalMs);
-      }
-
-      setTimeout(scheduleCheck, pollIntervalMs);
+      const socketScript = document.createElement('script');
+      socketScript.src = '/socket.io/socket.io.js';
+      socketScript.onload = () => {
+        const socket = window.io({ withCredentials: true });
+        socket.on('plan:update', () => {
+          window.location.reload();
+        });
+        socket.on('connect_error', () => {
+          startPolling();
+        });
+        socket.on('disconnect', () => {
+          startPolling();
+        });
+      };
+      socketScript.onerror = () => {
+        console.warn('Failed to load realtime script');
+        startPolling();
+      };
+      document.head.appendChild(socketScript);
     })();
 
     function toggleEdit(type, id) {

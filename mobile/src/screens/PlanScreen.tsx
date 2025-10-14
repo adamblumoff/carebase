@@ -21,6 +21,7 @@ import apiClient from '../api/client';
 import { API_ENDPOINTS } from '../config';
 import { palette, spacing, radius, shadow } from '../theme';
 import { addPlanChangeListener } from '../utils/planEvents';
+import { ensureRealtimeConnected, isRealtimeConnected } from '../utils/realtime';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Plan'>;
 
@@ -73,17 +74,24 @@ export default function PlanScreen({ navigation }: Props) {
     const unsubscribe = addPlanChangeListener(() => {
       fetchPlan({ silent: true });
     });
+    ensureRealtimeConnected().catch((error) => {
+      console.warn('Realtime connection failed', error);
+    });
     return unsubscribe;
   }, [fetchPlan]);
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      const pollIntervalMs = 10000;
+      const pollIntervalMs = 15000;
       let timer: ReturnType<typeof setTimeout> | null = null;
 
       const checkVersion = async () => {
         try {
+          if (isRealtimeConnected()) {
+            timer = setTimeout(checkVersion, pollIntervalMs);
+            return;
+          }
           const response = await apiClient.get(API_ENDPOINTS.getPlanVersion);
           const nextVersion = typeof response.data.planVersion === 'number' ? response.data.planVersion : 0;
           if (nextVersion > latestVersionRef.current) {
