@@ -112,3 +112,5 @@ export const useAuth = (): AuthContextValue => {
   }
   return ctx;
 };
+
+export { AuthContext };

@@ -8,19 +8,21 @@
 const DEFAULT_DEV_URL = 'http://localhost:3000';
 const DEFAULT_PROD_URL = 'https://your-production-url.com';
 
+const envVars = (typeof process !== 'undefined' && process.env) ? process.env : {};
+
 export const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL ||
+  envVars.EXPO_PUBLIC_API_BASE_URL ||
   (__DEV__ ? DEFAULT_DEV_URL : DEFAULT_PROD_URL);
 
 // Google OAuth configuration
 // Get these from Google Cloud Console
 export const GOOGLE_CLIENT_ID = {
   // Web client ID (used for iOS)
-  web: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || 'your-web-client-id.apps.googleusercontent.com',
+  web: envVars.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || 'your-web-client-id.apps.googleusercontent.com',
   // iOS client ID
-  ios: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || 'your-ios-client-id.apps.googleusercontent.com',
+  ios: envVars.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || 'your-ios-client-id.apps.googleusercontent.com',
   // Android client ID
-  android: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || 'your-android-client-id.apps.googleusercontent.com',
+  android: envVars.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || 'your-android-client-id.apps.googleusercontent.com',
 };
 
 export const API_ENDPOINTS = {
