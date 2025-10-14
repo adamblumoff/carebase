@@ -285,6 +285,32 @@
   </div>
 
   <script>
+    (function() {
+      const pollIntervalMs = 10000;
+      let latestVersion = Number(<%= typeof planVersion === 'number' ? planVersion : 0 %>);
+      const planToken = <%- JSON.stringify(planToken || null) %>;
+      const versionUrl = planToken ? `/plan/version?token=${encodeURIComponent(planToken)}` : '/plan/version';
+
+      async function scheduleCheck() {
+        try {
+          const response = await fetch(versionUrl, { cache: 'no-store' });
+          if (response.ok) {
+            const payload = await response.json();
+            if (typeof payload.planVersion === 'number' && payload.planVersion > latestVersion) {
+              window.location.reload();
+              return;
+            }
+          }
+        } catch (error) {
+          console.warn('Plan auto-refresh poll failed', error);
+        }
+
+        setTimeout(scheduleCheck, pollIntervalMs);
+      }
+
+      setTimeout(scheduleCheck, pollIntervalMs);
+    })();
+
     function toggleEdit(type, id) {
       const viewEl = document.getElementById(`${type}-view-${id}`);
       const editEl = document.getElementById(`${type}-edit-${id}`);

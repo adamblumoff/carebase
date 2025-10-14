@@ -2,7 +2,7 @@
  * Mobile API: Plan endpoints (appointments + bills)
  */
 import express, { Request, Response } from 'express';
-import { getUpcomingAppointments, getUpcomingBills, findRecipientsByUserId } from '../../db/queries.js';
+import { getUpcomingAppointments, getUpcomingBills, findRecipientsByUserId, getPlanVersion } from '../../db/queries.js';
 import type { Appointment, Bill, User } from '@carebase/shared';
 
 const router = express.Router();
@@ -48,6 +48,8 @@ router.get('/', async (req: Request, res: Response) => {
       endDate.toISOString()
     );
 
+    const { planVersion, planUpdatedAt } = await getPlanVersion(user.id);
+
     res.json({
       recipient: {
         id: recipient.id,
@@ -58,11 +60,28 @@ router.get('/', async (req: Request, res: Response) => {
         end: endDate.toISOString()
       },
       appointments,
-      bills
+      bills,
+      planVersion,
+      planUpdatedAt
     });
   } catch (error) {
     console.error('Get plan error:', error);
     res.status(500).json({ error: 'Failed to fetch plan' });
+  }
+});
+
+router.get('/version', async (req: Request, res: Response) => {
+  try {
+    const user = req.user as User | undefined;
+    if (!user) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const { planVersion, planUpdatedAt } = await getPlanVersion(user.id);
+    res.json({ planVersion, planUpdatedAt });
+  } catch (error) {
+    console.error('Get plan version error:', error);
+    res.status(500).json({ error: 'Failed to fetch plan version' });
   }
 });
 

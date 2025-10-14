@@ -19,6 +19,7 @@ import * as ImagePicker from 'expo-image-picker';
 import apiClient from '../api/client';
 import { API_ENDPOINTS } from '../config';
 import { palette, spacing, radius, shadow } from '../theme';
+import { emitPlanChanged } from '../utils/planEvents';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Camera'>;
 
@@ -85,6 +86,7 @@ export default function CameraScreen({ navigation }: Props) {
       });
 
       const { classification, extracted, overdue } = response.data;
+      emitPlanChanged();
       const details: string[] = [];
       if (extracted?.amount) {
         details.push(`Amount due: ${formatCurrency(extracted.amount)}`);
@@ -100,7 +102,10 @@ export default function CameraScreen({ navigation }: Props) {
         ? `Captured a ${classification.type} document.\n${details.join('\n')}`
         : `Captured a ${classification.type} document.`;
 
-      Alert.alert('Uploaded', message, [{ text: 'View plan', onPress: () => navigation.goBack() }]);
+      Alert.alert('Uploaded', message, [{ text: 'View plan', onPress: () => {
+        emitPlanChanged();
+        navigation.goBack();
+      } }]);
     } catch (error: any) {
       console.error('Upload error:', error);
       Alert.alert('Error', error.response?.data?.error || 'Failed to upload photo');

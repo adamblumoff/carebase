@@ -18,6 +18,7 @@ import type { RootStackParamList } from '../navigation/AppNavigator';
 import apiClient from '../api/client';
 import { API_ENDPOINTS } from '../config';
 import { palette, spacing, radius, shadow } from '../theme';
+import { emitPlanChanged } from '../utils/planEvents';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'BillDetail'>;
 
@@ -50,6 +51,7 @@ export default function BillDetailScreen({ route, navigation }: Props) {
     try {
       const response = await apiClient.post(API_ENDPOINTS.markBillPaid(currentBill.id));
       setCurrentBill(response.data);
+      emitPlanChanged();
       Alert.alert('Done', 'Bill marked as paid');
     } catch (error) {
       Alert.alert('Error', 'Failed to mark bill as paid');
@@ -68,6 +70,7 @@ export default function BillDetailScreen({ route, navigation }: Props) {
         onPress: async () => {
           try {
             await apiClient.delete(API_ENDPOINTS.deleteBill(currentBill.id));
+            emitPlanChanged();
             navigation.goBack();
           } catch (error) {
             Alert.alert('Error', 'Failed to delete bill');

@@ -32,6 +32,7 @@ export const API_ENDPOINTS = {
 
   // Plan
   getPlan: '/api/plan',
+  getPlanVersion: '/api/plan/version',
 
   // Appointments
   getAppointment: (id: number) => `/api/appointments/${id}`,

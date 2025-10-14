@@ -20,6 +20,7 @@ import type { RootStackParamList } from '../navigation/AppNavigator';
 import apiClient from '../api/client';
 import { API_ENDPOINTS } from '../config';
 import { palette, spacing, radius, shadow } from '../theme';
+import { emitPlanChanged } from '../utils/planEvents';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AppointmentDetail'>;
 
@@ -93,6 +94,7 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
       setPendingSummary(updated.summary);
       setPendingLocation(updated.location || '');
       setPendingNote(updated.prepNote || '');
+      emitPlanChanged();
       Alert.alert('Saved', 'Appointment updated successfully');
       setShowDatePicker(false);
       setShowTimePicker(false);
@@ -117,6 +119,7 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
           onPress: async () => {
             try {
               await apiClient.delete(API_ENDPOINTS.deleteAppointment(appointment.id));
+              emitPlanChanged();
               navigation.goBack();
             } catch (error) {
               Alert.alert('Error', 'Failed to delete appointment');

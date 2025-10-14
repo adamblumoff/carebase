@@ -2,7 +2,7 @@
  * Plan Screen
  * Simple weekly overview of appointments and bills
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -14,11 +14,13 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import type { Appointment, Bill } from '@carebase/shared';
 import apiClient from '../api/client';
 import { API_ENDPOINTS } from '../config';
 import { palette, spacing, radius, shadow } from '../theme';
+import { addPlanChangeListener } from '../utils/planEvents';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Plan'>;
 
@@ -29,6 +31,8 @@ interface PlanData {
     start: string;
     end: string;
   };
+  planVersion: number;
+  planUpdatedAt?: string | null;
 }
 
 export default function PlanScreen({ navigation }: Props) {
@@ -36,29 +40,79 @@ export default function PlanScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const latestVersionRef = useRef<number>(0);
 
-  const fetchPlan = async () => {
+  const fetchPlan = useCallback(async (options: { silent?: boolean } = {}) => {
+    const { silent = false } = options;
+    if (!silent) {
+      setLoading(true);
+    }
     try {
       const response = await apiClient.get(API_ENDPOINTS.getPlan);
       setPlanData(response.data);
+      if (typeof response.data.planVersion === 'number') {
+        latestVersionRef.current = response.data.planVersion;
+      }
       setError(null);
     } catch (err) {
       setError('We couldn’t refresh your plan. Pull to try again.');
       console.error('Failed to fetch plan:', err);
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
       setRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchPlan();
-  }, []);
+  }, [fetchPlan]);
+
+  useEffect(() => {
+    const unsubscribe = addPlanChangeListener(() => {
+      fetchPlan({ silent: true });
+    });
+    return unsubscribe;
+  }, [fetchPlan]);
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      const pollIntervalMs = 10000;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+
+      const checkVersion = async () => {
+        try {
+          const response = await apiClient.get(API_ENDPOINTS.getPlanVersion);
+          const nextVersion = typeof response.data.planVersion === 'number' ? response.data.planVersion : 0;
+          if (nextVersion > latestVersionRef.current) {
+            await fetchPlan({ silent: true });
+          }
+        } catch (pollError) {
+          console.warn('Plan version poll failed', pollError);
+        } finally {
+          if (!cancelled) {
+            timer = setTimeout(checkVersion, pollIntervalMs);
+          }
+        }
+      };
+
+      timer = setTimeout(checkVersion, pollIntervalMs);
+
+      return () => {
+        cancelled = true;
+        if (timer) {
+          clearTimeout(timer);
+        }
+      };
+    }, [fetchPlan])
+  );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchPlan();
-  }, []);
+    fetchPlan({ silent: true });
+  }, [fetchPlan]);
 
 const parseServerDate = (value: string) => new Date(value);
 

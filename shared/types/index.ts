@@ -11,6 +11,8 @@ export interface User {
   googleId: string;
   forwardingAddress: string;
   planSecret: string;
+  planVersion: number;
+  planUpdatedAt: Date;
   createdAt: Date;
 }
 

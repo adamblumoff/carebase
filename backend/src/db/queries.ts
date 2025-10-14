@@ -16,6 +16,34 @@ import type {
   BillUpdateRequest
 } from '@carebase/shared';
 
+let planVersionColumnsEnsured = false;
+let planVersionEnsurePromise: Promise<void> | null = null;
+
+async function ensurePlanVersionColumns(): Promise<void> {
+  if (planVersionColumnsEnsured) {
+    return;
+  }
+
+  if (!planVersionEnsurePromise) {
+    planVersionEnsurePromise = (async () => {
+      try {
+        await db.query(
+          'ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_version INTEGER NOT NULL DEFAULT 0'
+        );
+        await db.query(
+          'ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP'
+        );
+      } catch (error) {
+        console.error('Failed to ensure plan version columns:', error);
+      } finally {
+        planVersionColumnsEnsured = true;
+      }
+    })();
+  }
+
+  await planVersionEnsurePromise;
+}
+
 // Helper to generate random tokens
 function generateToken(length: number = 32): string {
   return crypto.randomBytes(length).toString('hex');
@@ -34,6 +62,8 @@ interface UserRow {
   google_id: string;
   forwarding_address: string;
   plan_secret: string;
+  plan_version: number;
+  plan_updated_at: Date;
   created_at: Date;
 }
 
@@ -97,6 +127,8 @@ function userRowToUser(row: UserRow): User {
     googleId: row.google_id,
     forwardingAddress: row.forwarding_address,
     planSecret: row.plan_secret,
+    planVersion: row.plan_version ?? 0,
+    planUpdatedAt: row.plan_updated_at,
     createdAt: row.created_at
   };
 }
@@ -160,6 +192,49 @@ function billRowToBill(row: BillRow): Bill {
     status: row.status,
     taskKey: row.task_key,
     createdAt: row.created_at
+  };
+}
+
+async function touchPlanForItem(itemId: number): Promise<void> {
+  await ensurePlanVersionColumns();
+  await db.query(
+    `UPDATE users u
+     SET plan_version = COALESCE(u.plan_version, 0) + 1,
+         plan_updated_at = NOW()
+    FROM recipients r
+     JOIN items i ON i.recipient_id = r.id
+     WHERE i.id = $1
+       AND r.user_id = u.id`,
+    [itemId]
+  );
+}
+
+export async function touchPlanForUser(userId: number): Promise<void> {
+  await ensurePlanVersionColumns();
+  await db.query(
+    `UPDATE users
+     SET plan_version = COALESCE(plan_version, 0) + 1,
+         plan_updated_at = NOW()
+     WHERE id = $1`,
+    [userId]
+  );
+}
+
+export async function getPlanVersion(userId: number): Promise<{ planVersion: number; planUpdatedAt: Date | null }> {
+  await ensurePlanVersionColumns();
+  const result = await db.query(
+    'SELECT plan_version, plan_updated_at FROM users WHERE id = $1',
+    [userId]
+  );
+
+  if (result.rows.length === 0) {
+    return { planVersion: 0, planUpdatedAt: null };
+  }
+
+  const row = result.rows[0];
+  return {
+    planVersion: row.plan_version ?? 0,
+    planUpdatedAt: row.plan_updated_at ?? null
   };
 }
 
@@ -279,7 +354,9 @@ export async function createAppointment(itemId: number, data: AppointmentCreateR
      VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
     [itemId, startLocal, endLocal, location, prepNote, summary, icsToken]
   );
-  return appointmentRowToAppointment(result.rows[0]);
+  const appointment = appointmentRowToAppointment(result.rows[0]);
+  await touchPlanForItem(appointment.itemId);
+  return appointment;
 }
 
 export async function findAppointmentByIcsToken(icsToken: string): Promise<Appointment | undefined> {
@@ -316,7 +393,9 @@ export async function updateAppointment(id: number, userId: number, data: Appoin
   if (result.rows.length === 0) {
     throw new Error('Appointment not found');
   }
-  return appointmentRowToAppointment(result.rows[0]);
+  const appointment = appointmentRowToAppointment(result.rows[0]);
+  await touchPlanForItem(appointment.itemId);
+  return appointment;
 }
 
 export async function getAppointmentById(id: number, userId: number): Promise<Appointment | undefined> {
@@ -338,12 +417,14 @@ export async function deleteAppointment(id: number, userId: number): Promise<voi
      JOIN recipients r ON i.recipient_id = r.id
      WHERE a.id = $1
        AND a.item_id = i.id
-       AND r.user_id = $2`,
+       AND r.user_id = $2
+     RETURNING a.item_id`,
     [id, userId]
   );
   if (result.rowCount === 0) {
     throw new Error('Appointment not found');
   }
+  await touchPlanForItem(result.rows[0].item_id);
 }
 
 // ========== BILLS ==========
@@ -357,7 +438,9 @@ export async function createBill(itemId: number, data: BillCreateRequest): Promi
      VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
     [itemId, statementDate, amount, dueDate, payUrl, status || 'todo', taskKey]
   );
-  return billRowToBill(result.rows[0]);
+  const bill = billRowToBill(result.rows[0]);
+  await touchPlanForItem(bill.itemId);
+  return bill;
 }
 
 export async function updateBillStatus(id: number, status: BillStatus): Promise<Bill> {
@@ -365,7 +448,9 @@ export async function updateBillStatus(id: number, status: BillStatus): Promise<
     'UPDATE bills SET status = $1 WHERE id = $2 RETURNING *',
     [status, id]
   );
-  return billRowToBill(result.rows[0]);
+  const bill = billRowToBill(result.rows[0]);
+  await touchPlanForItem(bill.itemId);
+  return bill;
 }
 
 export async function getUpcomingBills(recipientId: number, startDate: Date, endDate: Date): Promise<Bill[]> {
@@ -400,7 +485,9 @@ export async function updateBill(id: number, userId: number, data: BillUpdateReq
   if (result.rows.length === 0) {
     throw new Error('Bill not found');
   }
-  return billRowToBill(result.rows[0]);
+  const bill = billRowToBill(result.rows[0]);
+  await touchPlanForItem(bill.itemId);
+  return bill;
 }
 
 export async function getBillById(id: number, userId: number): Promise<Bill | undefined> {
@@ -422,12 +509,14 @@ export async function deleteBill(id: number, userId: number): Promise<void> {
      JOIN recipients r ON i.recipient_id = r.id
      WHERE b.id = $1
        AND b.item_id = i.id
-       AND r.user_id = $2`,
+       AND r.user_id = $2
+     RETURNING b.item_id`,
     [id, userId]
   );
   if (result.rowCount === 0) {
     throw new Error('Bill not found');
   }
+  await touchPlanForItem(result.rows[0].item_id);
 }
 
 // ========== AUDIT ==========
