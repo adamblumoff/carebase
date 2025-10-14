@@ -26,7 +26,13 @@ export type RootStackParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-export default function AppNavigator() {
+interface AppNavigatorProps {
+  isSignedIn: boolean;
+  onSignedIn?: (user?: any) => void;
+  onSignedOut?: () => void;
+}
+
+export default function AppNavigator({ isSignedIn }: AppNavigatorProps) {
   const { palette, colorScheme } = useTheme();
 
   const navigationTheme = React.useMemo(
@@ -51,7 +57,7 @@ export default function AppNavigator() {
   return (
     <NavigationContainer theme={navigationTheme}>
       <Stack.Navigator
-        initialRouteName="Login"
+        initialRouteName={isSignedIn ? 'Plan' : 'Login'}
         screenOptions={{
           headerStyle: {
             backgroundColor: palette.canvas,
@@ -63,16 +69,21 @@ export default function AppNavigator() {
           },
         }}
       >
-        <Stack.Screen
-          name="Login"
-          component={LoginScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Plan"
-          component={PlanScreen}
-          options={{ title: 'My Plan' }}
-        />
+        {!isSignedIn ? (
+          <Stack.Screen
+            key="Login"
+            name="Login"
+            component={LoginScreen}
+            options={{ headerShown: false }}
+          />
+        ) : (
+          <Stack.Screen
+            key="Plan"
+            name="Plan"
+            component={PlanScreen}
+            options={{ title: 'My Plan' }}
+          />
+        )}
         <Stack.Screen
           name="AppointmentDetail"
           component={AppointmentDetailScreen}

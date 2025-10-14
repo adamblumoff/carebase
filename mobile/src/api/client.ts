@@ -47,6 +47,8 @@ apiClient.interceptors.response.use(
         AsyncStorage.removeItem('accessToken').catch(() => {
           // ignore cleanup errors
         });
+        // Flag for consumers to prompt re-auth; session bootstrap handles redirect.
+        error.response.config.headers['x-auth-cleared'] = '1';
       }
     } else {
       console.error(`[API] Network error:`, error.message);
