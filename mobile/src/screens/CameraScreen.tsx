@@ -4,7 +4,6 @@
  */
 import React, { useMemo, useState } from 'react';
 import {
-  SafeAreaView,
   View,
   Text,
   StyleSheet,
@@ -13,6 +12,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import * as ImagePicker from 'expo-image-picker';
@@ -117,7 +117,7 @@ export default function CameraScreen({ navigation }: Props) {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['left', 'right']}>
       <View style={styles.container}>
         {imageUri ? (
           <View style={styles.previewCard}>
@@ -162,7 +162,7 @@ export default function CameraScreen({ navigation }: Props) {
           </View>
         )}
       </View>
-    </SafeAreaView>
+      </SafeAreaView>
   );
 }
 
