@@ -2,26 +2,23 @@
  * Appointment Detail Screen
  * Update appointment details, including date and time
  */
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  SafeAreaView,
-  ScrollView,
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Alert,
-  Platform,
   TextInput,
-  KeyboardAvoidingView,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import apiClient from '../api/client';
 import { API_ENDPOINTS } from '../config';
-import { palette, spacing, radius, shadow } from '../theme';
+import { useTheme, spacing, radius, type Palette } from '../theme';
 import { emitPlanChanged } from '../utils/planEvents';
+import { KeyboardScreen } from '../components/KeyboardScreen';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AppointmentDetail'>;
 
@@ -58,6 +55,8 @@ const formatForPayload = (date: Date) =>
 
 export default function AppointmentDetailScreen({ route, navigation }: Props) {
   const { appointment } = route.params;
+  const { palette, shadow } = useTheme();
+  const styles = useMemo(() => createStyles(palette), [palette]);
   const [currentAppointment, setCurrentAppointment] = useState(appointment);
   const [startDateTime, setStartDateTime] = useState(parseServerDate(appointment.startLocal));
   const [pendingStart, setPendingStart] = useState(parseServerDate(appointment.startLocal));
@@ -145,18 +144,10 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
   const locationDisplay = currentAppointment.location;
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
-      >
-        <ScrollView
-          style={styles.container}
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-          bounces={false}
-        >
+    <KeyboardScreen
+      containerStyle={styles.safe}
+      contentContainerStyle={styles.content}
+    >
         <View style={[styles.summaryCard, shadow.card]}>
           <View style={styles.summaryAccent} />
           <View style={styles.summaryBody}>
@@ -170,7 +161,7 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
         </View>
 
         {editing ? (
-          <View style={styles.formCard}>
+        <View style={[styles.formCard, shadow.card]}>
             <Text style={styles.formLabel}>Title</Text>
             <TextInput
               style={styles.textInput}
@@ -231,8 +222,8 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
               >
                 <Text style={styles.secondaryButtonText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionButton, styles.primaryButton, styles.buttonFlex]}
+            <TouchableOpacity
+              style={[styles.actionButton, styles.primaryButton, styles.buttonFlex]}
                 onPress={handleSave}
                 disabled={saving}
               >
@@ -274,7 +265,7 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
             )}
           </View>
         ) : (
-          <View style={styles.detailsCard}>
+          <View style={[styles.detailsCard, shadow.card]}>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Prep note</Text>
               <Text
@@ -300,178 +291,169 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
             </TouchableOpacity>
           </View>
         )}
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+    </KeyboardScreen>
   );
 }
 
-const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: palette.surfaceMuted,
-  },
-  flex: {
-    flex: 1,
-  },
-  container: {
-    flex: 1,
-  },
-  content: {
-    padding: spacing(3),
-    paddingBottom: spacing(10),
-  },
-  summaryCard: {
-    backgroundColor: palette.surface,
-    borderRadius: radius.lg,
-    flexDirection: 'row',
-    overflow: 'hidden',
-    marginBottom: spacing(3),
-  },
-  summaryAccent: {
-    width: 6,
-    backgroundColor: palette.primary,
-  },
-  summaryBody: {
-    flex: 1,
-    padding: spacing(2.5),
-  },
-  summaryLabel: {
-    fontSize: 12,
-    textTransform: 'uppercase',
-    fontWeight: '700',
-    color: palette.textMuted,
-  },
-  summaryTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: palette.textPrimary,
-    marginTop: spacing(0.5),
-  },
-  summaryMeta: {
-    marginTop: spacing(1),
-    color: palette.textSecondary,
-    fontSize: 14,
-  },
-  formCard: {
-    backgroundColor: palette.surface,
-    borderRadius: radius.md,
-    padding: spacing(3),
-  },
-  formLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: palette.textSecondary,
-    marginBottom: spacing(0.5),
-    textTransform: 'uppercase',
-  },
-  textInput: {
-    backgroundColor: palette.surfaceMuted,
-    borderRadius: radius.sm,
-    paddingVertical: spacing(1.25),
-    paddingHorizontal: spacing(2),
-    borderWidth: 1,
-    borderColor: '#dbe7d7',
-    fontSize: 16,
-    color: palette.textPrimary,
-    marginBottom: spacing(2),
-  },
-  textArea: {
-    textAlignVertical: 'top',
-  },
-  selectorRow: {
-    backgroundColor: palette.surfaceMuted,
-    borderRadius: radius.sm,
-    paddingVertical: spacing(1.25),
-    paddingHorizontal: spacing(2),
-    borderWidth: 1,
-    borderColor: '#dbe7d7',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing(2),
-  },
-  selectorValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: palette.textPrimary,
-  },
-  selectorHint: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: palette.primary,
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: spacing(2),
-    marginTop: spacing(1),
-  },
-  buttonFlex: {
-    flex: 1,
-  },
-  actionButton: {
-    borderRadius: radius.sm,
-    paddingVertical: spacing(1.5),
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: spacing(3),
-  },
-  primaryButton: {
-    backgroundColor: palette.primary,
-  },
-  primaryButtonText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  secondaryButton: {
-    borderWidth: 1,
-    borderColor: palette.textMuted,
-  },
-  secondaryButtonText: {
-    color: palette.textSecondary,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  dangerButton: {
-    marginTop: spacing(2),
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: palette.danger,
-    paddingVertical: spacing(1.5),
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dangerButtonText: {
-    color: palette.danger,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  detailsCard: {
-    marginTop: spacing(3),
-    backgroundColor: palette.surface,
-    borderRadius: radius.md,
-    padding: spacing(3),
-    ...shadow.card,
-  },
-  detailRow: {
-    marginBottom: spacing(2),
-  },
-  detailLabel: {
-    fontSize: 12,
-    color: palette.textMuted,
-    textTransform: 'uppercase',
-    fontWeight: '700',
-    marginBottom: spacing(0.5),
-  },
-  detailValue: {
-    fontSize: 15,
-    color: palette.textPrimary,
-    lineHeight: 22,
-  },
-  detailValueMuted: {
-    fontSize: 15,
-    color: palette.textMuted,
-    lineHeight: 22,
-  },
-});
+const createStyles = (palette: Palette) =>
+  StyleSheet.create({
+    safe: {
+      backgroundColor: palette.surfaceMuted,
+    },
+    content: {
+      padding: spacing(3),
+      paddingBottom: spacing(10),
+    },
+    summaryCard: {
+      backgroundColor: palette.surface,
+      borderRadius: radius.lg,
+      flexDirection: 'row',
+      overflow: 'hidden',
+      marginBottom: spacing(3),
+    },
+    summaryAccent: {
+      width: 6,
+      backgroundColor: palette.primary,
+    },
+    summaryBody: {
+      flex: 1,
+      padding: spacing(2.5),
+    },
+    summaryLabel: {
+      fontSize: 12,
+      textTransform: 'uppercase',
+      fontWeight: '700',
+      color: palette.textMuted,
+    },
+    summaryTitle: {
+      fontSize: 22,
+      fontWeight: '700',
+      color: palette.textPrimary,
+      marginTop: spacing(0.5),
+    },
+    summaryMeta: {
+      marginTop: spacing(1),
+      color: palette.textSecondary,
+      fontSize: 14,
+    },
+    formCard: {
+      backgroundColor: palette.surface,
+      borderRadius: radius.md,
+      padding: spacing(3),
+    },
+    formLabel: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: palette.textSecondary,
+      marginBottom: spacing(0.5),
+      textTransform: 'uppercase',
+    },
+    textInput: {
+      backgroundColor: palette.surfaceMuted,
+      borderRadius: radius.sm,
+      paddingVertical: spacing(1.5),
+      paddingHorizontal: spacing(2),
+      borderWidth: 1,
+      borderColor: palette.border,
+      fontSize: 16,
+      color: palette.textPrimary,
+      marginBottom: spacing(2),
+    },
+    textArea: {
+      textAlignVertical: 'top',
+    },
+    selectorRow: {
+      backgroundColor: palette.surfaceMuted,
+      borderRadius: radius.sm,
+      paddingVertical: spacing(1.25),
+      paddingHorizontal: spacing(2),
+      borderWidth: 1,
+      borderColor: palette.border,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: spacing(2),
+    },
+    selectorValue: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: palette.textPrimary,
+    },
+    selectorHint: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: palette.primary,
+    },
+    buttonRow: {
+      flexDirection: 'row',
+      gap: spacing(2),
+      marginTop: spacing(1),
+    },
+    buttonFlex: {
+      flex: 1,
+    },
+    actionButton: {
+      borderRadius: radius.sm,
+      paddingVertical: spacing(1.5),
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: spacing(3),
+    },
+    primaryButton: {
+      backgroundColor: palette.primary,
+    },
+    primaryButtonText: {
+      color: '#fff',
+      fontSize: 15,
+      fontWeight: '700',
+    },
+    secondaryButton: {
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    secondaryButtonText: {
+      color: palette.textSecondary,
+      fontSize: 15,
+      fontWeight: '600',
+    },
+    dangerButton: {
+      marginTop: spacing(2),
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: palette.danger,
+      paddingVertical: spacing(1.5),
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    dangerButtonText: {
+      color: palette.danger,
+      fontSize: 15,
+      fontWeight: '600',
+    },
+    detailsCard: {
+      marginTop: spacing(3),
+      backgroundColor: palette.surface,
+      borderRadius: radius.md,
+      padding: spacing(3),
+    },
+    detailRow: {
+      marginBottom: spacing(2),
+    },
+    detailLabel: {
+      fontSize: 12,
+      color: palette.textMuted,
+      textTransform: 'uppercase',
+      fontWeight: '700',
+      marginBottom: spacing(0.5),
+    },
+    detailValue: {
+      fontSize: 15,
+      color: palette.textPrimary,
+      lineHeight: 22,
+    },
+    detailValueMuted: {
+      fontSize: 15,
+      color: palette.textMuted,
+      lineHeight: 22,
+    },
+  });

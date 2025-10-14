@@ -2,7 +2,7 @@
  * Bill Detail Screen
  * Redesigned bill overview with actionable controls
  */
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -17,15 +17,160 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import apiClient from '../api/client';
 import { API_ENDPOINTS } from '../config';
-import { palette, spacing, radius, shadow } from '../theme';
+import { useTheme, spacing, radius, type Palette } from '../theme';
 import { emitPlanChanged } from '../utils/planEvents';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'BillDetail'>;
+
+const createStyles = (palette: Palette) =>
+  StyleSheet.create({
+    safe: {
+      flex: 1,
+      backgroundColor: palette.surfaceMuted,
+    },
+    container: {
+      flex: 1,
+    },
+    content: {
+      padding: spacing(3),
+      paddingBottom: spacing(6),
+    },
+    summaryCard: {
+      backgroundColor: palette.surface,
+      borderRadius: radius.lg,
+      flexDirection: 'row',
+      overflow: 'hidden',
+      marginBottom: spacing(3),
+    },
+    summaryAccent: {
+      width: 6,
+    },
+    summaryBody: {
+      flex: 1,
+      padding: spacing(2.5),
+    },
+    summaryLabel: {
+      fontSize: 12,
+      textTransform: 'uppercase',
+      fontWeight: '700',
+      color: palette.textMuted,
+    },
+    summaryAmount: {
+      marginTop: spacing(1),
+      fontSize: 28,
+      fontWeight: '700',
+      color: palette.textPrimary,
+    },
+    summaryStatus: {
+      marginTop: spacing(1),
+      fontSize: 14,
+      color: palette.textSecondary,
+    },
+    statusValue: {
+      fontWeight: '700',
+      color: palette.warning,
+      textTransform: 'uppercase',
+    },
+    statusValuePaid: {
+      color: palette.success,
+    },
+    statusValueOverdue: {
+      color: palette.danger,
+    },
+    infoGrid: {
+      flexDirection: 'row',
+      gap: spacing(2),
+      marginBottom: spacing(3),
+    },
+    infoItem: {
+      flex: 1,
+      backgroundColor: palette.surface,
+      borderRadius: radius.md,
+      padding: spacing(2),
+    },
+    infoLabel: {
+      fontSize: 12,
+      textTransform: 'uppercase',
+      fontWeight: '600',
+      color: palette.textMuted,
+    },
+    infoValue: {
+      marginTop: spacing(0.5),
+      fontSize: 16,
+      fontWeight: '600',
+      color: palette.textPrimary,
+    },
+    actionsCard: {
+      backgroundColor: palette.surface,
+      borderRadius: radius.md,
+      padding: spacing(3),
+      marginBottom: spacing(3),
+    },
+    primaryButton: {
+      backgroundColor: palette.primary,
+      borderRadius: radius.sm,
+      paddingVertical: spacing(1.5),
+      alignItems: 'center',
+    },
+    primaryButtonText: {
+      color: '#fff',
+      fontSize: 15,
+      fontWeight: '700',
+    },
+    secondaryButton: {
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: palette.success,
+      paddingVertical: spacing(1.5),
+      alignItems: 'center',
+      marginTop: spacing(2),
+    },
+    secondaryButtonDisabled: {
+      opacity: 0.6,
+    },
+    secondaryButtonText: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: palette.success,
+    },
+    dangerButton: {
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: palette.danger,
+      paddingVertical: spacing(1.5),
+      alignItems: 'center',
+      marginTop: spacing(2),
+    },
+    dangerButtonText: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: palette.danger,
+    },
+    noteCard: {
+      backgroundColor: palette.surface,
+      borderRadius: radius.md,
+      padding: spacing(3),
+      marginBottom: spacing(6),
+    },
+    noteTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: palette.textPrimary,
+      marginBottom: spacing(1),
+    },
+    noteBody: {
+      fontSize: 14,
+      color: palette.textSecondary,
+      lineHeight: 20,
+    },
+  });
 
 export default function BillDetailScreen({ route, navigation }: Props) {
   const { bill } = route.params;
   const [currentBill, setCurrentBill] = useState(bill);
   const [updating, setUpdating] = useState(false);
+  const { palette, shadow } = useTheme();
+  const styles = useMemo(() => createStyles(palette), [palette]);
 
   const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return 'Not available';
@@ -126,17 +271,17 @@ export default function BillDetailScreen({ route, navigation }: Props) {
         </View>
 
         <View style={styles.infoGrid}>
-          <View style={styles.infoItem}>
+          <View style={[styles.infoItem, shadow.card]}>
             <Text style={styles.infoLabel}>Due date</Text>
             <Text style={styles.infoValue}>{formatDate(currentBill.dueDate)}</Text>
           </View>
-          <View style={styles.infoItem}>
+          <View style={[styles.infoItem, shadow.card]}>
             <Text style={styles.infoLabel}>Statement</Text>
             <Text style={styles.infoValue}>{formatDate(currentBill.statementDate)}</Text>
           </View>
         </View>
 
-        <View style={styles.actionsCard}>
+        <View style={[styles.actionsCard, shadow.card]}>
           {currentBill.payUrl && (
             <TouchableOpacity style={styles.primaryButton} onPress={handleOpenPayLink}>
               <Text style={styles.primaryButtonText}>Pay online</Text>
@@ -160,7 +305,7 @@ export default function BillDetailScreen({ route, navigation }: Props) {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.noteCard}>
+        <View style={[styles.noteCard, shadow.card]}>
           <Text style={styles.noteTitle}>Need help?</Text>
           <Text style={styles.noteBody}>
             Upload billing statements from the camera tab or forward billing emails to keep this
