@@ -24,7 +24,7 @@ export function KeyboardScreen({
   keyboardVerticalOffset = Platform.OS === 'ios' ? 24 : 0,
 }: KeyboardScreenProps): JSX.Element {
   return (
-    <SafeAreaView style={[{ flex: 1 }, containerStyle]}> 
+    <SafeAreaView style={[{ flex: 1 }, containerStyle]}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -42,4 +42,3 @@ export function KeyboardScreen({
     </SafeAreaView>
   );
 }
-

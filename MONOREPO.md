@@ -19,8 +19,8 @@ carebase/
 │   ├── scripts/         # Database migrations & test data
 │   └── package.json     # Backend dependencies
 ├── mobile/              # React Native + Expo mobile app
-│   ├── src/             # (to be built)
-│   ├── App.tsx          # Main app component
+│   ├── src/             # Screens, navigation, theme, utilities
+│   ├── App.tsx          # Main app component with ThemeProvider + navigator
 │   └── package.json     # Mobile dependencies
 ├── shared/              # Shared code (types, constants)
 │   ├── types/           # TypeScript type definitions
@@ -82,23 +82,16 @@ The backend currently runs as a web app with EJS views. Features:
 - `/webhook/inbound-email` - Postmark webhook
 - `/calendar/:token.ics` - ICS file download
 
-## Mobile App (Next Steps)
+## Mobile App Overview
 
-The mobile app is initialized but not yet built. Planned features:
+Current features shipped in the Expo client:
 
-### Phase 1: Core Screens
-- Welcome/Login (Google OAuth)
-- Onboarding (email forwarding setup)
-- Plan Screen (Show Up + Pay)
-- Appointment Detail
-- Bill Detail
-- Settings
-
-### Phase 2: Mobile Features
-- Native calendar integration (replace ICS files)
-- Photo capture for bill upload
-- Push notifications for reminders
-- Offline support
+- Login (Google OAuth handoff + dev bypass)
+- Weekly Plan surfaced from the API with live polling + realtime refresh
+- Appointment and Bill detail editors
+- Settings hub with account, preferences, and system metadata
+- Camera capture + library import for bill uploads
+- Shared theming via `ThemeProvider` (`mobile/src/theme.tsx`) with automatic light/dark palettes
 
 ## Shared Types
 

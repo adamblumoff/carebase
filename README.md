@@ -96,6 +96,13 @@ npm run db:migrate
 - `accessToken` is stored in `AsyncStorage` and attached to every request through the axios interceptor in `mobile/src/api/client.ts`.
 - Configure `MOBILE_AUTH_SECRET` on the backend and `EXPO_PUBLIC_API_BASE_URL` in Expo so both sides agree on token signing and API base URLs.
 
+### Mobile Theming
+
+- The Expo app wraps `AppNavigator` with a shared `ThemeProvider` defined in `mobile/src/theme.tsx`.
+- Use the `useTheme()` hook (instead of importing color constants) to access `palette`, `shadow`, `spacing`, and `radius`.
+- Build styles inside `useMemo(() => createStyles(palette, shadow), [palette, shadow])` so they respond to light/dark changes.
+- Expo respects the device setting (`app.json` sets `"userInterfaceStyle": "automatic"`), so test both modes when adding UI.
+
 ## Tech Stack
 
 - **Backend**: TypeScript, Express, PostgreSQL, Passport.js

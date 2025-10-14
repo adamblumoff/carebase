@@ -2,7 +2,7 @@
  * Camera Screen
  * Redesigned capture flow for scanning bills
  */
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   SafeAreaView,
   View,
@@ -18,12 +18,14 @@ import type { RootStackParamList } from '../navigation/AppNavigator';
 import * as ImagePicker from 'expo-image-picker';
 import apiClient from '../api/client';
 import { API_ENDPOINTS } from '../config';
-import { palette, spacing, radius, shadow } from '../theme';
+import { useTheme, spacing, radius, type Palette, type Shadow } from '../theme';
 import { emitPlanChanged } from '../utils/planEvents';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Camera'>;
 
 export default function CameraScreen({ navigation }: Props) {
+  const { palette, shadow } = useTheme();
+  const styles = useMemo(() => createStyles(palette, shadow), [palette, shadow]);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const formatCurrency = (amount: number) =>
@@ -118,7 +120,7 @@ export default function CameraScreen({ navigation }: Props) {
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
         {imageUri ? (
-          <View style={[styles.previewCard, shadow.card]}>
+          <View style={styles.previewCard}>
             <Image source={{ uri: imageUri }} style={styles.preview} />
             <View style={styles.previewFooter}>
               <TouchableOpacity style={styles.secondaryButton} onPress={() => setImageUri(null)}>
@@ -164,105 +166,106 @@ export default function CameraScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: palette.surfaceMuted,
-  },
-  container: {
-    flex: 1,
-    padding: spacing(3),
-  },
-  content: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: palette.textPrimary,
-    textAlign: 'center',
-  },
-  subtitle: {
-    marginTop: spacing(1.5),
-    fontSize: 15,
-    color: palette.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  heroAction: {
-    marginTop: spacing(4),
-    backgroundColor: palette.primary,
-    borderRadius: radius.lg,
-    paddingVertical: spacing(2),
-    paddingHorizontal: spacing(3),
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadow.card,
-  },
-  heroActionIcon: {
-    color: '#fff',
-    fontSize: 20,
-    marginRight: spacing(1),
-  },
-  heroActionText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  secondaryButton: {
-    marginTop: spacing(2),
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: palette.textMuted,
-    paddingVertical: spacing(1.5),
-    paddingHorizontal: spacing(3),
-    alignItems: 'center',
-  },
-  secondaryButtonText: {
-    color: palette.textSecondary,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  helperText: {
-    marginTop: spacing(3),
-    fontSize: 13,
-    color: palette.textSecondary,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  previewCard: {
-    flex: 1,
-    backgroundColor: palette.surface,
-    borderRadius: radius.lg,
-    padding: spacing(2),
-    justifyContent: 'space-between',
-    ...shadow.card,
-  },
-  preview: {
-    width: '100%',
-    height: '80%',
-    borderRadius: radius.md,
-  },
-  previewFooter: {
-    flexDirection: 'row',
-    gap: spacing(2),
-  },
-  primaryButton: {
-    flex: 1,
-    backgroundColor: palette.primary,
-    borderRadius: radius.sm,
-    paddingVertical: spacing(1.5),
-    alignItems: 'center',
-  },
-  primaryButtonDisabled: {
-    opacity: 0.7,
-  },
-  primaryButtonText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-});
+const createStyles = (palette: Palette, shadow: Shadow) =>
+  StyleSheet.create({
+    safe: {
+      flex: 1,
+      backgroundColor: palette.surfaceMuted,
+    },
+    container: {
+      flex: 1,
+      padding: spacing(3),
+    },
+    content: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    title: {
+      fontSize: 28,
+      fontWeight: '700',
+      color: palette.textPrimary,
+      textAlign: 'center',
+    },
+    subtitle: {
+      marginTop: spacing(1.5),
+      fontSize: 15,
+      color: palette.textSecondary,
+      textAlign: 'center',
+      lineHeight: 22,
+    },
+    heroAction: {
+      marginTop: spacing(4),
+      backgroundColor: palette.primary,
+      borderRadius: radius.lg,
+      paddingVertical: spacing(2),
+      paddingHorizontal: spacing(3),
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      ...shadow.card,
+    },
+    heroActionIcon: {
+      color: '#fff',
+      fontSize: 20,
+      marginRight: spacing(1),
+    },
+    heroActionText: {
+      color: '#fff',
+      fontSize: 16,
+      fontWeight: '700',
+    },
+    secondaryButton: {
+      marginTop: spacing(2),
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: palette.textMuted,
+      paddingVertical: spacing(1.5),
+      paddingHorizontal: spacing(3),
+      alignItems: 'center',
+    },
+    secondaryButtonText: {
+      color: palette.textSecondary,
+      fontSize: 15,
+      fontWeight: '600',
+    },
+    helperText: {
+      marginTop: spacing(3),
+      fontSize: 13,
+      color: palette.textSecondary,
+      textAlign: 'center',
+      lineHeight: 20,
+    },
+    previewCard: {
+      flex: 1,
+      backgroundColor: palette.surface,
+      borderRadius: radius.lg,
+      padding: spacing(2),
+      justifyContent: 'space-between',
+      ...shadow.card,
+    },
+    preview: {
+      width: '100%',
+      height: '80%',
+      borderRadius: radius.md,
+    },
+    previewFooter: {
+      flexDirection: 'row',
+      gap: spacing(2),
+    },
+    primaryButton: {
+      flex: 1,
+      backgroundColor: palette.primary,
+      borderRadius: radius.sm,
+      paddingVertical: spacing(1.5),
+      alignItems: 'center',
+    },
+    primaryButtonDisabled: {
+      opacity: 0.7,
+    },
+    primaryButtonText: {
+      color: '#fff',
+      fontSize: 15,
+      fontWeight: '700',
+    },
+  });

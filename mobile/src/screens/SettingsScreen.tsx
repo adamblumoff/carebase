@@ -2,7 +2,7 @@
  * Settings Screen
  * Streamlined account and app preferences UI
  */
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -15,11 +15,13 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { API_BASE_URL } from '../config';
-import { palette, spacing, radius, shadow } from '../theme';
+import { useTheme, spacing, radius, type Palette, type Shadow } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
 export default function SettingsScreen({ navigation }: Props) {
+  const { palette, shadow } = useTheme();
+  const styles = useMemo(() => createStyles(palette, shadow), [palette, shadow]);
   const handleLogout = () => {
     Alert.alert('Log out', 'Are you sure you want to sign out of Carebase?', [
       { text: 'Cancel', style: 'cancel' },
@@ -40,7 +42,7 @@ export default function SettingsScreen({ navigation }: Props) {
         contentContainerStyle={styles.content}
         bounces={false}
       >
-        <View style={[styles.headerCard, shadow.card]}>
+        <View style={styles.headerCard}>
           <Text style={styles.headerEyebrow}>Account</Text>
           <Text style={styles.headerTitle}>Carebase Companion</Text>
           <Text style={styles.headerSubtitle}>
@@ -104,113 +106,115 @@ export default function SettingsScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: palette.surfaceMuted,
-  },
-  container: {
-    flex: 1,
-  },
-  content: {
-    padding: spacing(3),
-    paddingBottom: spacing(6),
-  },
-  headerCard: {
-    backgroundColor: palette.canvas,
-    borderRadius: radius.lg,
-    padding: spacing(3),
-    marginBottom: spacing(3),
-  },
-  headerEyebrow: {
-    color: palette.accent,
-    fontSize: 12,
-    textTransform: 'uppercase',
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-  headerTitle: {
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: '700',
-    marginTop: spacing(0.5),
-  },
-  headerSubtitle: {
-    color: '#cbd5f5',
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: spacing(1.5),
-  },
-  section: {
-    marginTop: spacing(3),
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: palette.textPrimary,
-    marginBottom: spacing(1.5),
-  },
-  card: {
-    backgroundColor: palette.surface,
-    borderRadius: radius.md,
-    padding: spacing(2.5),
-    ...shadow.card,
-    marginBottom: spacing(2),
-  },
-  cardLabel: {
-    fontSize: 12,
-    textTransform: 'uppercase',
-    fontWeight: '600',
-    color: palette.textMuted,
-    marginTop: spacing(1),
-  },
-  cardValue: {
-    fontSize: 15,
-    color: palette.textPrimary,
-    marginTop: spacing(0.5),
-  },
-  cardHint: {
-    fontSize: 13,
-    color: palette.textSecondary,
-    marginTop: spacing(1.5),
-    lineHeight: 20,
-  },
-  chevronRow: {
-    backgroundColor: palette.surface,
-    borderRadius: radius.md,
-    paddingVertical: spacing(2),
-    paddingHorizontal: spacing(2.5),
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing(1.5),
-    ...shadow.card,
-  },
-  chevronText: {
-    fontSize: 15,
-    color: palette.textPrimary,
-    fontWeight: '600',
-    flex: 1,
-  },
-  chevronSubtext: {
-    fontSize: 13,
-    color: palette.textMuted,
-    marginRight: spacing(1),
-  },
-  chevronIcon: {
-    fontSize: 22,
-    color: palette.textMuted,
-  },
-  logoutButton: {
-    marginTop: spacing(4),
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: palette.danger,
-    paddingVertical: spacing(1.75),
-    alignItems: 'center',
-  },
-  logoutButtonText: {
-    color: palette.danger,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-});
+const createStyles = (palette: Palette, shadow: Shadow) =>
+  StyleSheet.create({
+    safe: {
+      flex: 1,
+      backgroundColor: palette.surfaceMuted,
+    },
+    container: {
+      flex: 1,
+    },
+    content: {
+      padding: spacing(3),
+      paddingBottom: spacing(6),
+    },
+    headerCard: {
+      backgroundColor: palette.canvas,
+      borderRadius: radius.lg,
+      padding: spacing(3),
+      marginBottom: spacing(3),
+      ...shadow.card,
+    },
+    headerEyebrow: {
+      color: palette.accent,
+      fontSize: 12,
+      textTransform: 'uppercase',
+      fontWeight: '700',
+      letterSpacing: 1,
+    },
+    headerTitle: {
+      color: '#fff',
+      fontSize: 24,
+      fontWeight: '700',
+      marginTop: spacing(0.5),
+    },
+    headerSubtitle: {
+      color: '#cbd5f5',
+      fontSize: 14,
+      lineHeight: 20,
+      marginTop: spacing(1.5),
+    },
+    section: {
+      marginTop: spacing(3),
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: palette.textPrimary,
+      marginBottom: spacing(1.5),
+    },
+    card: {
+      backgroundColor: palette.canvas,
+      borderRadius: radius.md,
+      padding: spacing(2.5),
+      ...shadow.card,
+      marginBottom: spacing(2),
+    },
+    cardLabel: {
+      fontSize: 12,
+      textTransform: 'uppercase',
+      fontWeight: '600',
+      color: palette.textMuted,
+      marginTop: spacing(1),
+    },
+    cardValue: {
+      fontSize: 15,
+      color: palette.textPrimary,
+      marginTop: spacing(0.5),
+    },
+    cardHint: {
+      fontSize: 13,
+      color: palette.textSecondary,
+      marginTop: spacing(1.5),
+      lineHeight: 20,
+    },
+    chevronRow: {
+      backgroundColor: palette.canvas,
+      borderRadius: radius.md,
+      paddingVertical: spacing(2),
+      paddingHorizontal: spacing(2.5),
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: spacing(1.5),
+      ...shadow.card,
+    },
+    chevronText: {
+      fontSize: 15,
+      color: palette.textPrimary,
+      fontWeight: '600',
+      flex: 1,
+    },
+    chevronSubtext: {
+      fontSize: 13,
+      color: palette.textMuted,
+      marginRight: spacing(1),
+    },
+    chevronIcon: {
+      fontSize: 22,
+      color: palette.textMuted,
+    },
+    logoutButton: {
+      marginTop: spacing(4),
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: palette.danger,
+      paddingVertical: spacing(1.75),
+      alignItems: 'center',
+    },
+    logoutButtonText: {
+      color: palette.danger,
+      fontSize: 15,
+      fontWeight: '700',
+    },
+  });

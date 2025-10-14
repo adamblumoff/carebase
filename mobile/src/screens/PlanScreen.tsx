@@ -2,7 +2,7 @@
  * Plan Screen
  * Simple weekly overview of appointments and bills
  */
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -19,7 +19,7 @@ import type { RootStackParamList } from '../navigation/AppNavigator';
 import type { Appointment, Bill } from '@carebase/shared';
 import apiClient from '../api/client';
 import { API_ENDPOINTS } from '../config';
-import { palette, spacing, radius, shadow } from '../theme';
+import { useTheme, spacing, radius, type Palette, type Shadow } from '../theme';
 import { addPlanChangeListener } from '../utils/planEvents';
 import { ensureRealtimeConnected, isRealtimeConnected } from '../utils/realtime';
 
@@ -37,6 +37,8 @@ interface PlanData {
 }
 
 export default function PlanScreen({ navigation }: Props) {
+  const { palette, shadow } = useTheme();
+  const styles = useMemo(() => createStyles(palette, shadow), [palette, shadow]);
   const [planData, setPlanData] = useState<PlanData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -217,7 +219,7 @@ const formatTime = (dateString: string) => {
             planData?.appointments.map((appt) => (
               <TouchableOpacity
                 key={appt.id}
-                style={[styles.itemCard, shadow.card]}
+                style={styles.itemCard}
                 onPress={() => navigation.navigate('AppointmentDetail', { appointment: appt })}
               >
                 <Text style={styles.itemTitle}>{appt.summary}</Text>
@@ -254,7 +256,7 @@ const formatTime = (dateString: string) => {
               return (
                 <TouchableOpacity
                   key={bill.id}
-                  style={[styles.itemCard, shadow.card]}
+                  style={styles.itemCard}
                   onPress={() => navigation.navigate('BillDetail', { bill })}
                 >
                   <Text style={styles.itemTitle}>
@@ -282,159 +284,161 @@ const formatTime = (dateString: string) => {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: palette.background,
-  },
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: spacing(4),
-  },
-  loadingState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: spacing(2),
-    color: palette.textSecondary,
-  },
-  header: {
-    paddingHorizontal: spacing(3),
-    paddingTop: spacing(3),
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: spacing(2),
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: palette.textPrimary,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: palette.textSecondary,
-    marginTop: spacing(0.5),
-  },
-  headerMeta: {
-    fontSize: 13,
-    color: palette.textMuted,
-    marginTop: spacing(0.5),
-  },
-  headerButtons: {
-    flexDirection: 'row',
-    gap: spacing(1),
-  },
-  outlineButton: {
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: palette.primary,
-    paddingVertical: spacing(1),
-    paddingHorizontal: spacing(2),
-  },
-  outlineButtonText: {
-    color: palette.primary,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  errorBanner: {
-    marginTop: spacing(2),
-    marginHorizontal: spacing(3),
-    backgroundColor: '#fee2e2',
-    borderRadius: radius.sm,
-    padding: spacing(1.5),
-  },
-  errorText: {
-    color: palette.danger,
-    textAlign: 'center',
-    fontSize: 13,
-  },
-  section: {
-    marginTop: spacing(3),
-    paddingHorizontal: spacing(3),
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing(1.5),
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: palette.textPrimary,
-  },
-  sectionCount: {
-    fontSize: 13,
-    color: palette.textMuted,
-  },
-  itemCard: {
-    backgroundColor: palette.surface,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing(2),
-    paddingVertical: spacing(2),
-    marginBottom: spacing(1.5),
-  },
-  itemTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: palette.textPrimary,
-  },
-  itemMeta: {
-    marginTop: spacing(0.5),
-    fontSize: 13,
-    color: palette.textSecondary,
-  },
-  itemSub: {
-    marginTop: spacing(0.5),
-    fontSize: 13,
-    color: palette.textMuted,
-  },
-  itemNote: {
-    marginTop: spacing(1),
-    fontSize: 12,
-    color: palette.primary,
-  },
-  emptyCard: {
-    backgroundColor: palette.surface,
-    borderRadius: radius.md,
-    padding: spacing(3),
-    alignItems: 'center',
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: palette.textPrimary,
-    marginBottom: spacing(1),
-  },
-  emptyText: {
-    fontSize: 14,
-    color: palette.textSecondary,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  statusPill: {
-    marginTop: spacing(1),
-    alignSelf: 'flex-start',
-    paddingHorizontal: spacing(1.5),
-    paddingVertical: spacing(0.5),
-    borderRadius: radius.xs,
-    fontSize: 12,
-    fontWeight: '600',
-    color: palette.warning,
-    backgroundColor: '#fdecc8',
-    textTransform: 'uppercase',
-  },
-  statusPillSuccess: {
-    color: palette.success,
-    backgroundColor: palette.primarySoft,
-  },
-  statusPillOverdue: {
-    color: '#ffffff',
-    backgroundColor: palette.danger,
-  },
-});
+const createStyles = (palette: Palette, shadow: Shadow) =>
+  StyleSheet.create({
+    safe: {
+      flex: 1,
+      backgroundColor: palette.background,
+    },
+    container: {
+      flex: 1,
+    },
+    scrollContent: {
+      paddingBottom: spacing(4),
+    },
+    loadingState: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    loadingText: {
+      marginTop: spacing(2),
+      color: palette.textSecondary,
+    },
+    header: {
+      paddingHorizontal: spacing(3),
+      paddingTop: spacing(3),
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      gap: spacing(2),
+    },
+    headerTitle: {
+      fontSize: 24,
+      fontWeight: '600',
+      color: palette.textPrimary,
+    },
+    headerSubtitle: {
+      fontSize: 14,
+      color: palette.textSecondary,
+      marginTop: spacing(0.5),
+    },
+    headerMeta: {
+      fontSize: 13,
+      color: palette.textMuted,
+      marginTop: spacing(0.5),
+    },
+    headerButtons: {
+      flexDirection: 'row',
+      gap: spacing(1),
+    },
+    outlineButton: {
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: palette.primary,
+      paddingVertical: spacing(1),
+      paddingHorizontal: spacing(2),
+    },
+    outlineButtonText: {
+      color: palette.primary,
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    errorBanner: {
+      marginTop: spacing(2),
+      marginHorizontal: spacing(3),
+      backgroundColor: '#fee2e2',
+      borderRadius: radius.sm,
+      padding: spacing(1.5),
+    },
+    errorText: {
+      color: palette.danger,
+      textAlign: 'center',
+      fontSize: 13,
+    },
+    section: {
+      marginTop: spacing(3),
+      paddingHorizontal: spacing(3),
+    },
+    sectionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: spacing(1.5),
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: palette.textPrimary,
+    },
+    sectionCount: {
+      fontSize: 13,
+      color: palette.textMuted,
+    },
+    itemCard: {
+      backgroundColor: palette.surface,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing(2),
+      paddingVertical: spacing(2),
+      marginBottom: spacing(1.5),
+      ...shadow.card,
+    },
+    itemTitle: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: palette.textPrimary,
+    },
+    itemMeta: {
+      marginTop: spacing(0.5),
+      fontSize: 13,
+      color: palette.textSecondary,
+    },
+    itemSub: {
+      marginTop: spacing(0.5),
+      fontSize: 13,
+      color: palette.textMuted,
+    },
+    itemNote: {
+      marginTop: spacing(1),
+      fontSize: 12,
+      color: palette.primary,
+    },
+    emptyCard: {
+      backgroundColor: palette.surface,
+      borderRadius: radius.md,
+      padding: spacing(3),
+      alignItems: 'center',
+    },
+    emptyTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: palette.textPrimary,
+      marginBottom: spacing(1),
+    },
+    emptyText: {
+      fontSize: 14,
+      color: palette.textSecondary,
+      textAlign: 'center',
+      lineHeight: 20,
+    },
+    statusPill: {
+      marginTop: spacing(1),
+      alignSelf: 'flex-start',
+      paddingHorizontal: spacing(1.5),
+      paddingVertical: spacing(0.5),
+      borderRadius: radius.xs,
+      fontSize: 12,
+      fontWeight: '600',
+      color: palette.warning,
+      backgroundColor: '#fdecc8',
+      textTransform: 'uppercase',
+    },
+    statusPillSuccess: {
+      color: palette.success,
+      backgroundColor: palette.primarySoft,
+    },
+    statusPillOverdue: {
+      color: '#ffffff',
+      backgroundColor: palette.danger,
+    },
+  });

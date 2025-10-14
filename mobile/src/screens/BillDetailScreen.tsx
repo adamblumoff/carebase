@@ -22,149 +22,6 @@ import { emitPlanChanged } from '../utils/planEvents';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'BillDetail'>;
 
-const createStyles = (palette: Palette) =>
-  StyleSheet.create({
-    safe: {
-      flex: 1,
-      backgroundColor: palette.surfaceMuted,
-    },
-    container: {
-      flex: 1,
-    },
-    content: {
-      padding: spacing(3),
-      paddingBottom: spacing(6),
-    },
-    summaryCard: {
-      backgroundColor: palette.surface,
-      borderRadius: radius.lg,
-      flexDirection: 'row',
-      overflow: 'hidden',
-      marginBottom: spacing(3),
-    },
-    summaryAccent: {
-      width: 6,
-    },
-    summaryBody: {
-      flex: 1,
-      padding: spacing(2.5),
-    },
-    summaryLabel: {
-      fontSize: 12,
-      textTransform: 'uppercase',
-      fontWeight: '700',
-      color: palette.textMuted,
-    },
-    summaryAmount: {
-      marginTop: spacing(1),
-      fontSize: 28,
-      fontWeight: '700',
-      color: palette.textPrimary,
-    },
-    summaryStatus: {
-      marginTop: spacing(1),
-      fontSize: 14,
-      color: palette.textSecondary,
-    },
-    statusValue: {
-      fontWeight: '700',
-      color: palette.warning,
-      textTransform: 'uppercase',
-    },
-    statusValuePaid: {
-      color: palette.success,
-    },
-    statusValueOverdue: {
-      color: palette.danger,
-    },
-    infoGrid: {
-      flexDirection: 'row',
-      gap: spacing(2),
-      marginBottom: spacing(3),
-    },
-    infoItem: {
-      flex: 1,
-      backgroundColor: palette.surface,
-      borderRadius: radius.md,
-      padding: spacing(2),
-    },
-    infoLabel: {
-      fontSize: 12,
-      textTransform: 'uppercase',
-      fontWeight: '600',
-      color: palette.textMuted,
-    },
-    infoValue: {
-      marginTop: spacing(0.5),
-      fontSize: 16,
-      fontWeight: '600',
-      color: palette.textPrimary,
-    },
-    actionsCard: {
-      backgroundColor: palette.surface,
-      borderRadius: radius.md,
-      padding: spacing(3),
-      marginBottom: spacing(3),
-    },
-    primaryButton: {
-      backgroundColor: palette.primary,
-      borderRadius: radius.sm,
-      paddingVertical: spacing(1.5),
-      alignItems: 'center',
-    },
-    primaryButtonText: {
-      color: '#fff',
-      fontSize: 15,
-      fontWeight: '700',
-    },
-    secondaryButton: {
-      borderRadius: radius.sm,
-      borderWidth: 1,
-      borderColor: palette.success,
-      paddingVertical: spacing(1.5),
-      alignItems: 'center',
-      marginTop: spacing(2),
-    },
-    secondaryButtonDisabled: {
-      opacity: 0.6,
-    },
-    secondaryButtonText: {
-      fontSize: 15,
-      fontWeight: '600',
-      color: palette.success,
-    },
-    dangerButton: {
-      borderRadius: radius.sm,
-      borderWidth: 1,
-      borderColor: palette.danger,
-      paddingVertical: spacing(1.5),
-      alignItems: 'center',
-      marginTop: spacing(2),
-    },
-    dangerButtonText: {
-      fontSize: 15,
-      fontWeight: '600',
-      color: palette.danger,
-    },
-    noteCard: {
-      backgroundColor: palette.surface,
-      borderRadius: radius.md,
-      padding: spacing(3),
-      marginBottom: spacing(6),
-    },
-    noteTitle: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: palette.textPrimary,
-      marginBottom: spacing(1),
-    },
-    noteBody: {
-      fontSize: 14,
-      color: palette.textSecondary,
-      lineHeight: 20,
-    },
-  });
-
 export default function BillDetailScreen({ route, navigation }: Props) {
   const { bill } = route.params;
   const [currentBill, setCurrentBill] = useState(bill);
@@ -317,145 +174,144 @@ export default function BillDetailScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: palette.surfaceMuted,
-  },
-  container: {
-    flex: 1,
-  },
-  content: {
-    padding: spacing(3),
-    paddingBottom: spacing(6),
-  },
-  summaryCard: {
-    backgroundColor: palette.surface,
-    borderRadius: radius.lg,
-    flexDirection: 'row',
-    overflow: 'hidden',
-    marginBottom: spacing(3),
-  },
-  summaryAccent: {
-    width: 6,
-  },
-  summaryBody: {
-    flex: 1,
-    padding: spacing(2.5),
-  },
-  summaryLabel: {
-    fontSize: 12,
-    textTransform: 'uppercase',
-    fontWeight: '700',
-    color: palette.textMuted,
-  },
-  summaryAmount: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: palette.textPrimary,
-    marginTop: spacing(0.5),
-  },
-  summaryStatus: {
-    marginTop: spacing(1),
-    fontSize: 14,
-    color: palette.textSecondary,
-  },
-  statusValue: {
-    fontWeight: '700',
-    color: palette.warning,
-    textTransform: 'uppercase',
-  },
-  statusValuePaid: {
-    color: palette.success,
-  },
-  statusValueOverdue: {
-    color: palette.danger,
-  },
-  infoGrid: {
-    flexDirection: 'row',
-    gap: spacing(2),
-    marginBottom: spacing(3),
-  },
-  infoItem: {
-    flex: 1,
-    backgroundColor: palette.surface,
-    borderRadius: radius.md,
-    padding: spacing(2),
-    ...shadow.card,
-  },
-  infoLabel: {
-    fontSize: 12,
-    textTransform: 'uppercase',
-    fontWeight: '600',
-    color: palette.textMuted,
-    marginBottom: spacing(0.5),
-  },
-  infoValue: {
-    fontSize: 16,
-    color: palette.textPrimary,
-  },
-  actionsCard: {
-    backgroundColor: palette.surface,
-    borderRadius: radius.md,
-    padding: spacing(3),
-    ...shadow.card,
-    marginBottom: spacing(3),
-  },
-  primaryButton: {
-    backgroundColor: palette.primary,
-    borderRadius: radius.sm,
-    paddingVertical: spacing(1.5),
-    alignItems: 'center',
-  },
-  primaryButtonText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  secondaryButton: {
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: palette.success,
-    paddingVertical: spacing(1.5),
-    alignItems: 'center',
-    marginTop: spacing(2),
-  },
-  secondaryButtonDisabled: {
-    opacity: 0.6,
-  },
-  secondaryButtonText: {
-    color: palette.success,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  dangerButton: {
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: palette.danger,
-    paddingVertical: spacing(1.5),
-    alignItems: 'center',
-    marginTop: spacing(2),
-  },
-  dangerButtonText: {
-    color: palette.danger,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  noteCard: {
-    backgroundColor: palette.surface,
-    borderRadius: radius.md,
-    padding: spacing(3),
-    ...shadow.card,
-  },
-  noteTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: palette.textPrimary,
-    marginBottom: spacing(1),
-  },
-  noteBody: {
-    fontSize: 14,
-    color: palette.textSecondary,
-    lineHeight: 20,
-  },
-});
+const createStyles = (palette: Palette) =>
+  StyleSheet.create({
+    safe: {
+      flex: 1,
+      backgroundColor: palette.surfaceMuted,
+    },
+    container: {
+      flex: 1,
+    },
+    content: {
+      padding: spacing(3),
+      paddingBottom: spacing(6),
+    },
+    summaryCard: {
+      backgroundColor: palette.surface,
+      borderRadius: radius.lg,
+      flexDirection: 'row',
+      overflow: 'hidden',
+      marginBottom: spacing(3),
+    },
+    summaryAccent: {
+      width: 6,
+    },
+    summaryBody: {
+      flex: 1,
+      padding: spacing(2.5),
+    },
+    summaryLabel: {
+      fontSize: 12,
+      textTransform: 'uppercase',
+      fontWeight: '700',
+      color: palette.textMuted,
+    },
+    summaryAmount: {
+      fontSize: 32,
+      fontWeight: '700',
+      color: palette.textPrimary,
+      marginTop: spacing(0.5),
+    },
+    summaryStatus: {
+      marginTop: spacing(1),
+      fontSize: 14,
+      color: palette.textSecondary,
+    },
+    statusValue: {
+      fontWeight: '700',
+      color: palette.warning,
+      textTransform: 'uppercase',
+    },
+    statusValuePaid: {
+      color: palette.success,
+    },
+    statusValueOverdue: {
+      color: palette.danger,
+    },
+    infoGrid: {
+      flexDirection: 'row',
+      gap: spacing(2),
+      marginBottom: spacing(3),
+    },
+    infoItem: {
+      flex: 1,
+      backgroundColor: palette.surface,
+      borderRadius: radius.md,
+      padding: spacing(2),
+    },
+    infoLabel: {
+      fontSize: 12,
+      textTransform: 'uppercase',
+      fontWeight: '600',
+      color: palette.textMuted,
+      marginBottom: spacing(0.5),
+    },
+    infoValue: {
+      fontSize: 16,
+      color: palette.textPrimary,
+    },
+    actionsCard: {
+      backgroundColor: palette.surface,
+      borderRadius: radius.md,
+      padding: spacing(3),
+      marginBottom: spacing(3),
+    },
+    primaryButton: {
+      backgroundColor: palette.primary,
+      borderRadius: radius.sm,
+      paddingVertical: spacing(1.5),
+      alignItems: 'center',
+    },
+    primaryButtonText: {
+      color: '#fff',
+      fontSize: 15,
+      fontWeight: '700',
+    },
+    secondaryButton: {
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: palette.success,
+      paddingVertical: spacing(1.5),
+      alignItems: 'center',
+      marginTop: spacing(2),
+    },
+    secondaryButtonDisabled: {
+      opacity: 0.6,
+    },
+    secondaryButtonText: {
+      color: palette.success,
+      fontSize: 15,
+      fontWeight: '600',
+    },
+    dangerButton: {
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: palette.danger,
+      paddingVertical: spacing(1.5),
+      alignItems: 'center',
+      marginTop: spacing(2),
+    },
+    dangerButtonText: {
+      color: palette.danger,
+      fontSize: 15,
+      fontWeight: '600',
+    },
+    noteCard: {
+      backgroundColor: palette.surface,
+      borderRadius: radius.md,
+      padding: spacing(3),
+      marginBottom: spacing(6),
+    },
+    noteTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: palette.textPrimary,
+      marginBottom: spacing(1),
+    },
+    noteBody: {
+      fontSize: 14,
+      color: palette.textSecondary,
+      lineHeight: 20,
+    },
+  });

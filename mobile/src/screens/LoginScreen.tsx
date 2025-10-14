@@ -2,7 +2,7 @@
  * Login Screen
  * Minimal green-forward sign-in experience
  */
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   SafeAreaView,
   View,
@@ -18,13 +18,15 @@ import * as WebBrowser from 'expo-web-browser';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../api/client';
 import { API_ENDPOINTS, API_BASE_URL } from '../config';
-import { palette, spacing, radius, shadow } from '../theme';
+import { useTheme, spacing, radius, type Palette, type Shadow } from '../theme';
 
 WebBrowser.maybeCompleteAuthSession();
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 export default function LoginScreen({ navigation }: Props) {
+  const { palette, shadow } = useTheme();
+  const styles = useMemo(() => createStyles(palette, shadow), [palette, shadow]);
   const [loading, setLoading] = useState(false);
 
   const authenticate = async () => {
@@ -87,7 +89,7 @@ export default function LoginScreen({ navigation }: Props) {
           <Text style={styles.brandTagline}>All your care tasks, organized for the week ahead.</Text>
         </View>
 
-        <View style={[styles.card, shadow.card]}>
+        <View style={styles.card}>
           <Text style={styles.cardTitle}>Sign in</Text>
           <Text style={styles.cardText}>
             Use your Google account to sync appointments and bills securely.
@@ -120,79 +122,81 @@ export default function LoginScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: palette.background,
-  },
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: spacing(3),
-    paddingVertical: spacing(6),
-  },
-  brandBlock: {
-    marginBottom: spacing(4),
-  },
-  brandName: {
-    fontSize: 36,
-    fontWeight: '700',
-    color: palette.primary,
-  },
-  brandTagline: {
-    marginTop: spacing(1),
-    fontSize: 16,
-    lineHeight: 22,
-    color: palette.textSecondary,
-  },
-  card: {
-    backgroundColor: palette.surface,
-    borderRadius: radius.md,
-    padding: spacing(3),
-  },
-  cardTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: palette.textPrimary,
-  },
-  cardText: {
-    marginTop: spacing(1),
-    fontSize: 14,
-    color: palette.textSecondary,
-    lineHeight: 20,
-  },
-  primaryButton: {
-    marginTop: spacing(3),
-    backgroundColor: palette.primary,
-    borderRadius: radius.sm,
-    paddingVertical: spacing(1.75),
-    alignItems: 'center',
-  },
-  primaryButtonDisabled: {
-    opacity: 0.7,
-  },
-  primaryButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  noteText: {
-    marginTop: spacing(1.5),
-    fontSize: 12,
-    color: palette.textMuted,
-    lineHeight: 18,
-  },
-  devButton: {
-    marginTop: spacing(3),
-    paddingVertical: spacing(1.25),
-    alignItems: 'center',
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: palette.textMuted,
-  },
-  devButtonText: {
-    color: palette.textSecondary,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-});
+const createStyles = (palette: Palette, shadow: Shadow) =>
+  StyleSheet.create({
+    safe: {
+      flex: 1,
+      backgroundColor: palette.background,
+    },
+    container: {
+      flex: 1,
+      justifyContent: 'center',
+      paddingHorizontal: spacing(3),
+      paddingVertical: spacing(6),
+    },
+    brandBlock: {
+      marginBottom: spacing(4),
+    },
+    brandName: {
+      fontSize: 36,
+      fontWeight: '700',
+      color: palette.primary,
+    },
+    brandTagline: {
+      marginTop: spacing(1),
+      fontSize: 16,
+      lineHeight: 22,
+      color: palette.textSecondary,
+    },
+    card: {
+      backgroundColor: palette.surface,
+      borderRadius: radius.md,
+      padding: spacing(3),
+      ...shadow.card,
+    },
+    cardTitle: {
+      fontSize: 20,
+      fontWeight: '600',
+      color: palette.textPrimary,
+    },
+    cardText: {
+      marginTop: spacing(1),
+      fontSize: 14,
+      color: palette.textSecondary,
+      lineHeight: 20,
+    },
+    primaryButton: {
+      marginTop: spacing(3),
+      backgroundColor: palette.primary,
+      borderRadius: radius.sm,
+      paddingVertical: spacing(1.75),
+      alignItems: 'center',
+    },
+    primaryButtonDisabled: {
+      opacity: 0.7,
+    },
+    primaryButtonText: {
+      color: '#fff',
+      fontSize: 16,
+      fontWeight: '700',
+    },
+    noteText: {
+      marginTop: spacing(1.5),
+      fontSize: 12,
+      color: palette.textMuted,
+      lineHeight: 18,
+    },
+    devButton: {
+      marginTop: spacing(3),
+      paddingVertical: spacing(1.25),
+      alignItems: 'center',
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: palette.textMuted,
+    },
+    devButtonText: {
+      color: palette.textSecondary,
+      fontSize: 14,
+      fontWeight: '600',
+    },
+  });
