@@ -2,20 +2,12 @@
  * Carebase Mobile App
  * Healthcare coordination: Show Up (appointments) + Pay (bills)
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import AppNavigator from './src/navigation/AppNavigator';
 import { ThemeProvider, useTheme } from './src/theme';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import apiClient from './src/api/client';
-import { API_ENDPOINTS } from './src/config';
 import { View, ActivityIndicator, Text, StyleSheet } from 'react-native';
-import { AuthProvider } from './src/auth/AuthContext';
-
-type AuthState =
-  | { status: 'loading' }
-  | { status: 'signedOut' }
-  | { status: 'signedIn'; user?: any };
+import { AuthProvider, useAuth } from './src/auth/AuthContext';
 
 function SplashScreen() {
   const { colorScheme, palette } = useTheme();
@@ -30,59 +22,15 @@ function SplashScreen() {
 function AppContent() {
   const { colorScheme } = useTheme();
   const statusBarStyle = colorScheme === 'dark' ? 'light' : 'dark';
-  const [authState, setAuthState] = useState<AuthState>({ status: 'loading' });
-
-  useEffect(() => {
-    let mounted = true;
-
-    const bootstrap = async () => {
-      try {
-        const token = await AsyncStorage.getItem('accessToken');
-        if (!token) {
-          if (mounted) {
-            setAuthState({ status: 'signedOut' });
-          }
-          return;
-        }
-
-        try {
-          const response = await apiClient.get(API_ENDPOINTS.checkSession);
-          if (response.data?.authenticated) {
-            if (mounted) {
-              setAuthState({ status: 'signedIn', user: response.data.user });
-            }
-            return;
-          }
-        } catch (error) {
-          console.warn('Session check failed, clearing token', error);
-        }
-
-        await AsyncStorage.removeItem('accessToken');
-        if (mounted) {
-          setAuthState({ status: 'signedOut' });
-        }
-      } catch (error) {
-        console.error('Auth bootstrap error', error);
-        if (mounted) {
-          setAuthState({ status: 'signedOut' });
-        }
-      }
-    };
-
-    bootstrap();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  const auth = useAuth();
 
   const navigation = useMemo(() => {
-    if (authState.status === 'loading') {
+    if (auth.status === 'loading') {
       return <SplashScreen />;
     }
 
-    return <AppNavigator isSignedIn={authState.status === 'signedIn'} />;
-  }, [authState]);
+    return <AppNavigator isSignedIn={auth.status === 'signedIn'} />;
+  }, [auth.status]);
 
   return (
     <>

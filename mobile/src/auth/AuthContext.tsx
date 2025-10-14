@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, useState, useCallback } from 'react';
+import React, { createContext, useContext, useMemo, useState, useCallback, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../api/client';
 import { API_ENDPOINTS } from '../config';
@@ -6,27 +6,60 @@ import { API_ENDPOINTS } from '../config';
 interface AuthContextValue {
   status: 'loading' | 'signedOut' | 'signedIn';
   user: any | null;
-  setUser: (user: any | null) => void;
-  setStatus: (status: 'loading' | 'signedOut' | 'signedIn') => void;
   signIn: (user?: any) => void;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-interface AuthProviderProps {
-  initialStatus?: 'loading' | 'signedOut' | 'signedIn';
-  initialUser?: any;
-  children: React.ReactNode;
-}
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [status, setStatus] = useState<'loading' | 'signedOut' | 'signedIn'>('loading');
+  const [user, setUser] = useState<any | null>(null);
 
-export const AuthProvider: React.FC<AuthProviderProps> = ({
-  initialStatus = 'loading',
-  initialUser = null,
-  children,
-}) => {
-  const [status, setStatus] = useState<'loading' | 'signedOut' | 'signedIn'>(initialStatus);
-  const [user, setUser] = useState<any | null>(initialUser);
+  useEffect(() => {
+    let mounted = true;
+
+    const bootstrap = async () => {
+      try {
+        const token = await AsyncStorage.getItem('accessToken');
+        if (!token) {
+          if (mounted) {
+            setStatus('signedOut');
+          }
+          return;
+        }
+
+        try {
+          const response = await apiClient.get(API_ENDPOINTS.checkSession);
+          if (response.data?.authenticated && mounted) {
+            setUser(response.data.user ?? null);
+            setStatus('signedIn');
+            return;
+          }
+        } catch (error) {
+          console.warn('Session check failed, clearing token', error);
+        }
+
+        await AsyncStorage.removeItem('accessToken');
+        if (mounted) {
+          setUser(null);
+          setStatus('signedOut');
+        }
+      } catch (error) {
+        console.error('Auth bootstrap error', error);
+        if (mounted) {
+          setUser(null);
+          setStatus('signedOut');
+        }
+      }
+    };
+
+    bootstrap();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const signIn = useCallback((nextUser?: any) => {
     setUser(nextUser ?? null);
@@ -51,8 +84,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
     () => ({
       status,
       user,
-      setStatus,
-      setUser,
       signIn,
       signOut,
     }),
