@@ -68,7 +68,7 @@ export interface Appointment {
 
 // ========== BILLS ==========
 
-export type BillStatus = 'todo' | 'paid' | 'ignore';
+export type BillStatus = 'todo' | 'overdue' | 'paid';
 
 export interface Bill {
   id: number;
@@ -125,6 +125,8 @@ export interface BillUpdateRequest {
   payUrl?: string;
   status?: BillStatus;
 }
+
+export type BillUpdateData = BillUpdateRequest;
 
 export interface ReclassifyRequest {
   newType: ItemType;

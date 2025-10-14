@@ -188,7 +188,7 @@ const formatTime = (dateString: string) => {
           ) : (
             planData?.bills.map((bill) => {
               const isPaid = bill.status === 'paid';
-              const isIgnored = bill.status === 'ignore';
+              const isOverdue = bill.status === 'overdue';
               return (
                 <TouchableOpacity
                   key={bill.id}
@@ -205,7 +205,7 @@ const formatTime = (dateString: string) => {
                     style={[
                       styles.statusPill,
                       isPaid && styles.statusPillSuccess,
-                      isIgnored && styles.statusPillMuted,
+                      isOverdue && styles.statusPillOverdue,
                     ]}
                   >
                     {bill.status}
@@ -371,8 +371,8 @@ const styles = StyleSheet.create({
     color: palette.success,
     backgroundColor: palette.primarySoft,
   },
-  statusPillMuted: {
-    color: palette.textMuted,
-    backgroundColor: palette.surfaceMuted,
+  statusPillOverdue: {
+    color: '#ffffff',
+    backgroundColor: palette.danger,
   },
 });

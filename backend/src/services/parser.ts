@@ -2,7 +2,7 @@
  * Rules-based parser for classifying and extracting data from email/upload sources
  */
 
-import type { ItemType, Source, AppointmentCreateRequest, BillCreateRequest } from '@carebase/shared';
+import type { ItemType, Source, AppointmentCreateRequest, BillCreateRequest, BillStatus } from '@carebase/shared';
 import * as chrono from 'chrono-node';
 
 // Keywords and patterns for classification
@@ -98,16 +98,34 @@ function findBestAmount(text: string): number | undefined {
   return candidates[0].value;
 }
 
+function normalizePatterns(patterns: RegExp[]): RegExp[] {
+  return patterns.map((pattern) => {
+    const flags = pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g';
+    return new RegExp(pattern.source, flags);
+  });
+}
+
+function parseDateString(candidate: string): string | undefined {
+  const parsed = chrono.parseDate(candidate);
+  if (!parsed) return undefined;
+  return parsed.toISOString().split('T')[0];
+}
+
 function findDateWithContext(text: string, patterns: RegExp[], keywords: string[] = []): string | undefined {
-  for (const pattern of patterns) {
+  const searchPatterns = normalizePatterns(patterns);
+
+  for (const pattern of searchPatterns) {
     pattern.lastIndex = 0;
-    const match = pattern.exec(text);
-    if (!match) continue;
-    const context = match[1] ?? match[0];
-    const parsed = chrono.parseDate(context);
-    if (parsed) {
-      return parsed.toISOString().split('T')[0];
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(text)) !== null) {
+      const segment = match[1] ?? match[0];
+      const iso = parseDateString(segment);
+      if (iso) {
+        pattern.lastIndex = 0;
+        return iso;
+      }
     }
+    pattern.lastIndex = 0;
   }
 
   if (keywords.length > 0) {
@@ -115,11 +133,29 @@ function findDateWithContext(text: string, patterns: RegExp[], keywords: string[
     for (const keyword of keywords) {
       let idx = lower.indexOf(keyword);
       while (idx !== -1) {
-        const slice = text.slice(Math.max(0, idx), Math.min(text.length, idx + keyword.length + 60));
-        const parsed = chrono.parseDate(slice);
-        if (parsed) {
-          return parsed.toISOString().split('T')[0];
+        const contextEnd = Math.min(text.length, idx + keyword.length + 200);
+        const context = text.slice(idx, contextEnd);
+
+        const contextIso = parseDateString(context);
+        if (contextIso) {
+          return contextIso;
         }
+
+        const lookAhead = text.slice(idx + keyword.length, Math.min(text.length, idx + keyword.length + 200));
+        for (const pattern of searchPatterns) {
+          pattern.lastIndex = 0;
+          let match: RegExpExecArray | null;
+          while ((match = pattern.exec(lookAhead)) !== null) {
+            const segment = match[1] ?? match[0];
+            const iso = parseDateString(segment);
+            if (iso) {
+              pattern.lastIndex = 0;
+              return iso;
+            }
+          }
+          pattern.lastIndex = 0;
+        }
+
         idx = lower.indexOf(keyword, idx + keyword.length);
       }
     }
@@ -275,12 +311,17 @@ export function extractBill(text: string, subject: string): BillCreateRequest {
                    combined.match(/(https?:\/\/[^\s]+(?:pay|bill|invoice)[^\s]*)/i);
   const payUrl = urlMatch ? urlMatch[1] : undefined;
 
+  let status: BillStatus = 'todo';
+  if (dueDate && isPastDate(dueDate)) {
+    status = 'overdue';
+  }
+
   return {
     statementDate,
     amount,
     dueDate,
     payUrl,
-    status: 'todo'
+    status
   };
 }
 
@@ -323,7 +364,10 @@ export function parseSource(source: Source, fullText?: string): ParseResult {
 
   if (classification.type === 'bill') {
     billData = billCandidate;
-    billOverdue = isPastDate(billCandidate.dueDate);
+    billOverdue = billCandidate.status === 'overdue' || isPastDate(billCandidate.dueDate);
+    if (billData && billOverdue && billData.status !== 'overdue') {
+      billData = { ...billData, status: 'overdue' };
+    }
   } else if (classification.type === 'appointment') {
     appointmentData = appointmentCandidate;
   }

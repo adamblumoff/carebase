@@ -5,7 +5,7 @@ import express, { Request, Response } from 'express';
 import multer from 'multer';
 import { createSource, createItem, createBill, createAuditLog, findRecipientsByUserId } from '../../db/queries.js';
 import { extractTextFromImage, getShortExcerpt } from '../../services/ocr.js';
-import { storeFile } from '../../services/storage.js';
+import { storeFile, storeText } from '../../services/storage.js';
 import { parseSource } from '../../services/parser.js';
 import type { User } from '@carebase/shared';
 
@@ -65,6 +65,16 @@ router.post('/photo', upload.single('photo'), async (req: Request, res: Response
     // Get short excerpt for quick display, but keep full text for parsing
     const shortExcerpt = getShortExcerpt(ocrText);
 
+    // Persist full OCR transcript for deeper debugging
+    let ocrTextStorageKey: string | null = null;
+    if (ocrText) {
+      try {
+        ocrTextStorageKey = await storeText(ocrText);
+      } catch (storeErr) {
+        console.error('Failed to persist OCR text transcript:', storeErr);
+      }
+    }
+
     // Create source record
     const source = await createSource(recipient.id, 'upload', {
       externalId: null,
@@ -74,9 +84,20 @@ router.post('/photo', upload.single('photo'), async (req: Request, res: Response
       storageKey
     });
 
+    // Temporary logging to inspect OCR output on device vs tests
+    const ocrPreview = ocrText.slice(0, 400);
+    console.log('[upload] OCR text preview:', ocrPreview);
+
     // Parse source using full OCR text for classification/extraction
     const parsed = parseSource(source, ocrText);
     const { classification, billData, billOverdue } = parsed;
+    console.log('[upload] Parsed classification:', {
+      type: classification.type,
+      confidence: classification.confidence,
+      hasBillData: Boolean(billData),
+      billKeys: billData ? Object.keys(billData) : []
+    });
+    console.log('[upload] OCR stored key:', ocrTextStorageKey, 'length:', ocrText.length);
 
     // Create item
     const item = await createItem(
@@ -100,7 +121,9 @@ router.post('/photo', upload.single('photo'), async (req: Request, res: Response
       ocr: true,
       extractedBill: parsed.billData,
       overdue: billOverdue,
-      ocrSnippet: ocrText.substring(0, 2000)
+      ocrSnippet: ocrText.substring(0, 2000),
+      ocrStorageKey: ocrTextStorageKey,
+      ocrLength: ocrText.length
     });
 
     console.log(`Created ${classification.type} from photo upload with confidence ${classification.confidence}`);
@@ -118,7 +141,9 @@ router.post('/photo', upload.single('photo'), async (req: Request, res: Response
       bill: createdBill,
       extracted: parsed.billData,
       overdue: billOverdue,
-      ocrText: ocrText.substring(0, 200) // Return first 200 chars for debugging
+      ocrText: ocrText.substring(0, 200), // Quick preview for front-end debug
+      ocrTextFull: ocrText,
+      ocrStorageKey: ocrTextStorageKey
     });
   } catch (error) {
     console.error('Photo upload error:', error);

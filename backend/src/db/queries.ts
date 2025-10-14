@@ -373,8 +373,11 @@ export async function getUpcomingBills(recipientId: number, startDate: Date, end
     `SELECT b.* FROM bills b
      JOIN items i ON b.item_id = i.id
      WHERE i.recipient_id = $1
-       AND (b.due_date >= $2 AND b.due_date < $3 OR b.due_date IS NULL)
-       AND b.status != 'ignore'
+       AND (
+         (b.due_date >= $2 AND b.due_date < $3)
+         OR b.due_date IS NULL
+         OR b.due_date < $2
+       )
      ORDER BY b.due_date ASC NULLS LAST`,
     [recipientId, startDate, endDate]
   );

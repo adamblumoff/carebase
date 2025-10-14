@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import type { BillStatus } from '@carebase/shared';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -12,7 +13,7 @@ interface DigestAppointment {
 interface DigestBill {
   amount?: number | null;
   due_date?: Date | string | null;
-  status: string;
+  status: BillStatus;
 }
 
 interface DigestRecipient {
@@ -92,7 +93,13 @@ function generateDigestHTML(data: DigestEmailData): string {
             <div class="item">
               <div class="item-title">
                 ${bill.amount ? `$${parseFloat(bill.amount.toString()).toFixed(2)}` : 'Bill'}
-                ${bill.status === 'paid' ? ' ✅' : bill.status === 'todo' ? ' ⏰' : ''}
+                ${
+                  bill.status === 'paid'
+                    ? ' ✅'
+                    : bill.status === 'overdue'
+                    ? ' ⚠️'
+                    : ' ⏰'
+                }
               </div>
               <div class="item-details">
                 ${bill.due_date ? `Due: ${new Date(bill.due_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}` : 'No due date'}

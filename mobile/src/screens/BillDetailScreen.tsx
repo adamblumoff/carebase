@@ -84,7 +84,7 @@ export default function BillDetailScreen({ route, navigation }: Props) {
   };
 
   const isPaid = currentBill.status === 'paid';
-  const isIgnored = currentBill.status === 'ignore';
+  const isOverdue = currentBill.status === 'overdue';
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -97,7 +97,7 @@ export default function BillDetailScreen({ route, navigation }: Props) {
           <View
             style={[
               styles.summaryAccent,
-              { backgroundColor: isPaid ? palette.success : palette.warning },
+              { backgroundColor: isPaid ? palette.success : isOverdue ? palette.danger : palette.warning },
             ]}
           />
           <View style={styles.summaryBody}>
@@ -109,7 +109,7 @@ export default function BillDetailScreen({ route, navigation }: Props) {
                 style={[
                   styles.statusValue,
                   isPaid && styles.statusValuePaid,
-                  isIgnored && styles.statusValueMuted,
+                  isOverdue && styles.statusValueOverdue,
                 ]}
               >
                 {currentBill.status}
@@ -216,8 +216,8 @@ const styles = StyleSheet.create({
   statusValuePaid: {
     color: palette.success,
   },
-  statusValueMuted: {
-    color: palette.textMuted,
+  statusValueOverdue: {
+    color: palette.danger,
   },
   infoGrid: {
     flexDirection: 'row',

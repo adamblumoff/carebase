@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS bills (
   amount DECIMAL(10, 2),
   due_date DATE,
   pay_url TEXT,
-  status VARCHAR(20) NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'paid', 'ignore')),
+  status VARCHAR(20) NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'overdue', 'paid')),
   task_key VARCHAR(64),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
