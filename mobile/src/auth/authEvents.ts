@@ -1,18 +1,19 @@
-import { EventEmitter } from 'events';
-
-const emitter = new EventEmitter();
-
-export const AUTH_EVENTS = {
-  UNAUTHORIZED: 'unauthorized',
-};
+const listeners = new Set<() => void>();
 
 export const authEvents = {
-  emitUnauthorized: () => emitter.emit(AUTH_EVENTS.UNAUTHORIZED),
+  emitUnauthorized: () => {
+    listeners.forEach((listener) => {
+      try {
+        listener();
+      } catch (error) {
+        console.warn('auth unauthorized listener failed', error);
+      }
+    });
+  },
   onUnauthorized: (handler: () => void) => {
-    emitter.on(AUTH_EVENTS.UNAUTHORIZED, handler);
+    listeners.add(handler);
     return () => {
-      emitter.off(AUTH_EVENTS.UNAUTHORIZED, handler);
+      listeners.delete(handler);
     };
   },
 };
-
