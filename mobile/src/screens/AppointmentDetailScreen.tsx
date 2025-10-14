@@ -11,8 +11,9 @@ import {
   Alert,
   TextInput,
   Platform,
+  Modal,
 } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import apiClient from '../api/client';
@@ -62,11 +63,12 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
   const [startDateTime, setStartDateTime] = useState(parseServerDate(appointment.startLocal));
   const [pendingStart, setPendingStart] = useState(parseServerDate(appointment.startLocal));
   const [pendingSummary, setPendingSummary] = useState(appointment.summary);
-  const [pendingLocation, setPendingLocation] = useState(appointment.location || '');
-  const [pendingNote, setPendingNote] = useState(appointment.prepNote || '');
-  const [editing, setEditing] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
+const [pendingLocation, setPendingLocation] = useState(appointment.location || '');
+const [pendingNote, setPendingNote] = useState(appointment.prepNote || '');
+const [editing, setEditing] = useState(false);
+const [isPickerVisible, setPickerVisible] = useState(false);
+const [activePickerMode, setActivePickerMode] = useState<'date' | 'time'>('date');
+const [pickerTempValue, setPickerTempValue] = useState<Date | null>(null);
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const returnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -74,25 +76,67 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
   const initialDuration =
     parseServerDate(appointment.endLocal).getTime() -
     parseServerDate(appointment.startLocal).getTime();
-  const durationMs = initialDuration > 0 ? initialDuration : 60 * 60 * 1000;
+const durationMs = initialDuration > 0 ? initialDuration : 60 * 60 * 1000;
 
-  useEffect(() => {
-    return () => {
-      if (returnTimerRef.current) {
-        clearTimeout(returnTimerRef.current);
-      }
-    };
-  }, []);
-
-  const scheduleReturnToPlan = (message: string) => {
-    setSuccessMessage(message);
+useEffect(() => {
+  return () => {
     if (returnTimerRef.current) {
       clearTimeout(returnTimerRef.current);
     }
-    returnTimerRef.current = setTimeout(() => {
-      navigation.goBack();
-    }, 1000);
   };
+}, []);
+
+const scheduleReturnToPlan = (message: string) => {
+  setSuccessMessage(message);
+  if (returnTimerRef.current) {
+    clearTimeout(returnTimerRef.current);
+  }
+  returnTimerRef.current = setTimeout(() => {
+    navigation.goBack();
+  }, 1000);
+};
+
+const updateDatePart = (source: Date, mode: 'date' | 'time', nextValue: Date) => {
+  const updated = new Date(source);
+  if (mode === 'date') {
+    updated.setFullYear(nextValue.getFullYear(), nextValue.getMonth(), nextValue.getDate());
+  } else {
+    updated.setHours(nextValue.getHours(), nextValue.getMinutes(), 0, 0);
+  }
+  return updated;
+};
+
+const openPicker = (mode: 'date' | 'time') => {
+  if (Platform.OS === 'android') {
+    DateTimePickerAndroid.open({
+      value: pendingStart,
+      mode,
+      is24Hour: false,
+      onChange: (event, selectedDate) => {
+        if (event.type === 'set' && selectedDate) {
+          setPendingStart(updateDatePart(pendingStart, mode, selectedDate));
+        }
+      },
+    });
+    return;
+  }
+
+  setActivePickerMode(mode);
+  setPickerTempValue(new Date(pendingStart));
+  setPickerVisible(true);
+};
+
+const closePicker = () => {
+  setPickerVisible(false);
+  setPickerTempValue(null);
+};
+
+const confirmPicker = () => {
+  if (pickerTempValue) {
+    setPendingStart(updateDatePart(pendingStart, activePickerMode, pickerTempValue));
+  }
+  closePicker();
+};
 
   const handleSave = async () => {
     if (successMessage) {
@@ -119,8 +163,7 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
       setPendingLocation(updated.location || '');
       setPendingNote(updated.prepNote || '');
       emitPlanChanged();
-      setShowDatePicker(false);
-      setShowTimePicker(false);
+      closePicker();
       setEditing(false);
       scheduleReturnToPlan('Appointment updated. Returning to plan...');
     } catch (error) {
@@ -163,8 +206,8 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
     setPendingLocation(currentAppointment.location || '');
     setPendingNote(currentAppointment.prepNote || '');
     setEditing(false);
-    setShowDatePicker(false);
-    setShowTimePicker(false);
+    setPickerVisible(false);
+    setPickerTempValue(null);
   };
 
   const startDisplay = formatDisplayDateTime(startDateTime);
@@ -175,6 +218,41 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
       containerStyle={styles.safe}
       contentContainerStyle={styles.content}
     >
+        {Platform.OS === 'ios' ? (
+          <Modal
+            transparent
+            animationType="fade"
+            visible={isPickerVisible}
+            onRequestClose={closePicker}
+          >
+            <View style={styles.modalBackdrop}>
+              <View style={[styles.modalContainer, shadow.card]}>
+                <Text style={styles.modalTitle}>
+                  {activePickerMode === 'date' ? 'Select start date' : 'Select start time'}
+                </Text>
+                <DateTimePicker
+                  value={pickerTempValue ?? pendingStart}
+                  mode={activePickerMode}
+                  display="spinner"
+                  onChange={(_, selectedDate) => {
+                    if (selectedDate) {
+                      setPickerTempValue(selectedDate);
+                    }
+                  }}
+                  style={styles.modalPicker}
+                />
+                <View style={styles.modalActions}>
+                  <TouchableOpacity style={styles.modalButtonSecondary} onPress={closePicker}>
+                    <Text style={styles.modalButtonSecondaryText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.modalButtonPrimary} onPress={confirmPicker}>
+                    <Text style={styles.modalButtonPrimaryText}>Done</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
+        ) : null}
         {successMessage ? (
           <View style={styles.successBanner}>
             <Text style={styles.successText}>{successMessage}</Text>
@@ -215,10 +293,7 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
             <Text style={styles.formLabel}>Start date</Text>
             <TouchableOpacity
               style={styles.selectorRow}
-              onPress={() => {
-                setShowDatePicker(true);
-                setShowTimePicker(false);
-              }}
+              onPress={() => openPicker('date')}
             >
               <Text style={styles.selectorValue}>{formatDisplayDate(pendingStart)}</Text>
               <Text style={styles.selectorHint}>Change</Text>
@@ -227,10 +302,7 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
             <Text style={styles.formLabel}>Start time</Text>
             <TouchableOpacity
               style={styles.selectorRow}
-              onPress={() => {
-                setShowTimePicker(true);
-                setShowDatePicker(false);
-              }}
+              onPress={() => openPicker('time')}
             >
               <Text style={styles.selectorValue}>{formatDisplayTime(pendingStart)}</Text>
               <Text style={styles.selectorHint}>Change</Text>
@@ -265,36 +337,6 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
               </TouchableOpacity>
             </View>
 
-            {(showDatePicker || showTimePicker) && (
-              <DateTimePicker
-                value={pendingStart}
-                mode={showDatePicker ? 'date' : 'time'}
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={(event, selectedDate) => {
-                  if (Platform.OS !== 'ios') {
-                    setShowDatePicker(false);
-                    setShowTimePicker(false);
-                  }
-                  if (selectedDate) {
-                    const next = new Date(pendingStart);
-                    if (showDatePicker) {
-                      next.setFullYear(
-                        selectedDate.getFullYear(),
-                        selectedDate.getMonth(),
-                        selectedDate.getDate()
-                      );
-                    } else {
-                      next.setHours(selectedDate.getHours(), selectedDate.getMinutes(), 0, 0);
-                    }
-                    setPendingStart(next);
-                  }
-                }}
-                onTouchCancel={() => {
-                  setShowDatePicker(false);
-                  setShowTimePicker(false);
-                }}
-              />
-            )}
           </View>
         ) : (
           <View style={[styles.detailsCard, shadow.card]}>
@@ -311,8 +353,8 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
               style={[styles.actionButton, styles.primaryButton]}
               onPress={() => {
                 setPendingStart(new Date(startDateTime));
-                setShowDatePicker(false);
-                setShowTimePicker(false);
+                setPickerVisible(false);
+                setPickerTempValue(null);
                 setEditing(true);
               }}
             >
@@ -347,6 +389,60 @@ const createStyles = (palette: Palette) =>
       color: palette.primary,
       fontWeight: '600',
       textAlign: 'center',
+    },
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.35)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: spacing(3),
+    },
+    modalContainer: {
+      width: '100%',
+      borderRadius: radius.lg,
+      backgroundColor: palette.canvas,
+      padding: spacing(3),
+    },
+    modalTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: palette.textPrimary,
+      marginBottom: spacing(2),
+      textAlign: 'center',
+    },
+    modalPicker: {
+      alignSelf: 'stretch',
+    },
+    modalActions: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginTop: spacing(3),
+      gap: spacing(2),
+    },
+    modalButtonSecondary: {
+      flex: 1,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: palette.border,
+      paddingVertical: spacing(1.25),
+      alignItems: 'center',
+    },
+    modalButtonSecondaryText: {
+      color: palette.textSecondary,
+      fontSize: 15,
+      fontWeight: '600',
+    },
+    modalButtonPrimary: {
+      flex: 1,
+      borderRadius: radius.sm,
+      backgroundColor: palette.primary,
+      paddingVertical: spacing(1.25),
+      alignItems: 'center',
+    },
+    modalButtonPrimaryText: {
+      color: '#ffffff',
+      fontSize: 15,
+      fontWeight: '700',
     },
     summaryCard: {
       backgroundColor: palette.surface,
