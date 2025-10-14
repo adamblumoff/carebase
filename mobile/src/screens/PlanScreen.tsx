@@ -9,8 +9,9 @@ import {
   Text,
   StyleSheet,
   RefreshControl,
-  TouchableOpacity,
   ActivityIndicator,
+  Pressable,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -53,8 +54,43 @@ export default function PlanScreen({ navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const latestVersionRef = useRef<number>(0);
-  const planDataRef = useRef<PlanData | null>(null);
-  const cacheLoadedRef = useRef(false);
+const planDataRef = useRef<PlanData | null>(null);
+const cacheLoadedRef = useRef(false);
+
+const AnimatedStatusBadge: React.FC<{ status: string }> = ({ status }) => {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    let loop: Animated.CompositeAnimation | null = null;
+    if (status === 'overdue') {
+      loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(scale, { toValue: 1.05, duration: 400, useNativeDriver: true }),
+          Animated.timing(scale, { toValue: 1, duration: 400, useNativeDriver: true }),
+        ])
+      );
+      loop.start();
+    } else {
+      scale.setValue(1);
+    }
+    return () => {
+      loop?.stop();
+    };
+  }, [scale, status]);
+
+  const style = [
+    styles.statusBadge,
+    status === 'paid' && styles.statusBadgeSuccess,
+    status === 'overdue' && styles.statusBadgeOverdue,
+    status === 'pending' && styles.statusBadgeWarning,
+  ];
+
+  return (
+    <Animated.View style={[style, status === 'overdue' && { transform: [{ scale }] }]}>
+      <Text style={styles.statusBadgeText}>{status}</Text>
+    </Animated.View>
+  );
+};
 
   useEffect(() => {
     planDataRef.current = planData;
@@ -63,8 +99,8 @@ export default function PlanScreen({ navigation }: Props) {
   const sleep = useCallback((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)), []);
 
   const fetchPlan = useCallback(
-    async (options: { silent?: boolean; manual?: boolean } = {}) => {
-      const { silent = false, manual = false } = options;
+    async (options: { silent?: boolean; manual?: boolean; source?: 'realtime' | 'poll' } = {}) => {
+      const { silent = false, manual = false, source } = options;
       if (!silent) {
         setLoading(true);
       }
@@ -82,6 +118,8 @@ export default function PlanScreen({ navigation }: Props) {
             setError(null);
             if (manual) {
               toast.showToast('Plan updated');
+            } else if (source === 'realtime') {
+              toast.showToast('Plan refreshed');
             }
             success = true;
             break;
@@ -142,7 +180,7 @@ export default function PlanScreen({ navigation }: Props) {
 
   useEffect(() => {
     const unsubscribe = addPlanChangeListener(() => {
-      fetchPlan({ silent: true });
+      fetchPlan({ silent: true, source: 'realtime' });
     });
     ensureRealtimeConnected().catch((error) => {
       console.warn('Realtime connection failed', error);
@@ -165,7 +203,7 @@ export default function PlanScreen({ navigation }: Props) {
           const response = await apiClient.get(API_ENDPOINTS.getPlanVersion);
           const nextVersion = typeof response.data.planVersion === 'number' ? response.data.planVersion : 0;
           if (nextVersion > latestVersionRef.current) {
-            await fetchPlan({ silent: true });
+            await fetchPlan({ silent: true, source: 'poll' });
           }
         } catch (pollError) {
           console.warn('Plan version poll failed', pollError);
@@ -238,33 +276,48 @@ const formatTime = (dateString: string) => {
         }
       >
         <View style={styles.header}>
-          <View style={styles.headerTextBlock}>
-            <Text style={styles.headerTitle}>This week</Text>
-            <Text style={styles.headerSubtitle}>
-              {planData?.dateRange
-                ? `${formatDate(planData.dateRange.start)} – ${formatDate(planData.dateRange.end)}`
-                : 'Connect your inbox to build a plan.'}
-            </Text>
-            <Text style={styles.headerMeta}>
-              {appointmentCount} appointments • {billsDue} bills due
-            </Text>
-            {auth.user?.email ? (
-              <Text style={styles.headerUser}>Signed in as {auth.user.email}</Text>
-            ) : null}
+          <View style={styles.heroCard}>
+            <View style={styles.heroRow}>
+              <Text style={styles.heroIcon}>📅</Text>
+              <View style={styles.heroTextBlock}>
+                <Text style={styles.headerTitle}>This week</Text>
+                <Text style={styles.headerSubtitle}>
+                  {planData?.dateRange
+                    ? `${formatDate(planData.dateRange.start)} – ${formatDate(planData.dateRange.end)}`
+                    : 'Connect your inbox to build a plan.'}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.heroMetaRow}>
+              <Text style={styles.headerMeta}>
+                {appointmentCount} appointments • {billsDue} bills due
+              </Text>
+              {auth.user?.email ? (
+                <Text style={styles.headerUser}>Signed in as {auth.user.email}</Text>
+              ) : null}
+            </View>
           </View>
           <View style={styles.headerButtons}>
-            <TouchableOpacity
-              style={styles.outlineButton}
+            <Pressable
+              style={({ pressed }) => [
+                styles.actionPill,
+                styles.actionPrimary,
+                pressed && styles.actionPillPressed,
+              ]}
               onPress={() => navigation.navigate('Camera')}
             >
-              <Text style={styles.outlineButtonText}>Scan bill</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.outlineButton}
+              <Text style={styles.actionPrimaryText}>📷 Scan bill</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [
+                styles.actionPill,
+                styles.actionSecondary,
+                pressed && styles.actionPillPressed,
+              ]}
               onPress={() => navigation.navigate('Settings')}
             >
-              <Text style={styles.outlineButtonText}>Settings</Text>
-            </TouchableOpacity>
+              <Text style={styles.actionSecondaryText}>⚙️ Settings</Text>
+            </Pressable>
           </View>
         </View>
 
@@ -276,7 +329,10 @@ const formatTime = (dateString: string) => {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Upcoming visits</Text>
+            <View style={styles.sectionTitleRow}>
+              <Text style={styles.sectionIcon}>🗓️</Text>
+              <Text style={styles.sectionTitle}>Upcoming visits</Text>
+            </View>
             {appointmentCount > 0 && <Text style={styles.sectionCount}>{appointmentCount}</Text>}
           </View>
           {appointmentCount === 0 ? (
@@ -288,27 +344,37 @@ const formatTime = (dateString: string) => {
             </View>
           ) : (
             planData?.appointments.map((appt) => (
-              <TouchableOpacity
+              <Pressable
                 key={appt.id}
-                style={styles.itemCard}
+                style={({ pressed }) => [
+                  styles.itemCard,
+                  styles.appointmentCard,
+                  pressed && styles.itemCardPressed,
+                ]}
                 onPress={() => navigation.navigate('AppointmentDetail', { appointment: appt })}
               >
-                <Text style={styles.itemTitle}>{appt.summary}</Text>
-                <Text style={styles.itemMeta}>
-                  {formatDate(appt.startLocal)} at {formatTime(appt.startLocal)}
-                </Text>
-                {appt.location ? <Text style={styles.itemSub}>{appt.location}</Text> : null}
-                {appt.prepNote ? (
-                  <Text style={styles.itemNote}>{appt.prepNote}</Text>
-                ) : null}
-              </TouchableOpacity>
+                <View style={[styles.cardAccent, styles.appointmentAccent]} />
+                <View style={styles.cardBody}>
+                  <Text style={styles.itemTitle}>{appt.summary}</Text>
+                  <Text style={styles.itemMeta}>
+                    {formatDate(appt.startLocal)} at {formatTime(appt.startLocal)}
+                  </Text>
+                  {appt.location ? <Text style={styles.itemSub}>{appt.location}</Text> : null}
+                  {appt.prepNote ? (
+                    <Text style={styles.itemNote}>{appt.prepNote}</Text>
+                  ) : null}
+                </View>
+              </Pressable>
             ))
           )}
         </View>
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Bills to handle</Text>
+            <View style={styles.sectionTitleRow}>
+              <Text style={styles.sectionIcon}>💳</Text>
+              <Text style={styles.sectionTitle}>Bills to handle</Text>
+            </View>
             {planData && planData.bills.length > 0 && (
               <Text style={styles.sectionCount}>{planData.bills.length}</Text>
             )}
@@ -321,33 +387,28 @@ const formatTime = (dateString: string) => {
               </Text>
             </View>
           ) : (
-            planData?.bills.map((bill) => {
-              const isPaid = bill.status === 'paid';
-              const isOverdue = bill.status === 'overdue';
-              return (
-                <TouchableOpacity
-                  key={bill.id}
-                  style={styles.itemCard}
-                  onPress={() => navigation.navigate('BillDetail', { bill })}
-                >
+            planData?.bills.map((bill) => (
+              <Pressable
+                key={bill.id}
+                style={({ pressed }) => [
+                  styles.itemCard,
+                  styles.billCard,
+                  pressed && styles.itemCardPressed,
+                ]}
+                onPress={() => navigation.navigate('BillDetail', { bill })}
+              >
+                <View style={[styles.cardAccent, styles.billAccent]} />
+                <View style={styles.cardBody}>
                   <Text style={styles.itemTitle}>
                     {bill.amount ? formatCurrency(bill.amount) : 'Amount unknown'}
                   </Text>
                   <Text style={styles.itemMeta}>
                     {bill.dueDate ? `Due ${formatDate(bill.dueDate)}` : 'No due date'}
                   </Text>
-                  <Text
-                    style={[
-                      styles.statusPill,
-                      isPaid && styles.statusPillSuccess,
-                      isOverdue && styles.statusPillOverdue,
-                    ]}
-                  >
-                    {bill.status}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })
+                  <AnimatedStatusBadge status={bill.status} />
+                </View>
+              </Pressable>
+            ))
           )}
         </View>
       </ScrollView>
@@ -384,9 +445,32 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
       alignItems: 'flex-start',
       gap: spacing(2),
     },
-    headerTextBlock: {
+    heroCard: {
       flex: 1,
-      paddingRight: spacing(2),
+      backgroundColor: palette.primarySoft,
+      borderRadius: radius.md,
+      padding: spacing(2),
+      borderWidth: 1,
+      borderColor: palette.primary,
+    },
+    heroRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing(1.5),
+    },
+    heroIcon: {
+      fontSize: 22,
+      lineHeight: 24,
+    },
+    heroTextBlock: {
+      flex: 1,
+    },
+    heroMetaRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: spacing(1.5),
+      gap: spacing(1),
     },
     headerTitle: {
       fontSize: 24,
@@ -413,17 +497,33 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
       gap: spacing(1),
       alignSelf: 'flex-start',
     },
-    outlineButton: {
-      borderRadius: radius.sm,
-      borderWidth: 1,
-      borderColor: palette.primary,
+    actionPill: {
+      borderRadius: radius.lg,
       paddingVertical: spacing(1),
       paddingHorizontal: spacing(2),
+      minWidth: 110,
+      alignItems: 'center',
     },
-    outlineButtonText: {
+    actionPrimary: {
+      backgroundColor: palette.primary,
+    },
+    actionPrimaryText: {
+      color: '#fff',
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    actionSecondary: {
+      borderWidth: 1,
+      borderColor: palette.primary,
+      backgroundColor: 'transparent',
+    },
+    actionSecondaryText: {
       color: palette.primary,
       fontSize: 14,
       fontWeight: '600',
+    },
+    actionPillPressed: {
+      transform: [{ scale: 0.98 }],
     },
     errorBanner: {
       marginTop: spacing(2),
@@ -447,6 +547,14 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
       justifyContent: 'space-between',
       marginBottom: spacing(1.5),
     },
+    sectionTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing(1),
+    },
+    sectionIcon: {
+      fontSize: 16,
+    },
     sectionTitle: {
       fontSize: 18,
       fontWeight: '600',
@@ -456,13 +564,54 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
       fontSize: 13,
       color: palette.textMuted,
     },
+    sectionDivider: {
+      height: 1,
+      backgroundColor: palette.primary,
+      opacity: 0.1,
+      marginHorizontal: spacing(3),
+      marginTop: spacing(3),
+    },
     itemCard: {
       backgroundColor: palette.surface,
       borderRadius: radius.md,
+      overflow: 'hidden',
+      marginBottom: spacing(1.5),
+      flexDirection: 'row',
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    appointmentCard: {
+      shadowColor: '#000',
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 3,
+      marginBottom: spacing(1.5),
+    },
+    billCard: {
+      shadowColor: '#000',
+      shadowOpacity: 0.12,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 5 },
+      elevation: 4,
+      marginBottom: spacing(1.5),
+    },
+    itemCardPressed: {
+      transform: [{ scale: 0.98 }],
+    },
+    cardAccent: {
+      width: 6,
+    },
+    appointmentAccent: {
+      backgroundColor: palette.accent,
+    },
+    billAccent: {
+      backgroundColor: palette.primary,
+    },
+    cardBody: {
+      flex: 1,
       paddingHorizontal: spacing(2),
       paddingVertical: spacing(2),
-      marginBottom: spacing(1.5),
-      ...shadow.card,
     },
     itemTitle: {
       fontSize: 15,
@@ -502,24 +651,27 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
       textAlign: 'center',
       lineHeight: 20,
     },
-    statusPill: {
+    statusBadge: {
       marginTop: spacing(1),
       alignSelf: 'flex-start',
       paddingHorizontal: spacing(1.5),
       paddingVertical: spacing(0.5),
       borderRadius: radius.xs,
+      backgroundColor: '#fdecc8',
+    },
+    statusBadgeText: {
       fontSize: 12,
       fontWeight: '600',
-      color: palette.warning,
-      backgroundColor: '#fdecc8',
       textTransform: 'uppercase',
+      color: palette.warning,
     },
-    statusPillSuccess: {
-      color: palette.success,
+    statusBadgeSuccess: {
       backgroundColor: palette.primarySoft,
     },
-    statusPillOverdue: {
-      color: '#ffffff',
+    statusBadgeOverdue: {
       backgroundColor: palette.danger,
+    },
+    statusBadgeWarning: {
+      backgroundColor: '#fdecc8',
     },
   });
