@@ -13,20 +13,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 import passportConfig from './auth/passport.js';
-import authRoutes from './routes/auth.js';
-import webhookRoutes from './routes/webhook.js';
-import planRoutes from './routes/plan.js';
-import calendarRoutes from './routes/calendar.js';
-import uploadRoutes from './routes/upload.js';
-import settingsRoutes from './routes/settings.js';
-import reviewRoutes from './routes/review.js';
-
-// Mobile API routes
-import apiAuthRoutes from './routes/api/auth.js';
-import apiPlanRoutes from './routes/api/plan.js';
-import apiAppointmentsRoutes from './routes/api/appointments.js';
-import apiBillsRoutes from './routes/api/bills.js';
-import apiUploadRoutes from './routes/api/upload.js';
+import { registerRoutes } from './routes/registry.js';
 
 import { scheduleFridayDigest } from './jobs/digest.js';
 import { attachBearerUser } from './middleware/attachBearerUser.js';
@@ -79,21 +66,7 @@ app.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'ok' });
 });
 
-// Web routes
-app.use('/auth', authRoutes);
-app.use('/webhook', webhookRoutes);
-app.use('/plan', planRoutes);
-app.use('/calendar', calendarRoutes);
-app.use('/upload', uploadRoutes);
-app.use('/settings', settingsRoutes);
-app.use('/review', reviewRoutes);
-
-// Mobile API routes
-app.use('/api/auth', apiAuthRoutes);
-app.use('/api/plan', apiPlanRoutes);
-app.use('/api/appointments', apiAppointmentsRoutes);
-app.use('/api/bills', apiBillsRoutes);
-app.use('/api/upload', apiUploadRoutes);
+registerRoutes(app);
 
 // Schedule jobs
 scheduleFridayDigest();

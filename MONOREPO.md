@@ -9,13 +9,14 @@ carebase/
 ├── backend/              # Node.js + Express backend
 │   ├── src/
 │   │   ├── auth/        # Passport.js authentication
+│   │   ├── controllers/ # Express handlers referenced by routes
 │   │   ├── db/          # PostgreSQL client & queries
 │   │   ├── jobs/        # Cron jobs (Friday digest)
 │   │   ├── middleware/  # Express middleware
-│   │   ├── routes/      # API routes
+│   │   ├── routes/      # Route registration + Express routers
 │   │   ├── services/    # Parser, email, storage, OCR
 │   │   ├── views/       # EJS templates (legacy web views)
-│   │   └── server.js    # Express app entry point
+│   │   └── server.ts    # Express app entry point
 │   ├── scripts/         # Database migrations & test data
 │   └── package.json     # Backend dependencies
 ├── mobile/              # React Native + Expo mobile app
@@ -73,6 +74,7 @@ The backend currently runs as a web app with EJS views. Features:
 - **File Upload**: Multer for photo uploads with OCR
 
 ### Routes
+- Route registration table: see `backend/src/routes/registry.ts` for every mounted router and API endpoint summary.
 - `/` - Landing page
 - `/auth/google` - OAuth login
 - `/plan` - Weekly plan (7-day view)
