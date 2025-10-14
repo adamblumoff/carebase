@@ -2,7 +2,7 @@
  * Appointment Detail Screen
  * Update appointment details, including date and time
  */
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -67,13 +67,36 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const returnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const initialDuration =
     parseServerDate(appointment.endLocal).getTime() -
     parseServerDate(appointment.startLocal).getTime();
   const durationMs = initialDuration > 0 ? initialDuration : 60 * 60 * 1000;
 
+  useEffect(() => {
+    return () => {
+      if (returnTimerRef.current) {
+        clearTimeout(returnTimerRef.current);
+      }
+    };
+  }, []);
+
+  const scheduleReturnToPlan = (message: string) => {
+    setSuccessMessage(message);
+    if (returnTimerRef.current) {
+      clearTimeout(returnTimerRef.current);
+    }
+    returnTimerRef.current = setTimeout(() => {
+      navigation.goBack();
+    }, 1000);
+  };
+
   const handleSave = async () => {
+    if (successMessage) {
+      return;
+    }
     const end = new Date(pendingStart.getTime() + durationMs);
 
     setSaving(true);
@@ -95,10 +118,10 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
       setPendingLocation(updated.location || '');
       setPendingNote(updated.prepNote || '');
       emitPlanChanged();
-      Alert.alert('Saved', 'Appointment updated successfully');
       setShowDatePicker(false);
       setShowTimePicker(false);
       setEditing(false);
+      scheduleReturnToPlan('Appointment updated. Returning to plan...');
     } catch (error) {
       Alert.alert('Error', 'Failed to update appointment');
       console.error('Update appointment error:', error);
@@ -108,6 +131,9 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
   };
 
   const handleDelete = () => {
+    if (successMessage) {
+      return;
+    }
     Alert.alert(
       'Delete Appointment',
       'Are you sure you want to delete this appointment?',
@@ -120,7 +146,7 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
             try {
               await apiClient.delete(API_ENDPOINTS.deleteAppointment(appointment.id));
               emitPlanChanged();
-              navigation.goBack();
+              scheduleReturnToPlan('Appointment deleted. Returning to plan...');
             } catch (error) {
               Alert.alert('Error', 'Failed to delete appointment');
             }
@@ -148,6 +174,11 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
       containerStyle={styles.safe}
       contentContainerStyle={styles.content}
     >
+        {successMessage ? (
+          <View style={styles.successBanner}>
+            <Text style={styles.successText}>{successMessage}</Text>
+          </View>
+        ) : null}
         <View style={[styles.summaryCard, shadow.card]}>
           <View style={styles.summaryAccent} />
           <View style={styles.summaryBody}>
@@ -303,6 +334,18 @@ const createStyles = (palette: Palette) =>
     content: {
       padding: spacing(3),
       paddingBottom: spacing(10),
+    },
+    successBanner: {
+      backgroundColor: palette.primarySoft,
+      borderRadius: radius.sm,
+      paddingVertical: spacing(1),
+      paddingHorizontal: spacing(2),
+      marginBottom: spacing(2),
+    },
+    successText: {
+      color: palette.primary,
+      fontWeight: '600',
+      textAlign: 'center',
     },
     summaryCard: {
       backgroundColor: palette.surface,

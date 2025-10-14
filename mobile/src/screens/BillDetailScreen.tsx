@@ -2,7 +2,7 @@
  * Bill Detail Screen
  * Redesigned bill overview with actionable controls
  */
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -26,8 +26,28 @@ export default function BillDetailScreen({ route, navigation }: Props) {
   const { bill } = route.params;
   const [currentBill, setCurrentBill] = useState(bill);
   const [updating, setUpdating] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const returnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { palette, shadow } = useTheme();
   const styles = useMemo(() => createStyles(palette), [palette]);
+
+  useEffect(() => {
+    return () => {
+      if (returnTimerRef.current) {
+        clearTimeout(returnTimerRef.current);
+      }
+    };
+  }, []);
+
+  const scheduleReturnToPlan = (message: string) => {
+    setSuccessMessage(message);
+    if (returnTimerRef.current) {
+      clearTimeout(returnTimerRef.current);
+    }
+    returnTimerRef.current = setTimeout(() => {
+      navigation.goBack();
+    }, 1000);
+  };
 
   const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return 'Not available';
@@ -49,12 +69,15 @@ export default function BillDetailScreen({ route, navigation }: Props) {
   };
 
   const handleMarkPaid = async () => {
+    if (successMessage) {
+      return;
+    }
     setUpdating(true);
     try {
       const response = await apiClient.post(API_ENDPOINTS.markBillPaid(currentBill.id));
       setCurrentBill(response.data);
       emitPlanChanged();
-      Alert.alert('Done', 'Bill marked as paid');
+      scheduleReturnToPlan('Bill marked as paid. Returning to plan...');
     } catch (error) {
       Alert.alert('Error', 'Failed to mark bill as paid');
       console.error('Mark bill paid error:', error);
@@ -64,6 +87,9 @@ export default function BillDetailScreen({ route, navigation }: Props) {
   };
 
   const handleDelete = () => {
+    if (successMessage) {
+      return;
+    }
     Alert.alert('Delete Bill', 'Are you sure you want to delete this bill?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -73,7 +99,7 @@ export default function BillDetailScreen({ route, navigation }: Props) {
           try {
             await apiClient.delete(API_ENDPOINTS.deleteBill(currentBill.id));
             emitPlanChanged();
-            navigation.goBack();
+            scheduleReturnToPlan('Bill deleted. Returning to plan...');
           } catch (error) {
             Alert.alert('Error', 'Failed to delete bill');
           }
@@ -102,6 +128,11 @@ export default function BillDetailScreen({ route, navigation }: Props) {
         contentContainerStyle={styles.content}
         bounces={false}
       >
+        {successMessage ? (
+          <View style={styles.successBanner}>
+            <Text style={styles.successText}>{successMessage}</Text>
+          </View>
+        ) : null}
         <View style={[styles.summaryCard, shadow.card]}>
           <View
             style={[
@@ -186,6 +217,18 @@ const createStyles = (palette: Palette) =>
     content: {
       padding: spacing(3),
       paddingBottom: spacing(6),
+    },
+    successBanner: {
+      backgroundColor: palette.primarySoft,
+      borderRadius: radius.sm,
+      paddingVertical: spacing(1),
+      paddingHorizontal: spacing(2),
+      marginBottom: spacing(2),
+    },
+    successText: {
+      color: palette.primary,
+      fontWeight: '600',
+      textAlign: 'center',
     },
     summaryCard: {
       backgroundColor: palette.surface,
