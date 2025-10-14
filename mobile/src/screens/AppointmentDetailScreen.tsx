@@ -13,6 +13,7 @@ import {
   Alert,
   Platform,
   TextInput,
+  KeyboardAvoidingView,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -145,11 +146,17 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        bounces={false}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
       >
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          bounces={false}
+        >
         <View style={[styles.summaryCard, shadow.card]}>
           <View style={styles.summaryAccent} />
           <View style={styles.summaryBody}>
@@ -293,7 +300,8 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
             </TouchableOpacity>
           </View>
         )}
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -303,12 +311,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: palette.surfaceMuted,
   },
+  flex: {
+    flex: 1,
+  },
   container: {
     flex: 1,
   },
   content: {
     padding: spacing(3),
-    paddingBottom: spacing(6),
+    paddingBottom: spacing(10),
   },
   summaryCard: {
     backgroundColor: palette.surface,
