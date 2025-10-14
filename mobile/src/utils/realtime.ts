@@ -1,5 +1,5 @@
 import type { Socket } from 'socket.io-client';
-import { io as createSocket } from 'socket.io-client/dist/socket.io.esm.min.js';
+import { io as createSocket } from 'socket.io-client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config';
 import { emitPlanChanged } from './planEvents';

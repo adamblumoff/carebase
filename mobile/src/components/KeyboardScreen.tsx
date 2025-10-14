@@ -1,6 +1,5 @@
 import React, { PropsWithChildren } from 'react';
 import {
-  SafeAreaView,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -8,6 +7,7 @@ import {
   ViewStyle,
   ScrollViewProps,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface KeyboardScreenProps extends PropsWithChildren {
   containerStyle?: StyleProp<ViewStyle>;
