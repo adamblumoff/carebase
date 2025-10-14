@@ -276,27 +276,6 @@ const formatTime = (dateString: string) => {
         }
       >
         <View style={styles.header}>
-          <View style={styles.heroCard}>
-            <View style={styles.heroRow}>
-              <Text style={styles.heroIcon}>📅</Text>
-              <View style={styles.heroTextBlock}>
-                <Text style={styles.headerTitle}>This week</Text>
-                <Text style={styles.headerSubtitle}>
-                  {planData?.dateRange
-                    ? `${formatDate(planData.dateRange.start)} – ${formatDate(planData.dateRange.end)}`
-                    : 'Connect your inbox to build a plan.'}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.heroMetaRow}>
-              <Text style={styles.headerMeta}>
-                {appointmentCount} appointments • {billsDue} bills due
-              </Text>
-              {auth.user?.email ? (
-                <Text style={styles.headerUser}>Signed in as {auth.user.email}</Text>
-              ) : null}
-            </View>
-          </View>
           <View style={styles.headerButtons}>
             <Pressable
               style={({ pressed }) => [
@@ -318,6 +297,19 @@ const formatTime = (dateString: string) => {
             >
               <Text style={styles.actionSecondaryText}>⚙️ Settings</Text>
             </Pressable>
+          </View>
+          <View style={styles.heroCard}>
+            <View style={styles.heroRow}>
+              <Text style={styles.heroIcon}>📅</Text>
+              <Text style={styles.heroSubtitle}>
+                {planData?.dateRange
+                  ? `${formatDate(planData.dateRange.start)} – ${formatDate(planData.dateRange.end)}`
+                  : 'Connect your inbox to build a plan.'}
+              </Text>
+            </View>
+            <Text style={styles.heroMeta}>
+              {appointmentCount} appointments • {billsDue} bills due
+            </Text>
           </View>
         </View>
 
@@ -439,63 +431,50 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
     },
     header: {
       paddingHorizontal: spacing(3),
-      paddingTop: spacing(3),
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'flex-start',
-      gap: spacing(2),
+      paddingTop: spacing(2.5),
+      gap: spacing(1.5),
+      alignItems: 'stretch',
     },
     heroCard: {
-      flex: 1,
+      alignSelf: 'center',
       backgroundColor: palette.primarySoft,
       borderRadius: radius.md,
-      padding: spacing(2),
+      paddingVertical: spacing(1.5),
+      paddingHorizontal: spacing(1.75),
       borderWidth: 1,
       borderColor: palette.primary,
+      alignItems: 'center',
+      width: '100%',
+      maxWidth: 320,
     },
     heroRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: spacing(1.5),
-    },
-    heroIcon: {
-      fontSize: 22,
-      lineHeight: 24,
-    },
-    heroTextBlock: {
-      flex: 1,
-    },
-    heroMetaRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginTop: spacing(1.5),
+      justifyContent: 'center',
       gap: spacing(1),
     },
-    headerTitle: {
-      fontSize: 24,
+    heroIcon: {
+      fontSize: 18,
+    },
+    heroSubtitle: {
+      fontSize: 16,
       fontWeight: '600',
       color: palette.textPrimary,
+      textAlign: 'center',
     },
-    headerSubtitle: {
-      fontSize: 14,
-      color: palette.textSecondary,
-      marginTop: spacing(0.5),
-    },
-    headerMeta: {
+    heroMeta: {
+      marginTop: spacing(0.75),
       fontSize: 13,
       color: palette.textMuted,
-      marginTop: spacing(0.5),
-    },
-    headerUser: {
-      fontSize: 12,
-      color: palette.textMuted,
-      marginTop: spacing(0.5),
+      textAlign: 'center',
     },
     headerButtons: {
       flexDirection: 'row',
-      gap: spacing(1),
-      alignSelf: 'flex-start',
+      gap: spacing(0.75),
+      alignSelf: 'center',
+      justifyContent: 'center',
+      width: '100%',
+      maxWidth: 320,
     },
     actionPill: {
       borderRadius: radius.lg,
