@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import type { Appointment, Bill } from '@carebase/shared';
 import apiClient from '../api/client';
@@ -22,6 +23,8 @@ import { API_ENDPOINTS } from '../config';
 import { useTheme, spacing, radius, type Palette, type Shadow } from '../theme';
 import { addPlanChangeListener } from '../utils/planEvents';
 import { ensureRealtimeConnected, isRealtimeConnected } from '../utils/realtime';
+import { useAuth } from '../auth/AuthContext';
+import { useToast } from '../ui/ToastProvider';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Plan'>;
 
@@ -36,40 +39,105 @@ interface PlanData {
   planUpdatedAt?: string | null;
 }
 
+const MAX_FETCH_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 600;
+const PLAN_CACHE_KEY = 'plan_cache_v1';
+
 export default function PlanScreen({ navigation }: Props) {
   const { palette, shadow } = useTheme();
   const styles = useMemo(() => createStyles(palette, shadow), [palette, shadow]);
+  const auth = useAuth();
+  const toast = useToast();
   const [planData, setPlanData] = useState<PlanData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const latestVersionRef = useRef<number>(0);
-
-  const fetchPlan = useCallback(async (options: { silent?: boolean } = {}) => {
-    const { silent = false } = options;
-    if (!silent) {
-      setLoading(true);
-    }
-    try {
-      const response = await apiClient.get(API_ENDPOINTS.getPlan);
-      setPlanData(response.data);
-      if (typeof response.data.planVersion === 'number') {
-        latestVersionRef.current = response.data.planVersion;
-      }
-      setError(null);
-    } catch (err) {
-      setError('We couldn’t refresh your plan. Pull to try again.');
-      console.error('Failed to fetch plan:', err);
-    } finally {
-      if (!silent) {
-        setLoading(false);
-      }
-      setRefreshing(false);
-    }
-  }, []);
+  const planDataRef = useRef<PlanData | null>(null);
+  const cacheLoadedRef = useRef(false);
 
   useEffect(() => {
-    fetchPlan();
+    planDataRef.current = planData;
+  }, [planData]);
+
+  const sleep = useCallback((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)), []);
+
+  const fetchPlan = useCallback(
+    async (options: { silent?: boolean; manual?: boolean } = {}) => {
+      const { silent = false, manual = false } = options;
+      if (!silent) {
+        setLoading(true);
+      }
+
+      let success = false;
+
+      try {
+        for (let attempt = 1; attempt <= MAX_FETCH_ATTEMPTS; attempt += 1) {
+          try {
+            const response = await apiClient.get(API_ENDPOINTS.getPlan);
+            const data: PlanData = response.data;
+            setPlanData(data);
+            latestVersionRef.current = typeof data.planVersion === 'number' ? data.planVersion : 0;
+            await AsyncStorage.setItem(PLAN_CACHE_KEY, JSON.stringify(data));
+            setError(null);
+            if (manual) {
+              toast.showToast('Plan updated');
+            }
+            success = true;
+            break;
+          } catch (err) {
+            console.error(`Failed to fetch plan (attempt ${attempt})`, err);
+            if (attempt < MAX_FETCH_ATTEMPTS) {
+              await sleep(RETRY_DELAY_MS * attempt);
+            }
+          }
+        }
+
+        if (!success) {
+          setError('We couldn’t refresh your plan. Pull to try again.');
+          if (planDataRef.current) {
+            toast.showToast('Unable to refresh plan. Showing saved data');
+          } else {
+            toast.showToast('Unable to refresh plan');
+          }
+        }
+      } finally {
+        if (!silent) {
+          setLoading(false);
+        }
+        setRefreshing(false);
+      }
+    },
+    [sleep, toast]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadCacheAndFetch = async () => {
+      try {
+        const cached = await AsyncStorage.getItem(PLAN_CACHE_KEY);
+        if (cached && !cancelled) {
+          const parsed: PlanData = JSON.parse(cached);
+          cacheLoadedRef.current = true;
+          setPlanData(parsed);
+          latestVersionRef.current = typeof parsed.planVersion === 'number' ? parsed.planVersion : 0;
+          setLoading(false);
+        }
+      } catch (err) {
+        console.warn('Failed to load cached plan', err);
+      }
+
+      if (!cancelled) {
+        fetchPlan({ silent: cacheLoadedRef.current });
+      }
+    };
+
+    loadCacheAndFetch();
+
+    return () => {
+      cancelled = true;
+    };
   }, [fetchPlan]);
 
   useEffect(() => {
@@ -121,7 +189,7 @@ export default function PlanScreen({ navigation }: Props) {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchPlan({ silent: true });
+    fetchPlan({ silent: true, manual: true });
   }, [fetchPlan]);
 
 const parseServerDate = (value: string) => new Date(value);
@@ -180,6 +248,9 @@ const formatTime = (dateString: string) => {
             <Text style={styles.headerMeta}>
               {appointmentCount} appointments • {billsDue} bills due
             </Text>
+            {auth.user?.email ? (
+              <Text style={styles.headerUser}>Signed in as {auth.user.email}</Text>
+            ) : null}
           </View>
           <View style={styles.headerButtons}>
             <TouchableOpacity
@@ -325,6 +396,11 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
     },
     headerMeta: {
       fontSize: 13,
+      color: palette.textMuted,
+      marginTop: spacing(0.5),
+    },
+    headerUser: {
+      fontSize: 12,
       color: palette.textMuted,
       marginTop: spacing(0.5),
     },

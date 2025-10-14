@@ -28,6 +28,9 @@ export default function SettingsScreen({ navigation }: Props) {
   const toast = useToast();
   const [loggingOut, setLoggingOut] = useState(false);
 
+  const email = auth.user?.email;
+  const forwardingAddress = auth.user?.forwardingAddress ?? 'Add your forwarding address';
+
   const handleLogout = () => {
     if (loggingOut) return;
     Alert.alert('Log out', 'Are you sure you want to sign out of Carebase?', [
@@ -62,16 +65,20 @@ export default function SettingsScreen({ navigation }: Props) {
         <View style={styles.headerCard}>
           <Text style={styles.headerEyebrow}>Account</Text>
           <Text style={styles.headerTitle}>Carebase Companion</Text>
-          <Text style={styles.headerSubtitle}>
-            Manage how we gather care info and keep your plan in sync.
-          </Text>
+          {email ? (
+            <Text style={styles.headerSubtitle}>{email}</Text>
+          ) : (
+            <Text style={styles.headerSubtitle}>
+              Manage how we gather care info and keep your plan in sync.
+            </Text>
+          )}
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Inbox routing</Text>
           <View style={styles.card}>
             <Text style={styles.cardLabel}>Forwarding address</Text>
-            <Text style={styles.cardValue}>user-123-abc@inbound.carebase.app</Text>
+            <Text style={styles.cardValue}>{forwardingAddress}</Text>
             <Text style={styles.cardHint}>
               Forward healthcare emails here so Carebase can build your weekly checklist.
             </Text>

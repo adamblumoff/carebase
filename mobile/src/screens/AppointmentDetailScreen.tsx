@@ -10,10 +10,7 @@ import {
   TouchableOpacity,
   Alert,
   TextInput,
-  Platform,
-  Modal,
 } from 'react-native';
-import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import apiClient from '../api/client';
@@ -21,6 +18,7 @@ import { API_ENDPOINTS } from '../config';
 import { useTheme, spacing, radius, type Palette } from '../theme';
 import { emitPlanChanged } from '../utils/planEvents';
 import { KeyboardScreen } from '../components/KeyboardScreen';
+import DateTimePickerModal from '../components/DateTimePickerModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AppointmentDetail'>;
 
@@ -66,9 +64,8 @@ export default function AppointmentDetailScreen({ route, navigation }: Props) {
 const [pendingLocation, setPendingLocation] = useState(appointment.location || '');
 const [pendingNote, setPendingNote] = useState(appointment.prepNote || '');
 const [editing, setEditing] = useState(false);
-const [isPickerVisible, setPickerVisible] = useState(false);
-const [activePickerMode, setActivePickerMode] = useState<'date' | 'time'>('date');
-const [pickerTempValue, setPickerTempValue] = useState<Date | null>(null);
+  const [isPickerVisible, setPickerVisible] = useState(false);
+  const [activePickerMode, setActivePickerMode] = useState<'date' | 'time'>('date');
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const returnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -107,35 +104,12 @@ const updateDatePart = (source: Date, mode: 'date' | 'time', nextValue: Date) =>
 };
 
 const openPicker = (mode: 'date' | 'time') => {
-  if (Platform.OS === 'android') {
-    DateTimePickerAndroid.open({
-      value: pendingStart,
-      mode,
-      is24Hour: false,
-      onChange: (event, selectedDate) => {
-        if (event.type === 'set' && selectedDate) {
-          setPendingStart(updateDatePart(pendingStart, mode, selectedDate));
-        }
-      },
-    });
-    return;
-  }
-
   setActivePickerMode(mode);
-  setPickerTempValue(new Date(pendingStart));
   setPickerVisible(true);
 };
 
 const closePicker = () => {
   setPickerVisible(false);
-  setPickerTempValue(null);
-};
-
-const confirmPicker = () => {
-  if (pickerTempValue) {
-    setPendingStart(updateDatePart(pendingStart, activePickerMode, pickerTempValue));
-  }
-  closePicker();
 };
 
   const handleSave = async () => {
@@ -207,7 +181,6 @@ const confirmPicker = () => {
     setPendingNote(currentAppointment.prepNote || '');
     setEditing(false);
     setPickerVisible(false);
-    setPickerTempValue(null);
   };
 
   const startDisplay = formatDisplayDateTime(startDateTime);
@@ -218,41 +191,15 @@ const confirmPicker = () => {
       containerStyle={styles.safe}
       contentContainerStyle={styles.content}
     >
-        {Platform.OS === 'ios' ? (
-          <Modal
-            transparent
-            animationType="fade"
-            visible={isPickerVisible}
-            onRequestClose={closePicker}
-          >
-            <View style={styles.modalBackdrop}>
-              <View style={[styles.modalContainer, shadow.card]}>
-                <Text style={styles.modalTitle}>
-                  {activePickerMode === 'date' ? 'Select start date' : 'Select start time'}
-                </Text>
-                <DateTimePicker
-                  value={pickerTempValue ?? pendingStart}
-                  mode={activePickerMode}
-                  display="spinner"
-                  onChange={(_, selectedDate) => {
-                    if (selectedDate) {
-                      setPickerTempValue(selectedDate);
-                    }
-                  }}
-                  style={styles.modalPicker}
-                />
-                <View style={styles.modalActions}>
-                  <TouchableOpacity style={styles.modalButtonSecondary} onPress={closePicker}>
-                    <Text style={styles.modalButtonSecondaryText}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.modalButtonPrimary} onPress={confirmPicker}>
-                    <Text style={styles.modalButtonPrimaryText}>Done</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          </Modal>
-        ) : null}
+        <DateTimePickerModal
+          visible={isPickerVisible}
+          mode={activePickerMode}
+          value={pendingStart}
+          onDismiss={closePicker}
+          onConfirm={(selectedDate) => {
+            setPendingStart((prev) => updateDatePart(prev, activePickerMode, selectedDate));
+          }}
+        />
         {successMessage ? (
           <View style={styles.successBanner}>
             <Text style={styles.successText}>{successMessage}</Text>
@@ -389,60 +336,6 @@ const createStyles = (palette: Palette) =>
       color: palette.primary,
       fontWeight: '600',
       textAlign: 'center',
-    },
-    modalBackdrop: {
-      flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.35)',
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: spacing(3),
-    },
-    modalContainer: {
-      width: '100%',
-      borderRadius: radius.lg,
-      backgroundColor: palette.canvas,
-      padding: spacing(3),
-    },
-    modalTitle: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: palette.textPrimary,
-      marginBottom: spacing(2),
-      textAlign: 'center',
-    },
-    modalPicker: {
-      alignSelf: 'stretch',
-    },
-    modalActions: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      marginTop: spacing(3),
-      gap: spacing(2),
-    },
-    modalButtonSecondary: {
-      flex: 1,
-      borderRadius: radius.sm,
-      borderWidth: 1,
-      borderColor: palette.border,
-      paddingVertical: spacing(1.25),
-      alignItems: 'center',
-    },
-    modalButtonSecondaryText: {
-      color: palette.textSecondary,
-      fontSize: 15,
-      fontWeight: '600',
-    },
-    modalButtonPrimary: {
-      flex: 1,
-      borderRadius: radius.sm,
-      backgroundColor: palette.primary,
-      paddingVertical: spacing(1.25),
-      alignItems: 'center',
-    },
-    modalButtonPrimaryText: {
-      color: '#ffffff',
-      fontSize: 15,
-      fontWeight: '700',
     },
     summaryCard: {
       backgroundColor: palette.surface,

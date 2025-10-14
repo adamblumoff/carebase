@@ -92,9 +92,10 @@ This ensures React Native rebuilds styles when the device appearance changes.
 ## 6. Weekly Plan & Realtime Updates
 
 ### Plan Screen (`PlanScreen.tsx`)
-- Fetches the plan on mount with `apiClient.get(API_ENDPOINTS.getPlan)`.
+- Bootstraps from the last cached payload in AsyncStorage (`plan_cache_v1`) so the screen can render instantly offline.
+- Fetches fresh data with up to three retries (exponential backoff) and stores success responses back into the cache.
 - Displays appointments and bills with sections, empty states, and status pills.
-- Pull-to-refresh triggers `fetchPlan({ silent: true })`.
+- Pull-to-refresh triggers a silent retry that surfaces a toast on success/failure.
 - **Realtime Integration**:
   - `ensureRealtimeConnected()` from `utils/realtime` creates a Socket.IO client pointed at `API_BASE_URL`.
   - Server-sent `plan:update` events dispatch `emitPlanChanged()`, which notifies all listeners registered via `addPlanChangeListener`.
@@ -113,7 +114,7 @@ This ensures React Native rebuilds styles when the device appearance changes.
 - Uses `KeyboardScreen` to handle form scrolling with keyboard avoidance.
 - Maintains editable state for summary, location, start time/date via `useState`.
 - `handleSave` patches the API, updates local state with the response, and triggers a plan refresh via `emitPlanChanged()`.
-- Date/time picking uses `@react-native-community/datetimepicker`.
+- Date/time picking runs through the shared `DateTimePickerModal` component (iOS modal + Android native picker).
 - `handleDelete` issues a `DELETE` and navigates back on success.
 
 ### Bill Detail
