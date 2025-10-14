@@ -195,6 +195,22 @@ function billRowToBill(row: BillRow): Bill {
   };
 }
 
+function sanitizePayUrl(url?: string | null): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  try {
+    const cleaned = trimmed.replace(/[),.;]+$/g, '');
+    const parsed = new URL(cleaned);
+    if (parsed.protocol !== 'https:') {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 async function touchPlanForItem(itemId: number): Promise<void> {
   await ensurePlanVersionColumns();
   await db.query(
@@ -432,22 +448,35 @@ export async function deleteAppointment(id: number, userId: number): Promise<voi
 export async function createBill(itemId: number, data: BillCreateRequest): Promise<Bill> {
   const { statementDate, amount, dueDate, payUrl, status } = data;
   const taskKey = generateToken(16);
+  const sanitizedPayUrl = sanitizePayUrl(payUrl);
 
   const result = await db.query(
     `INSERT INTO bills (item_id, statement_date, amount, due_date, pay_url, status, task_key)
      VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-    [itemId, statementDate, amount, dueDate, payUrl, status || 'todo', taskKey]
+    [itemId, statementDate, amount, dueDate, sanitizedPayUrl, status || 'todo', taskKey]
   );
   const bill = billRowToBill(result.rows[0]);
   await touchPlanForItem(bill.itemId);
   return bill;
 }
 
-export async function updateBillStatus(id: number, status: BillStatus): Promise<Bill> {
+export async function updateBillStatus(id: number, userId: number, status: BillStatus): Promise<Bill> {
   const result = await db.query(
-    'UPDATE bills SET status = $1 WHERE id = $2 RETURNING *',
-    [status, id]
+    `UPDATE bills AS b
+     SET status = $1
+     FROM items i
+     JOIN recipients r ON i.recipient_id = r.id
+     WHERE b.id = $2
+       AND b.item_id = i.id
+       AND r.user_id = $3
+     RETURNING b.*`,
+    [status, id, userId]
   );
+
+  if (result.rows.length === 0) {
+    throw new Error('Bill not found');
+  }
+
   const bill = billRowToBill(result.rows[0]);
   await touchPlanForItem(bill.itemId);
   return bill;
@@ -471,6 +500,7 @@ export async function getUpcomingBills(recipientId: number, startDate: Date, end
 
 export async function updateBill(id: number, userId: number, data: BillUpdateRequest): Promise<Bill> {
   const { statementDate, amount, dueDate, payUrl, status } = data;
+  const sanitizedPayUrl = sanitizePayUrl(payUrl);
   const result = await db.query(
     `UPDATE bills AS b
      SET statement_date = $1, amount = $2, due_date = $3, pay_url = $4, status = $5
@@ -480,7 +510,7 @@ export async function updateBill(id: number, userId: number, data: BillUpdateReq
        AND b.item_id = i.id
        AND r.user_id = $7
      RETURNING b.*`,
-    [statementDate, amount, dueDate, payUrl, status, id, userId]
+    [statementDate, amount, dueDate, sanitizedPayUrl, status, id, userId]
   );
   if (result.rows.length === 0) {
     throw new Error('Bill not found');

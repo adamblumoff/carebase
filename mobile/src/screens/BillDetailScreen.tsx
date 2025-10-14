@@ -81,8 +81,12 @@ export default function BillDetailScreen({ route, navigation }: Props) {
   };
 
   const handleOpenPayLink = () => {
-    if (currentBill.payUrl) {
-      Linking.openURL(currentBill.payUrl);
+    if (currentBill.payUrl && currentBill.payUrl.startsWith('https://')) {
+      Linking.openURL(currentBill.payUrl).catch(() => {
+        Alert.alert('Error', 'Unable to open the payment website.');
+      });
+    } else {
+      Alert.alert('Unavailable', 'This bill does not include an online payment link.');
     }
   };
 

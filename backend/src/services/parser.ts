@@ -47,6 +47,84 @@ const BILL_AMOUNT_KEYWORDS = [
 
 const DUE_DATE_KEYWORDS = ['due date', 'date due', 'pay by', 'payment due', 'due on', 'pay on'];
 const STATEMENT_DATE_KEYWORDS = ['statement date', 'billing date', 'service date', 'date of service'];
+const PAY_URL_CONTEXT_KEYWORDS = ['pay', 'payment', 'bill', 'invoice', 'portal'];
+
+function cleanUrlCandidate(candidate: string): string {
+  return candidate.replace(/[),.;]+$/g, '');
+}
+
+function isHttpsUrl(candidate: string): boolean {
+  try {
+    const url = new URL(candidate);
+    return url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function extractPayUrl(text: string): string | undefined {
+  const httpsMatches = Array.from(text.matchAll(/https:\/\/[^\s"'<>]+/gi)).map((match) => {
+    const raw = match[0];
+    const cleaned = cleanUrlCandidate(raw);
+    const index = match.index ?? text.indexOf(raw);
+    return { raw: cleaned, index };
+  });
+
+  const lower = text.toLowerCase();
+
+  const withContext = (matches: Array<{ raw: string; index: number }>) =>
+    matches.find(({ raw, index }) => {
+      const start = Math.max(0, index - 120);
+      const end = Math.min(text.length, index + raw.length + 120);
+      const context = lower.slice(start, end);
+      return PAY_URL_CONTEXT_KEYWORDS.some((keyword) => context.includes(keyword));
+    });
+
+  if (httpsMatches.length > 0) {
+    const prioritizedHttps = withContext(httpsMatches) ?? httpsMatches[0];
+    if (prioritizedHttps && isHttpsUrl(prioritizedHttps.raw)) {
+      return prioritizedHttps.raw;
+    }
+    const fallbackHttps = httpsMatches.find(({ raw }) => isHttpsUrl(raw));
+    if (fallbackHttps) {
+      return fallbackHttps.raw;
+    }
+  }
+
+  const domainMatches = Array.from(
+    text.matchAll(
+      /\b(?:www\.)?[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+(?:\/[^\s"'<>]*)?/gi
+    )
+  )
+    .map((match) => {
+      const raw = cleanUrlCandidate(match[0]);
+      const index = match.index ?? text.indexOf(match[0]);
+      return { raw, index };
+    })
+    .filter(({ raw }) => {
+      if (!raw) return false;
+      if (raw.startsWith('http://') || raw.startsWith('https://')) return false;
+      if (raw.includes('@')) return false;
+      if (!/[a-z]/i.test(raw)) return false;
+      return true;
+    });
+
+  if (domainMatches.length === 0) {
+    return undefined;
+  }
+
+  const prioritizedDomain = withContext(domainMatches);
+  const chosenDomain = prioritizedDomain ?? domainMatches[0];
+  if (!chosenDomain) {
+    return undefined;
+  }
+
+  const normalized = chosenDomain.raw.startsWith('www.')
+    ? `https://${chosenDomain.raw}`
+    : `https://${chosenDomain.raw}`;
+
+  return normalized;
+}
 
 interface AmountCandidate {
   value: number;
@@ -307,9 +385,7 @@ export function extractBill(text: string, subject: string): BillCreateRequest {
     /(?:statement date|service date|billing date)[\s:]{0,10}([\s\S]{0,40})/i
   ], STATEMENT_DATE_KEYWORDS);
 
-  const urlMatch = combined.match(/(?:pay at|payment link|pay online)[\s:]+(\S+)/i) ||
-                   combined.match(/(https?:\/\/[^\s]+(?:pay|bill|invoice)[^\s]*)/i);
-  const payUrl = urlMatch ? urlMatch[1] : undefined;
+  const payUrl = extractPayUrl(combined);
 
   let status: BillStatus = 'todo';
   if (dueDate && isPastDate(dueDate)) {

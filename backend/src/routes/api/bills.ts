@@ -5,7 +5,8 @@ import express, { Request, Response } from 'express';
 import {
   getBillById,
   updateBill,
-  deleteBill
+  deleteBill,
+  updateBillStatus
 } from '../../db/queries.js';
 import type { BillUpdateData, BillStatus, User } from '@carebase/shared';
 
@@ -105,7 +106,7 @@ router.post('/:id/mark-paid', async (req: Request, res: Response) => {
     }
 
     const { id } = req.params;
-    const updated = await updateBill(parseInt(id), user.id, { status: 'paid' });
+    const updated = await updateBillStatus(parseInt(id), user.id, 'paid');
 
     res.json(updated);
   } catch (error) {
