@@ -171,6 +171,7 @@ This ensures React Native rebuilds styles when the device appearance changes.
 - **Testing**: No Jest suite yet. When adding tests use `jest-expo` and mock AsyncStorage + theme context.
 - **Tokens**: Debug stored tokens with `AsyncStorage.getItem('accessToken')` via React Native DevTools or by instrumenting the interceptors.
 - **Caching**: After editing `app.json` or adding native modules ensure you stop Expo and run `npx expo start -c`.
+- **API Docs**: Run `npm run docs:routes --workspace=backend` whenever routes change to refresh `docs/api-routes.md`.
 
 ---
 

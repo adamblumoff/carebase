@@ -301,7 +301,6 @@ const closePicker = () => {
               onPress={() => {
                 setPendingStart(new Date(startDateTime));
                 setPickerVisible(false);
-                setPickerTempValue(null);
                 setEditing(true);
               }}
             >

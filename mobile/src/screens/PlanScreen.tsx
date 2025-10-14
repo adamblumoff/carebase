@@ -238,7 +238,7 @@ const formatTime = (dateString: string) => {
         }
       >
         <View style={styles.header}>
-          <View>
+          <View style={styles.headerTextBlock}>
             <Text style={styles.headerTitle}>This week</Text>
             <Text style={styles.headerSubtitle}>
               {planData?.dateRange
@@ -384,6 +384,10 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
       alignItems: 'flex-start',
       gap: spacing(2),
     },
+    headerTextBlock: {
+      flex: 1,
+      paddingRight: spacing(2),
+    },
     headerTitle: {
       fontSize: 24,
       fontWeight: '600',
@@ -407,6 +411,7 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
     headerButtons: {
       flexDirection: 'row',
       gap: spacing(1),
+      alignSelf: 'flex-start',
     },
     outlineButton: {
       borderRadius: radius.sm,
