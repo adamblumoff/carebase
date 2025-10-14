@@ -78,16 +78,23 @@ const AnimatedStatusBadge: React.FC<{ status: string }> = ({ status }) => {
     };
   }, [scale, status]);
 
-  const style = [
+  const badgeStyle = [
     styles.statusBadge,
     status === 'paid' && styles.statusBadgeSuccess,
     status === 'overdue' && styles.statusBadgeOverdue,
     status === 'pending' && styles.statusBadgeWarning,
   ];
 
+  const textStyle = [
+    styles.statusBadgeText,
+    status === 'paid' && styles.statusBadgeTextSuccess,
+    status === 'overdue' && styles.statusBadgeTextOverdue,
+    status === 'pending' && styles.statusBadgeTextWarning,
+  ];
+
   return (
-    <Animated.View style={[style, status === 'overdue' && { transform: [{ scale }] }]}>
-      <Text style={styles.statusBadgeText}>{status}</Text>
+    <Animated.View style={[badgeStyle, status === 'overdue' && { transform: [{ scale }] }]}>
+      <Text style={textStyle}>{status}</Text>
     </Animated.View>
   );
 };
@@ -636,21 +643,30 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
       paddingHorizontal: spacing(1.5),
       paddingVertical: spacing(0.5),
       borderRadius: radius.xs,
-      backgroundColor: '#fdecc8',
+      backgroundColor: palette.primarySoft,
     },
     statusBadgeText: {
       fontSize: 12,
       fontWeight: '600',
       textTransform: 'uppercase',
-      color: palette.warning,
+      color: palette.primary,
     },
     statusBadgeSuccess: {
       backgroundColor: palette.primarySoft,
     },
+    statusBadgeTextSuccess: {
+      color: palette.success,
+    },
     statusBadgeOverdue: {
       backgroundColor: palette.danger,
     },
+    statusBadgeTextOverdue: {
+      color: '#ffffff',
+    },
     statusBadgeWarning: {
       backgroundColor: '#fdecc8',
+    },
+    statusBadgeTextWarning: {
+      color: palette.warning,
     },
   });
