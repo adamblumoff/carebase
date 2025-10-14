@@ -16,12 +16,14 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { API_BASE_URL } from '../config';
 import { useTheme, spacing, radius, type Palette, type Shadow } from '../theme';
+import { useAuth } from '../auth/AuthContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
 export default function SettingsScreen({ navigation }: Props) {
   const { palette, shadow } = useTheme();
   const styles = useMemo(() => createStyles(palette, shadow), [palette, shadow]);
+  const auth = useAuth();
   const handleLogout = () => {
     Alert.alert('Log out', 'Are you sure you want to sign out of Carebase?', [
       { text: 'Cancel', style: 'cancel' },
@@ -29,7 +31,9 @@ export default function SettingsScreen({ navigation }: Props) {
         text: 'Log out',
         style: 'destructive',
         onPress: () => {
-          navigation.replace('Login');
+          auth.signOut().catch(() => {
+            Alert.alert('Error', 'Failed to sign out. Please try again.');
+          });
         },
       },
     ]);

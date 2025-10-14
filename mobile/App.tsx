@@ -10,6 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from './src/api/client';
 import { API_ENDPOINTS } from './src/config';
 import { View, ActivityIndicator, Text, StyleSheet } from 'react-native';
+import { AuthProvider } from './src/auth/AuthContext';
 
 type AuthState =
   | { status: 'loading' }
@@ -91,10 +92,18 @@ function AppContent() {
   );
 }
 
+function AppBootstrap() {
+  return (
+    <AuthProvider initialStatus="loading">
+      <AppContent />
+    </AuthProvider>
+  );
+}
+
 export default function App() {
   return (
     <ThemeProvider>
-      <AppContent />
+      <AppBootstrap />
     </ThemeProvider>
   );
 }

@@ -19,6 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../api/client';
 import { API_ENDPOINTS, API_BASE_URL } from '../config';
 import { useTheme, spacing, radius, type Palette, type Shadow } from '../theme';
+import { useAuth } from '../auth/AuthContext';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -28,6 +29,7 @@ export default function LoginScreen({ navigation }: Props) {
   const { palette, shadow } = useTheme();
   const styles = useMemo(() => createStyles(palette, shadow), [palette, shadow]);
   const [loading, setLoading] = useState(false);
+  const auth = useAuth();
 
   const authenticate = async () => {
     setLoading(true);
@@ -63,7 +65,7 @@ export default function LoginScreen({ navigation }: Props) {
 
       const sessionCheck = await apiClient.get(API_ENDPOINTS.checkSession);
       if (sessionCheck.data.authenticated) {
-        navigation.replace('Plan');
+        auth.signIn(sessionCheck.data.user);
       } else {
         throw new Error('Session not established');
       }
@@ -78,7 +80,7 @@ export default function LoginScreen({ navigation }: Props) {
 
   const handleContinueWithoutAuth = () => {
     AsyncStorage.removeItem('accessToken').catch(() => {});
-    navigation.replace('Plan');
+    auth.signIn();
   };
 
   return (
