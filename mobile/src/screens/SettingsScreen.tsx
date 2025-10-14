@@ -2,7 +2,7 @@
  * Settings Screen
  * Streamlined account and app preferences UI
  */
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -17,6 +17,7 @@ import type { RootStackParamList } from '../navigation/AppNavigator';
 import { API_BASE_URL } from '../config';
 import { useTheme, spacing, radius, type Palette, type Shadow } from '../theme';
 import { useAuth } from '../auth/AuthContext';
+import { useToast } from '../ui/ToastProvider';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
@@ -24,16 +25,28 @@ export default function SettingsScreen({ navigation }: Props) {
   const { palette, shadow } = useTheme();
   const styles = useMemo(() => createStyles(palette, shadow), [palette, shadow]);
   const auth = useAuth();
+  const toast = useToast();
+  const [loggingOut, setLoggingOut] = useState(false);
+
   const handleLogout = () => {
+    if (loggingOut) return;
     Alert.alert('Log out', 'Are you sure you want to sign out of Carebase?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Log out',
         style: 'destructive',
-        onPress: () => {
-          auth.signOut().catch(() => {
+        onPress: async () => {
+          setLoggingOut(true);
+          try {
+            await auth.signOut();
+            toast.showToast('Signed out');
+          } catch (error) {
+            console.error('Logout error', error);
             Alert.alert('Error', 'Failed to sign out. Please try again.');
-          });
+            toast.showToast('Failed to sign out');
+          } finally {
+            setLoggingOut(false);
+          }
         },
       },
     ]);
@@ -102,8 +115,12 @@ export default function SettingsScreen({ navigation }: Props) {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutButtonText}>Log out</Text>
+        <TouchableOpacity
+          style={[styles.logoutButton, loggingOut && styles.logoutButtonDisabled]}
+          onPress={handleLogout}
+          disabled={loggingOut}
+        >
+          <Text style={styles.logoutButtonText}>{loggingOut ? 'Logging out…' : 'Log out'}</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -215,6 +232,9 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
       borderColor: palette.danger,
       paddingVertical: spacing(1.75),
       alignItems: 'center',
+    },
+    logoutButtonDisabled: {
+      opacity: 0.6,
     },
     logoutButtonText: {
       color: palette.danger,

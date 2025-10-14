@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useMemo, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../api/client';
 import { API_ENDPOINTS } from '../config';
+import { authEvents } from './authEvents';
 
 interface AuthContextValue {
   status: 'loading' | 'signedOut' | 'signedIn';
@@ -15,6 +16,41 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [status, setStatus] = useState<'loading' | 'signedOut' | 'signedIn'>('loading');
   const [user, setUser] = useState<any | null>(null);
+  const signOutInProgress = useRef(false);
+
+const signIn = useCallback((nextUser?: any) => {
+  setUser(nextUser ?? null);
+  setStatus('signedIn');
+}, []);
+
+  const signOut = useCallback(async () => {
+    if (status === 'signedOut' || signOutInProgress.current) {
+      return;
+    }
+    signOutInProgress.current = true;
+    try {
+      await apiClient.post(API_ENDPOINTS.logout).catch((error) => {
+        console.warn('Logout call failed', error);
+      });
+    } catch (error) {
+      console.warn('Logout request error', error);
+    } finally {
+      await AsyncStorage.removeItem('accessToken').catch(() => {});
+      setUser(null);
+      setStatus('signedOut');
+      signOutInProgress.current = false;
+    }
+  }, [status]);
+
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      status,
+      user,
+      signIn,
+      signOut,
+    }),
+    [status, user, signIn, signOut]
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -56,39 +92,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     bootstrap();
 
+    const unsubscribe = authEvents.onUnauthorized(() => {
+      signOut().catch(() => {});
+    });
+
     return () => {
       mounted = false;
+      unsubscribe();
     };
-  }, []);
-
-  const signIn = useCallback((nextUser?: any) => {
-    setUser(nextUser ?? null);
-    setStatus('signedIn');
-  }, []);
-
-  const signOut = useCallback(async () => {
-    try {
-      await apiClient.post(API_ENDPOINTS.logout).catch((error) => {
-        console.warn('Logout call failed', error);
-      });
-    } catch (error) {
-      console.warn('Logout request error', error);
-    } finally {
-      await AsyncStorage.removeItem('accessToken').catch(() => {});
-      setUser(null);
-      setStatus('signedOut');
-    }
-  }, []);
-
-  const value = useMemo<AuthContextValue>(
-    () => ({
-      status,
-      user,
-      signIn,
-      signOut,
-    }),
-    [status, user, signIn, signOut]
-  );
+  }, [signOut]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

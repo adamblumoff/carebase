@@ -20,6 +20,7 @@ import apiClient from '../api/client';
 import { API_ENDPOINTS, API_BASE_URL } from '../config';
 import { useTheme, spacing, radius, type Palette, type Shadow } from '../theme';
 import { useAuth } from '../auth/AuthContext';
+import { useToast } from '../ui/ToastProvider';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -30,6 +31,7 @@ export default function LoginScreen({ navigation }: Props) {
   const styles = useMemo(() => createStyles(palette, shadow), [palette, shadow]);
   const [loading, setLoading] = useState(false);
   const auth = useAuth();
+  const toast = useToast();
 
   const authenticate = async () => {
     setLoading(true);
@@ -66,12 +68,14 @@ export default function LoginScreen({ navigation }: Props) {
       const sessionCheck = await apiClient.get(API_ENDPOINTS.checkSession);
       if (sessionCheck.data.authenticated) {
         auth.signIn(sessionCheck.data.user);
+        toast.showToast('Signed in');
       } else {
         throw new Error('Session not established');
       }
     } catch (error: any) {
       console.error('Sign in error:', error);
       Alert.alert('Error', error.message || 'Failed to sign in');
+      toast.showToast('Failed to sign in');
       await AsyncStorage.removeItem('accessToken');
     } finally {
       setLoading(false);
@@ -81,6 +85,7 @@ export default function LoginScreen({ navigation }: Props) {
   const handleContinueWithoutAuth = () => {
     AsyncStorage.removeItem('accessToken').catch(() => {});
     auth.signIn();
+    toast.showToast('Signed in (dev bypass)');
   };
 
   return (

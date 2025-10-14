@@ -8,6 +8,7 @@ import AppNavigator from './src/navigation/AppNavigator';
 import { ThemeProvider, useTheme } from './src/theme';
 import { View, ActivityIndicator, Text, StyleSheet } from 'react-native';
 import { AuthProvider, useAuth } from './src/auth/AuthContext';
+import { ToastProvider } from './src/ui/ToastProvider';
 
 function SplashScreen() {
   const { colorScheme, palette } = useTheme();
@@ -42,8 +43,10 @@ function AppContent() {
 
 function AppBootstrap() {
   return (
-    <AuthProvider initialStatus="loading">
-      <AppContent />
+    <AuthProvider>
+      <ToastProvider>
+        <AppContent />
+      </ToastProvider>
     </AuthProvider>
   );
 }

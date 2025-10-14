@@ -4,6 +4,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config';
+import { authEvents } from '../auth/authEvents';
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -47,8 +48,7 @@ apiClient.interceptors.response.use(
         AsyncStorage.removeItem('accessToken').catch(() => {
           // ignore cleanup errors
         });
-        // Flag for consumers to prompt re-auth; session bootstrap handles redirect.
-        error.response.config.headers['x-auth-cleared'] = '1';
+        authEvents.emitUnauthorized();
       }
     } else {
       console.error(`[API] Network error:`, error.message);
