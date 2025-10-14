@@ -55,7 +55,7 @@ export default function AppNavigator({ isSignedIn }: AppNavigatorProps) {
   );
 
   return (
-    <NavigationContainer theme={navigationTheme}>
+    <NavigationContainer theme={navigationTheme} key={isSignedIn ? 'app-stack' : 'auth-stack'}>
       <Stack.Navigator
         initialRouteName={isSignedIn ? 'Plan' : 'Login'}
         screenOptions={{
@@ -69,41 +69,41 @@ export default function AppNavigator({ isSignedIn }: AppNavigatorProps) {
           },
         }}
       >
-        {!isSignedIn ? (
+        {isSignedIn ? (
+          <>
+            <Stack.Screen
+              name="Plan"
+              component={PlanScreen}
+              options={{ title: 'My Plan' }}
+            />
+            <Stack.Screen
+              name="AppointmentDetail"
+              component={AppointmentDetailScreen}
+              options={{ title: 'Appointment' }}
+            />
+            <Stack.Screen
+              name="BillDetail"
+              component={BillDetailScreen}
+              options={{ title: 'Bill' }}
+            />
+            <Stack.Screen
+              name="Settings"
+              component={SettingsScreen}
+              options={{ title: 'Settings' }}
+            />
+            <Stack.Screen
+              name="Camera"
+              component={CameraScreen}
+              options={{ title: 'Scan Bill' }}
+            />
+          </>
+        ) : (
           <Stack.Screen
-            key="Login"
             name="Login"
             component={LoginScreen}
             options={{ headerShown: false }}
           />
-        ) : (
-          <Stack.Screen
-            key="Plan"
-            name="Plan"
-            component={PlanScreen}
-            options={{ title: 'My Plan' }}
-          />
         )}
-        <Stack.Screen
-          name="AppointmentDetail"
-          component={AppointmentDetailScreen}
-          options={{ title: 'Appointment' }}
-        />
-        <Stack.Screen
-          name="BillDetail"
-          component={BillDetailScreen}
-          options={{ title: 'Bill' }}
-        />
-        <Stack.Screen
-          name="Settings"
-          component={SettingsScreen}
-          options={{ title: 'Settings' }}
-        />
-        <Stack.Screen
-          name="Camera"
-          component={CameraScreen}
-          options={{ title: 'Scan Bill' }}
-        />
       </Stack.Navigator>
     </NavigationContainer>
   );
