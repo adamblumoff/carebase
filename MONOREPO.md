@@ -137,6 +137,8 @@ NODE_ENV=development
 
 # Collaboration invites (optional override for email links)
 COLLABORATOR_INVITE_BASE_URL=http://localhost:3000
+COLLABORATOR_APP_OPEN_URL=carebase://open
+COLLABORATOR_APP_DOWNLOAD_URL=https://your-download-link.example.com
 ```
 
 ## Migration Notes

@@ -147,7 +147,7 @@
           <p id="statusMessage"></p>
         </div>
 
-        <div id="actions" class="actions">
+        <div id="actions" class="actions" style="display: none;">
           <button id="openApp" class="button primary">Open Carebase app</button>
           <button id="downloadApp" class="button secondary">Get the app</button>
         </div>
@@ -177,6 +177,9 @@
       const copyButton = document.getElementById('copyToken');
       const openAppButton = document.getElementById('openApp');
       const downloadAppButton = document.getElementById('downloadApp');
+      const actions = document.getElementById('actions');
+      const appOpenUrl = '<%= appOpenUrl %>';
+      const appDownloadUrl = '<%= appDownloadUrl %>';
 
       const playSuccess = (message) => {
         statusEl.classList.remove('error', 'neutral');
@@ -264,13 +267,35 @@
         }
       });
 
-      openAppButton.addEventListener('click', () => {
-        window.location.href = 'carebase://open';
-      });
+      if (appOpenUrl) {
+        openAppButton.addEventListener('click', () => {
+          const now = Date.now();
+          window.location.href = appOpenUrl;
+          if (appDownloadUrl) {
+            setTimeout(() => {
+              if (Date.now() - now < 1500) {
+                window.location.href = appDownloadUrl;
+              }
+            }, 1200);
+          }
+        });
+      } else {
+        openAppButton.disabled = true;
+        openAppButton.textContent = 'Set COLLABORATOR_APP_OPEN_URL';
+      }
 
-      downloadAppButton.addEventListener('click', () => {
-        window.location.href = 'https://carebase.app/download';
-      });
+      if (appDownloadUrl) {
+        downloadAppButton.addEventListener('click', () => {
+          window.location.href = appDownloadUrl;
+        });
+      } else {
+        downloadAppButton.disabled = true;
+        downloadAppButton.textContent = 'Set COLLABORATOR_APP_DOWNLOAD_URL';
+      }
+
+      if (appOpenUrl || appDownloadUrl) {
+        actions.style.display = 'flex';
+      }
 
       attemptAccept();
     </script>
