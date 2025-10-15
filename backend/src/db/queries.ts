@@ -455,6 +455,20 @@ export async function resolveRecipientContextForUser(
   return { recipient: collaboratorRecipient, role: 'contributor' };
 }
 
+export async function hasCollaboratorInviteForEmail(email: string): Promise<boolean> {
+  await ensureCollaboratorSchema();
+  const normalizedEmail = email.trim().toLowerCase();
+  const result = await db.query(
+    `SELECT 1
+     FROM care_collaborators
+     WHERE email = $1
+       AND status IN ('pending', 'accepted')
+     LIMIT 1`,
+    [normalizedEmail]
+  );
+  return result.rows.length > 0;
+}
+
 async function touchPlanForItem(itemId: number): Promise<void> {
   await ensurePlanVersionColumns();
   const result = await db.query(

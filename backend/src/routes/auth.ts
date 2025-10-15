@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
 import passport from '../auth/passport.js';
-import { createRecipient, findRecipientsByUserId } from '../db/queries.js';
+import { createRecipient, findRecipientsByUserId, hasCollaboratorInviteForEmail } from '../db/queries.js';
 import { issueMobileLoginToken } from '../auth/mobileTokenService.js';
 import type { User } from '@carebase/shared';
 
@@ -31,7 +31,10 @@ router.get(
       const recipients = await findRecipientsByUserId(req.user.id);
 
       if (recipients.length === 0) {
-        await createRecipient(req.user.id, 'My Care Recipient');
+        const skipDefaultRecipient = await hasCollaboratorInviteForEmail(req.user.email);
+        if (!skipDefaultRecipient) {
+          await createRecipient(req.user.id, 'My Care Recipient');
+        }
       }
 
       // Decide redirect target based on OAuth state param or legacy session flag
