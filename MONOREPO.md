@@ -141,6 +141,12 @@ COLLABORATOR_APP_OPEN_URL=carebase://invite?token={token}
 COLLABORATOR_APP_DOWNLOAD_URL=https://your-download-link.example.com
 ```
 
+### Collaborator Invite Flow
+
+1. Owners trigger invites from the Settings Care Team screen.
+2. The invited collaborator must open the email link while signed in with the invited address; other accounts will be rejected.
+3. After acceptance, logging in with that email on the mobile app loads the shared recipient’s plan instead of creating a standalone account.
+
 ## Migration Notes
 
 ### What Changed

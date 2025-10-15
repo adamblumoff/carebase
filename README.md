@@ -62,6 +62,13 @@ COLLABORATOR_APP_DOWNLOAD_URL=https://your-download-link.example.com
 EXPO_PUBLIC_API_BASE_URL=http://localhost:3000
 ```
 
+### Collaborator Invites
+
+1. The owner sends an invite from Settings → Care Team (owners only).
+2. The invited person must open the email on the device where the app runs and tap **Open Carebase app**.
+3. The invite can only be redeemed by the email address it was sent to. If the owner opens the link first, they’ll see a warning and the invited user can still accept it later.
+4. Once accepted, logging in with the invited email will show the shared plan instead of creating a new account.
+
 ## External Services
 
 1. **Railway**: PostgreSQL database

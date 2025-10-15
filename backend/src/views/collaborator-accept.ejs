@@ -231,21 +231,26 @@
             body: JSON.stringify({ token }),
           });
 
-          if (response.ok) {
-            playSuccess('Open the Carebase app to see the shared plan.');
-            return;
-          }
+        if (response.ok) {
+          playSuccess('Open the Carebase app to see the shared plan.');
+          return;
+        }
 
-          if (response.status === 404) {
-            playError('This invite link may have already been used or expired.');
-            return;
-          }
+        if (response.status === 404) {
+          playError('This invite link may have already been used or expired.');
+          return;
+        }
 
-          if (response.status === 401) {
-            playInfo(
-              'Almost there',
-              'Sign in on the Carebase mobile app with this email, then we’ll connect you automatically.'
-            );
+        if (response.status === 403) {
+          playError('You’re signed in as a different email. Log out and try the invited email.');
+          return;
+        }
+
+        if (response.status === 401) {
+          playInfo(
+            'Almost there',
+            'Sign in on the Carebase mobile app with this email, then we’ll connect you automatically.'
+          );
             return;
           }
 

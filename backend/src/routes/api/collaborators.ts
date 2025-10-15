@@ -10,6 +10,10 @@ import {
 } from '../../db/queries.js';
 import { sendCollaboratorInviteEmail } from '../../services/email.js';
 
+export function emailsMatch(inviteEmail: string, userEmail: string): boolean {
+  return inviteEmail.trim().toLowerCase() === userEmail.trim().toLowerCase();
+}
+
 function formatAppLink(template: string, token: string): string {
   if (!template) return '';
   if (!token) return template;
@@ -121,10 +125,7 @@ router.post('/accept', async (req: Request, res: Response) => {
       return;
     }
 
-    const inviteEmail = invite.email.trim().toLowerCase();
-    const userEmail = user.email.trim().toLowerCase();
-
-    if (inviteEmail !== userEmail) {
+    if (!emailsMatch(invite.email, user.email)) {
       res.status(403).json({ error: 'Invite belongs to a different email' });
       return;
     }
