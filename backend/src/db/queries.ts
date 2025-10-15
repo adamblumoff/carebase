@@ -329,7 +329,7 @@ export async function createCollaboratorInvite(
   invitedByUserId: number,
   email: string,
   role: CollaboratorRole = 'contributor'
-): Promise<{ collaborator: Collaborator; created: boolean }> {
+): Promise<{ collaborator: Collaborator; created: boolean; resent: boolean }> {
   await ensureCollaboratorSchema();
   const normalizedEmail = email.trim().toLowerCase();
   const existing = await db.query(
@@ -337,7 +337,30 @@ export async function createCollaboratorInvite(
     [recipientId, normalizedEmail]
   );
   if (existing.rows[0]) {
-    return { collaborator: collaboratorRowToCollaborator(existing.rows[0] as CollaboratorRow), created: false };
+    const row = existing.rows[0] as CollaboratorRow;
+    if (row.status === 'pending') {
+      const newToken = generateToken(16);
+      const refreshed = await db.query(
+        `UPDATE care_collaborators
+         SET invite_token = $1,
+             invited_at = NOW(),
+             invited_by = $2
+         WHERE id = $3
+         RETURNING *`,
+        [newToken, invitedByUserId, row.id]
+      );
+      return {
+        collaborator: collaboratorRowToCollaborator(refreshed.rows[0] as CollaboratorRow),
+        created: false,
+        resent: true,
+      };
+    }
+
+    return {
+      collaborator: collaboratorRowToCollaborator(row),
+      created: false,
+      resent: false,
+    };
   }
 
   const token = generateToken(16);
@@ -348,7 +371,11 @@ export async function createCollaboratorInvite(
     [recipientId, normalizedEmail, role, token, invitedByUserId]
   );
 
-  return { collaborator: collaboratorRowToCollaborator(result.rows[0] as CollaboratorRow), created: true };
+  return {
+    collaborator: collaboratorRowToCollaborator(result.rows[0] as CollaboratorRow),
+    created: true,
+    resent: false,
+  };
 }
 
 export async function listCollaborators(recipientId: number): Promise<Collaborator[]> {

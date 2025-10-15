@@ -61,14 +61,14 @@ router.post('/', async (req: Request, res: Response) => {
       return;
     }
 
-    const { collaborator, created } = await createCollaboratorInvite(
+    const { collaborator, created, resent } = await createCollaboratorInvite(
       context.recipient.id,
       user.id,
       email,
       role
     );
 
-    if (created) {
+    if (created || resent) {
       const baseUrl =
         process.env.COLLABORATOR_INVITE_BASE_URL || process.env.BASE_URL || 'http://localhost:3000';
       const acceptUrl = `${baseUrl.replace(/\/$/, '')}/collaborators/accept?token=${collaborator.inviteToken}`;
@@ -80,7 +80,7 @@ router.post('/', async (req: Request, res: Response) => {
       });
     }
 
-    res.status(201).json({ collaborator });
+    res.status(201).json({ collaborator, resent });
   } catch (error) {
     console.error('Create collaborator invite error:', error);
     res.status(500).json({ error: 'Failed to invite collaborator' });
