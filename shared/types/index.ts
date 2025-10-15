@@ -160,3 +160,20 @@ export interface ReviewListResponse {
     source: Source;
   }>;
 }
+
+export interface UploadPhotoResponse {
+  success: boolean;
+  classification: {
+    detectedType: ItemType;
+    confidence: number;
+  };
+  item: Item;
+  bill: Bill | null;
+  extracted: BillCreateRequest | null;
+  overdue: boolean;
+  ocr: {
+    preview: string;
+    storageKey: string | null;
+    length: number;
+  };
+}

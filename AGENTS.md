@@ -14,3 +14,5 @@ Backend unit and integration tests belong next to the code as `*.test.ts` and ru
 
 ## Commit & Pull Request Guidelines
 Commits should stay concise, imperative, and focused (e.g., “Replace cookie manager with AsyncStorage”). Reference issues in the body if applicable and avoid batching unrelated changes. Pull requests need a short summary, testing notes (`npm run test:backend`, `npm test --workspace=mobile`, simulator screenshots, etc.), call out new env vars, and include migration IDs when schema changes apply. When modifying theming or Expo config, mention whether you cleared the Metro cache and confirmed both light/dark modes. Regenerate API route docs with `npm run docs:routes --workspace=backend` whenever routers change.
+
+Commit after every semi-major feature change so reviewers can follow the progression without wading through mega-diffs.

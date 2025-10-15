@@ -57,6 +57,8 @@ npm test                   # Run all tests across workspaces
 npm test --workspace=@carebase/backend  # Run backend tests only
 ```
 
+The backend suite includes unit specs and a pg-mem powered integration test that exercises the inbound email webhook end to end (ensuring plan versions bump and realtime notifications fire). Running `npm test --workspace=@carebase/backend` is safe without a local Postgres instance.
+
 ### Database
 ```bash
 npm run db:migrate         # Run database migrations

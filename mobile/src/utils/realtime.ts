@@ -7,6 +7,17 @@ import { emitPlanChanged } from './planEvents';
 let socket: Socket | null = null;
 let connecting = false;
 let connected = false;
+const statusListeners = new Set<(status: 'connected' | 'disconnected') => void>();
+
+function notifyStatus(status: 'connected' | 'disconnected') {
+  statusListeners.forEach((listener) => {
+    try {
+      listener(status);
+    } catch (error) {
+      console.warn('[Realtime] Status listener error', error);
+    }
+  });
+}
 
 async function getAuthToken(): Promise<string | null> {
   try {
@@ -37,16 +48,19 @@ async function initSocket(): Promise<void> {
   socket.on('connect', () => {
     connected = true;
     console.log('[Realtime] Connected');
+    notifyStatus('connected');
   });
 
   socket.on('disconnect', (reason) => {
     connected = false;
     console.log('[Realtime] Disconnected', reason);
+    notifyStatus('disconnected');
   });
 
   socket.on('connect_error', (error) => {
     connected = false;
     console.warn('[Realtime] Connection error', error);
+    notifyStatus('disconnected');
   });
 
   socket.on('plan:update', () => {
@@ -62,4 +76,11 @@ export async function ensureRealtimeConnected(): Promise<void> {
 
 export function isRealtimeConnected(): boolean {
   return connected;
+}
+
+export function addRealtimeStatusListener(listener: (status: 'connected' | 'disconnected') => void): () => void {
+  statusListeners.add(listener);
+  return () => {
+    statusListeners.delete(listener);
+  };
 }

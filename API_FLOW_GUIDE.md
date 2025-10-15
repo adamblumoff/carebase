@@ -78,7 +78,7 @@ Tap “Mark as paid” → POST marks status server-side → response returned �
 
 | Endpoint | Method | Triggered From | Payload | Response | Follow-up |
 |----------|--------|----------------|---------|----------|-----------|
-| `/api/upload/photo` | `POST` | `CameraScreen.handleUpload()` | `FormData` with `{ photo: { uri, name, type } }` | `{ classification, extracted, overdue }` | Display alert summarizing extraction, emit plan change, navigate back. |
+| `/api/upload/photo` | `POST` | `CameraScreen.handleUpload()` | `FormData` with `{ photo: { uri, name, type } }` | `{ classification: { detectedType, confidence }, item, bill, extracted, overdue, ocr }` | Display alert summarizing extraction, emit plan change, navigate back. |
 
 **Data Flow:**  
 Camera/library returns `imageUri` → `FormData` appended → axios POST with `multipart/form-data` header → backend returns classification details → UI surfaces details and triggers plan refresh.

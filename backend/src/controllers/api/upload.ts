@@ -9,7 +9,7 @@ import {
 import { extractTextFromImage, getShortExcerpt } from '../../services/ocr.js';
 import { storeFile, storeText } from '../../services/storage.js';
 import { parseSource } from '../../services/parser.js';
-import type { User } from '@carebase/shared';
+import type { User, UploadPhotoResponse } from '@carebase/shared';
 
 export async function uploadPhoto(req: Request, res: Response): Promise<void> {
   try {
@@ -96,23 +96,24 @@ export async function uploadPhoto(req: Request, res: Response): Promise<void> {
       `Created ${classification.type} from photo upload with confidence ${classification.confidence}`,
     );
 
-    res.json({
+    const responsePayload: UploadPhotoResponse = {
       success: true,
       classification: {
-        type: classification.type,
+        detectedType: classification.type,
         confidence: classification.confidence,
       },
-      item: {
-        id: item.id,
-        type: item.type,
-      },
+      item,
       bill: createdBill,
-      extracted: parsed.billData,
+      extracted: parsed.billData ?? null,
       overdue: billOverdue,
-      ocrText: ocrText.substring(0, 200),
-      ocrTextFull: ocrText,
-      ocrStorageKey: ocrTextStorageKey,
-    });
+      ocr: {
+        preview: ocrText.substring(0, 200),
+        storageKey: ocrTextStorageKey,
+        length: ocrText.length,
+      },
+    };
+
+    res.json(responsePayload);
   } catch (error) {
     console.error('Photo upload error:', error);
     res.status(500).json({ error: 'Failed to process photo' });

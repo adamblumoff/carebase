@@ -50,7 +50,10 @@ router.post('/:itemId/reclassify', requireAuth, async (req: Request, res: Respon
       return res.status(404).json({ error: 'Item not found' });
     }
 
-    const source = await findSourceById(item.source_id);
+    const source = await findSourceById(item.sourceId);
+    if (!source) {
+      return res.status(404).json({ error: 'Source not found' });
+    }
 
     // Reclassify item (deletes old appointment/bill)
     await reclassifyItem(parseInt(itemId), newType as ItemType);

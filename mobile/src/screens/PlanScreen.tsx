@@ -54,8 +54,8 @@ export default function PlanScreen({ navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const latestVersionRef = useRef<number>(0);
-const planDataRef = useRef<PlanData | null>(null);
-const cacheLoadedRef = useRef(false);
+  const planDataRef = useRef<PlanData | null>(null);
+  const cacheLoadedRef = useRef(false);
 
 const AnimatedStatusBadge: React.FC<{ status: string }> = ({ status }) => {
   const scale = useRef(new Animated.Value(1)).current;
@@ -186,13 +186,13 @@ const AnimatedStatusBadge: React.FC<{ status: string }> = ({ status }) => {
   }, [fetchPlan]);
 
   useEffect(() => {
-    const unsubscribe = addPlanChangeListener(() => {
+    const unsubscribePlan = addPlanChangeListener(() => {
       fetchPlan({ silent: true, source: 'realtime' });
     });
     ensureRealtimeConnected().catch((error) => {
       console.warn('Realtime connection failed', error);
     });
-    return unsubscribe;
+    return unsubscribePlan;
   }, [fetchPlan]);
 
   useFocusEffect(
@@ -305,24 +305,24 @@ const formatTime = (dateString: string) => {
               <Text style={styles.actionSecondaryText}>⚙️ Settings</Text>
             </Pressable>
           </View>
-          <View style={styles.heroCard}>
-            <View style={styles.heroRow}>
-              <Text style={styles.heroIcon}>📅</Text>
-              <Text style={styles.heroSubtitle}>
-                {planData?.dateRange
-                  ? `${formatDate(planData.dateRange.start)} – ${formatDate(planData.dateRange.end)}`
-                  : 'Connect your inbox to build a plan.'}
-              </Text>
-            </View>
-            <Text style={styles.heroMeta}>
-              {appointmentCount} appointments • {billsDue} bills due
+        <View style={styles.heroCard}>
+          <View style={styles.heroRow}>
+            <Text style={styles.heroIcon}>📅</Text>
+            <Text style={styles.heroSubtitle}>
+              {planData?.dateRange
+                ? `${formatDate(planData.dateRange.start)} – ${formatDate(planData.dateRange.end)}`
+                : 'Connect your inbox to build a plan.'}
             </Text>
           </View>
+          <Text style={styles.heroMeta}>
+            {appointmentCount} appointments • {billsDue} bills due
+          </Text>
         </View>
+      </View>
 
-        {error && (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorText}>{error}</Text>
+      {error && (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorText}>{error}</Text>
           </View>
         )}
 

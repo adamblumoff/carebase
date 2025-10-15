@@ -69,7 +69,7 @@ router.post('/photo', ensureAuthenticated, ensureRecipient, upload.single('photo
 
     // Create item
     const item = await createItem(
-      source.recipient_id,
+      source.recipientId,
       source.id,
       classification.type,
       classification.confidence

@@ -74,3 +74,7 @@ export function initRealtime(io: SocketIOServer): void {
 export function getRealtimeEmitter(): RealtimeEmitter | null {
   return emitter;
 }
+
+export function __setRealtimeEmitterForTests(testEmitter: RealtimeEmitter | null): void {
+  emitter = testEmitter;
+}

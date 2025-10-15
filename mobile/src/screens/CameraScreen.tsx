@@ -20,6 +20,7 @@ import apiClient from '../api/client';
 import { API_ENDPOINTS } from '../config';
 import { useTheme, spacing, radius, type Palette, type Shadow } from '../theme';
 import { emitPlanChanged } from '../utils/planEvents';
+import type { UploadPhotoResponse } from '@carebase/shared';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Camera'>;
 
@@ -83,7 +84,7 @@ export default function CameraScreen({ navigation }: Props) {
         type,
       } as any);
 
-      const response = await apiClient.post(API_ENDPOINTS.uploadPhoto, formData, {
+      const response = await apiClient.post<UploadPhotoResponse>(API_ENDPOINTS.uploadPhoto, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
@@ -100,9 +101,13 @@ export default function CameraScreen({ navigation }: Props) {
         details.push('Status: overdue');
       }
 
+      const detectedType =
+        classification?.detectedType ??
+        response.data.item?.detectedType ??
+        'document';
       const message = details.length > 0
-        ? `Captured a ${classification.type} document.\n${details.join('\n')}`
-        : `Captured a ${classification.type} document.`;
+        ? `Captured a ${detectedType} document.\n${details.join('\n')}`
+        : `Captured a ${detectedType} document.`;
 
       Alert.alert('Uploaded', message, [{ text: 'View plan', onPress: () => {
         emitPlanChanged();

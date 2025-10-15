@@ -72,12 +72,12 @@ async function processSource(source: Source): Promise<void> {
   const { classification, appointmentData, billData } = parsed;
 
   // Create item
-  const item = await createItem(
-    source.recipient_id,
-    source.id,
-    classification.type,
-    classification.confidence
-  );
+    const item = await createItem(
+      source.recipientId,
+      source.id,
+      classification.type,
+      classification.confidence
+    );
 
   // Create appointment or bill based on classification
   if (classification.type === 'appointment' && appointmentData) {
