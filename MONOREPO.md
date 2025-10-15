@@ -134,6 +134,9 @@ INBOUND_EMAIL_DOMAIN=inbound.yourapp.com
 BASE_URL=http://localhost:3000
 SESSION_SECRET=your-secret-key
 NODE_ENV=development
+
+# Collaboration invites (optional override for email links)
+COLLABORATOR_INVITE_BASE_URL=http://localhost:3000
 ```
 
 ## Migration Notes

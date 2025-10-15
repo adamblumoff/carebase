@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   Alert,
   TextInput,
+  Modal,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
@@ -19,6 +20,8 @@ import { useTheme, spacing, radius, type Palette } from '../theme';
 import { emitPlanChanged } from '../utils/planEvents';
 import { KeyboardScreen } from '../components/KeyboardScreen';
 import DateTimePickerModal from '../components/DateTimePickerModal';
+import { useAuth } from '../auth/AuthContext';
+import { fetchCollaborators, type CollaboratorResponse } from '../api/collaborators';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AppointmentDetail'>;
 
@@ -56,6 +59,7 @@ const formatForPayload = (date: Date) =>
 export default function AppointmentDetailScreen({ route, navigation }: Props) {
   const { appointment } = route.params;
   const { palette, shadow } = useTheme();
+  const auth = useAuth();
   const styles = useMemo(() => createStyles(palette), [palette]);
   const [currentAppointment, setCurrentAppointment] = useState(appointment);
   const [startDateTime, setStartDateTime] = useState(parseServerDate(appointment.startLocal));
@@ -69,11 +73,58 @@ const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const returnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [collaborators, setCollaborators] = useState<CollaboratorResponse[]>([]);
+  const [collaboratorsLoading, setCollaboratorsLoading] = useState(true);
+  const [assignmentModalVisible, setAssignmentModalVisible] = useState(false);
+  const [assignmentSaving, setAssignmentSaving] = useState(false);
 
   const initialDuration =
     parseServerDate(appointment.endLocal).getTime() -
     parseServerDate(appointment.startLocal).getTime();
 const durationMs = initialDuration > 0 ? initialDuration : 60 * 60 * 1000;
+
+const acceptedCollaborators = useMemo(
+  () => collaborators.filter((collab) => collab.status === 'accepted'),
+  [collaborators]
+);
+const currentCollaborator = useMemo(
+  () => acceptedCollaborators.find((collab) => collab.userId === auth.user?.id),
+  [acceptedCollaborators, auth.user?.id]
+);
+const isOwner = currentCollaborator?.role === 'owner';
+const isContributor = currentCollaborator?.role === 'contributor';
+
+const assignedCollaboratorEmail = useMemo(() => {
+  if (!currentAppointment.assignedCollaboratorId) return null;
+  const match = acceptedCollaborators.find(
+    (collab) => collab.id === currentAppointment.assignedCollaboratorId
+  );
+  return match?.email ?? null;
+}, [acceptedCollaborators, currentAppointment.assignedCollaboratorId]);
+
+useEffect(() => {
+  let active = true;
+  const load = async () => {
+    try {
+      const data = await fetchCollaborators();
+      if (!active) return;
+      setCollaborators(data);
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'test') {
+        console.warn('Failed to load collaborators', error);
+      }
+    } finally {
+      if (active) {
+        setCollaboratorsLoading(false);
+      }
+    }
+  };
+
+  load();
+  return () => {
+    active = false;
+  };
+}, []);
 
 useEffect(() => {
   return () => {
@@ -174,6 +225,53 @@ const closePicker = () => {
     );
   };
 
+  const handleAssignCollaborator = async (targetId: number | null) => {
+    if (assignmentSaving) return;
+    setAssignmentSaving(true);
+    try {
+      const response = await apiClient.patch(API_ENDPOINTS.updateAppointment(appointment.id), {
+        assignedCollaboratorId: targetId,
+      });
+      const updated = response.data;
+      setCurrentAppointment(updated);
+      setAssignmentModalVisible(false);
+      emitPlanChanged();
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update assignment');
+      console.error('Assign collaborator error:', error);
+    } finally {
+      setAssignmentSaving(false);
+    }
+  };
+
+  const handleMarkHandled = async () => {
+    if (successMessage) {
+      return;
+    }
+    const now = new Date();
+    const note = `Handled by ${auth.user?.email ?? 'care teammate'} on ${now.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    })}`;
+    setSaving(true);
+    try {
+      const response = await apiClient.patch(API_ENDPOINTS.updateAppointment(appointment.id), {
+        prepNote: note,
+      });
+      const updated = response.data;
+      setCurrentAppointment(updated);
+      setPendingNote(updated.prepNote || '');
+      emitPlanChanged();
+      scheduleReturnToPlan('Visit marked as handled. Returning to plan...');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update visit');
+      console.error('Mark handled error:', error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleCancelEdit = () => {
     setPendingStart(new Date(startDateTime));
     setPendingSummary(currentAppointment.summary);
@@ -213,6 +311,21 @@ const closePicker = () => {
             <Text style={styles.summaryMeta}>{startDisplay}</Text>
             {locationDisplay ? (
               <Text style={styles.summaryMeta}>📍 {locationDisplay}</Text>
+            ) : null}
+            {assignedCollaboratorEmail ? (
+              <Text style={styles.summaryMeta}>Assigned to {assignedCollaboratorEmail}</Text>
+            ) : isOwner && !collaboratorsLoading ? (
+              <Text style={styles.summaryMeta}>Unassigned</Text>
+            ) : null}
+            {isOwner && acceptedCollaborators.length > 0 ? (
+              <TouchableOpacity
+                style={styles.assignLink}
+                onPress={() => setAssignmentModalVisible(true)}
+              >
+                <Text style={styles.assignLinkText}>
+                  {currentAppointment.assignedCollaboratorId ? 'Change assignment' : 'Assign collaborator'}
+                </Text>
+              </TouchableOpacity>
             ) : null}
           </View>
         </View>
@@ -296,20 +409,94 @@ const closePicker = () => {
               </Text>
             </View>
 
-            <TouchableOpacity
-              style={[styles.actionButton, styles.primaryButton]}
-              onPress={() => {
-                setPendingStart(new Date(startDateTime));
-                setPickerVisible(false);
-                setEditing(true);
-              }}
-            >
-              <Text style={styles.primaryButtonText}>Edit visit details</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.dangerButton} onPress={handleDelete}>
-              <Text style={styles.dangerButtonText}>Delete appointment</Text>
-            </TouchableOpacity>
+            {isOwner ? (
+              <TouchableOpacity
+                style={[styles.actionButton, styles.primaryButton]}
+                onPress={() => {
+                  setPendingStart(new Date(startDateTime));
+                  setPickerVisible(false);
+                  setEditing(true);
+                }}
+              >
+                <Text style={styles.primaryButtonText}>Edit visit details</Text>
+              </TouchableOpacity>
+            ) : null}
+            {isContributor ? (
+              <TouchableOpacity
+                style={[styles.actionButton, styles.primaryButton]}
+                onPress={handleMarkHandled}
+                disabled={saving}
+              >
+                <Text style={styles.primaryButtonText}>
+                  {saving ? 'Updating…' : 'Mark visit handled'}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+            {isOwner ? (
+              <TouchableOpacity style={styles.dangerButton} onPress={handleDelete}>
+                <Text style={styles.dangerButtonText}>Delete appointment</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
+        )}
+        {isOwner && (
+          <Modal
+            visible={assignmentModalVisible}
+            transparent
+            animationType="fade"
+            onRequestClose={() => {
+              if (!assignmentSaving) setAssignmentModalVisible(false);
+            }}
+          >
+            <View style={styles.modalBackdrop}>
+              <View style={[styles.modalCard, shadow.card]}>
+                <Text style={styles.modalTitle}>Assign to…</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.modalOption,
+                    currentAppointment.assignedCollaboratorId === null && styles.modalOptionSelected,
+                  ]}
+                  onPress={() => handleAssignCollaborator(null)}
+                  disabled={assignmentSaving}
+                >
+                  <Text style={styles.modalOptionText}>
+                    {assignmentSaving && currentAppointment.assignedCollaboratorId === null
+                      ? 'Assigning…'
+                      : 'Unassigned'}
+                  </Text>
+                </TouchableOpacity>
+                {acceptedCollaborators.length === 0 ? (
+                  <Text style={styles.modalEmpty}>Invite a collaborator to assign this visit.</Text>
+                ) : (
+                  acceptedCollaborators.map((collaborator) => {
+                    const isSelected = collaborator.id === currentAppointment.assignedCollaboratorId;
+                    return (
+                      <TouchableOpacity
+                        key={collaborator.id}
+                        style={[
+                          styles.modalOption,
+                          isSelected && styles.modalOptionSelected,
+                        ]}
+                        onPress={() => handleAssignCollaborator(collaborator.id)}
+                        disabled={assignmentSaving}
+                      >
+                        <Text style={styles.modalOptionText}>
+                          {assignmentSaving && isSelected ? 'Assigning…' : collaborator.email}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })
+                )}
+                <TouchableOpacity
+                  style={styles.modalCancel}
+                  onPress={() => setAssignmentModalVisible(false)}
+                  disabled={assignmentSaving}
+                >
+                  <Text style={styles.modalCancelText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
         )}
     </KeyboardScreen>
   );
@@ -318,6 +505,7 @@ const closePicker = () => {
 const createStyles = (palette: Palette) =>
   StyleSheet.create({
     safe: {
+      flex: 1,
       backgroundColor: palette.surfaceMuted,
     },
     content: {
@@ -487,5 +675,69 @@ const createStyles = (palette: Palette) =>
       fontSize: 15,
       color: palette.textMuted,
       lineHeight: 22,
+    },
+    assignLink: {
+      marginTop: spacing(1),
+      alignSelf: 'flex-start',
+      paddingVertical: spacing(0.5),
+      paddingHorizontal: spacing(1.25),
+      backgroundColor: palette.surfaceMuted,
+      borderRadius: radius.sm,
+    },
+    assignLinkText: {
+      color: palette.primary,
+      fontWeight: '600',
+      fontSize: 13,
+    },
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.4)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: spacing(3),
+    },
+    modalCard: {
+      width: '100%',
+      maxWidth: 360,
+      backgroundColor: palette.canvas,
+      borderRadius: radius.md,
+      padding: spacing(3),
+    },
+    modalTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: palette.textPrimary,
+      marginBottom: spacing(2),
+    },
+    modalOption: {
+      paddingVertical: spacing(1.25),
+      paddingHorizontal: spacing(1.5),
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: palette.border,
+      marginBottom: spacing(1),
+    },
+    modalOptionSelected: {
+      borderColor: palette.primary,
+      backgroundColor: palette.primarySoft,
+    },
+    modalOptionText: {
+      fontSize: 15,
+      color: palette.textPrimary,
+      fontWeight: '600',
+    },
+    modalEmpty: {
+      fontSize: 13,
+      color: palette.textMuted,
+      marginBottom: spacing(1.5),
+    },
+    modalCancel: {
+      marginTop: spacing(1.5),
+      alignSelf: 'flex-end',
+    },
+    modalCancelText: {
+      color: palette.primary,
+      fontWeight: '600',
+      fontSize: 14,
     },
   });

@@ -1,7 +1,8 @@
 import { Resend } from 'resend';
 import type { BillStatus } from '@carebase/shared';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const resendApiKey = process.env.RESEND_API_KEY;
+const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
 interface DigestAppointment {
   summary: string;
@@ -130,6 +131,10 @@ function generateDigestHTML(data: DigestEmailData): string {
  * @returns Resend response
  */
 export async function sendDigestEmail(to: string, data: DigestEmailData): Promise<any> {
+  if (!resend) {
+    console.warn('Resend API key missing; skipping digest email');
+    return null;
+  }
   const html = generateDigestHTML(data);
 
   const result = await resend.emails.send({
@@ -137,6 +142,65 @@ export async function sendDigestEmail(to: string, data: DigestEmailData): Promis
     to,
     subject: `${data.recipient.display_name}'s Weekly Plan`,
     html
+  });
+
+  return result;
+}
+
+interface CollaboratorInviteEmailData {
+  inviterEmail: string;
+  acceptUrl: string;
+}
+
+function generateCollaboratorInviteHTML(data: CollaboratorInviteEmailData): string {
+  const { inviterEmail, acceptUrl } = data;
+  return `
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Carebase Invite</title>
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1f2937; line-height: 1.6; }
+      .container { max-width: 520px; margin: 0 auto; padding: 24px; }
+      .card { background: #ffffff; border-radius: 12px; padding: 24px; box-shadow: 0 2px 12px rgba(15, 23, 42, 0.08); }
+      .cta { display: inline-block; background: #15803d; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; margin-top: 20px; font-weight: 600; }
+      .footer { font-size: 12px; color: #6b7280; margin-top: 24px; text-align: center; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="card">
+        <h1 style="margin-top: 0;">You've been invited to Carebase</h1>
+        <p>${inviterEmail} added you to their care team so you can keep appointments and bills in sync.</p>
+        <p>To join, open Carebase and sign in with this email, then approve the invite:</p>
+        <p style="margin-bottom: 0;"><a class="cta" href="${acceptUrl}">Accept invite</a></p>
+        <p>If the button doesn't work, copy and paste this link into your browser:</p>
+        <p style="word-break: break-all;">${acceptUrl}</p>
+      </div>
+      <div class="footer">
+        Questions? Reply to this email and we'll help you out.
+      </div>
+    </div>
+  </body>
+</html>
+  `.trim();
+}
+
+export async function sendCollaboratorInviteEmail(to: string, data: CollaboratorInviteEmailData): Promise<any> {
+  if (!resend) {
+    console.warn('Resend API key missing; skipping collaborator invite email');
+    return null;
+  }
+
+  const html = generateCollaboratorInviteHTML(data);
+
+  const result = await resend.emails.send({
+    from: 'Carebase <noreply@' + (process.env.INBOUND_EMAIL_DOMAIN || 'yourdomain.com') + '>',
+    to,
+    subject: 'You’re invited to Carebase',
+    html,
   });
 
   return result;

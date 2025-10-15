@@ -4,28 +4,12 @@ import type { CollaboratorRole, User } from '@carebase/shared';
 import {
   acceptCollaboratorInvite,
   createCollaboratorInvite,
-  ensureOwnerCollaborator,
-  findRecipientForCollaborator,
-  findRecipientsByUserId,
   listCollaborators,
+  resolveRecipientContextForUser,
 } from '../../db/queries.js';
+import { sendCollaboratorInviteEmail } from '../../services/email.js';
 
 const router = express.Router();
-
-async function resolveRecipientContext(user: User) {
-  const ownedRecipients = await findRecipientsByUserId(user.id);
-  if (ownedRecipients.length > 0) {
-    const recipient = ownedRecipients[0];
-    await ensureOwnerCollaborator(recipient.id, user);
-    return { recipient, isOwner: true } as const;
-  }
-
-  const collaboratorRecipient = await findRecipientForCollaborator(user.id);
-  if (!collaboratorRecipient) {
-    return null;
-  }
-  return { recipient: collaboratorRecipient, isOwner: false } as const;
-}
 
 router.use((req, res, next) => {
   const user = req.user as User | undefined;
@@ -39,7 +23,7 @@ router.use((req, res, next) => {
 router.get('/', async (req: Request, res: Response) => {
   try {
     const user = req.user as User;
-    const context = await resolveRecipientContext(user);
+    const context = await resolveRecipientContextForUser(user);
     if (!context) {
       res.status(404).json({ error: 'No recipient found' });
       return;
@@ -49,7 +33,7 @@ router.get('/', async (req: Request, res: Response) => {
     const response = collaborators.map((collaborator) => ({
       ...collaborator,
       inviteToken:
-        context.isOwner && collaborator.status === 'pending' ? collaborator.inviteToken : ''
+        context.role === 'owner' && collaborator.status === 'pending' ? collaborator.inviteToken : ''
     }));
     res.json({ collaborators: response });
   } catch (error) {
@@ -61,12 +45,12 @@ router.get('/', async (req: Request, res: Response) => {
 router.post('/', async (req: Request, res: Response) => {
   try {
     const user = req.user as User;
-    const context = await resolveRecipientContext(user);
+    const context = await resolveRecipientContextForUser(user);
     if (!context) {
       res.status(404).json({ error: 'No recipient found' });
       return;
     }
-    if (!context.isOwner) {
+    if (context.role !== 'owner') {
       res.status(403).json({ error: 'Only the owner can invite collaborators' });
       return;
     }
@@ -77,8 +61,25 @@ router.post('/', async (req: Request, res: Response) => {
       return;
     }
 
-    const collaborator = await createCollaboratorInvite(context.recipient.id, user.id, email, role);
-    // TODO: send invitation email via Resend
+    const { collaborator, created } = await createCollaboratorInvite(
+      context.recipient.id,
+      user.id,
+      email,
+      role
+    );
+
+    if (created) {
+      const baseUrl =
+        process.env.COLLABORATOR_INVITE_BASE_URL || process.env.BASE_URL || 'http://localhost:3000';
+      const acceptUrl = `${baseUrl.replace(/\/$/, '')}/collaborators/accept?token=${collaborator.inviteToken}`;
+      await sendCollaboratorInviteEmail(collaborator.email, {
+        inviterEmail: user.email,
+        acceptUrl,
+      }).catch((err) => {
+        console.warn('Failed to send collaborator invite email:', err);
+      });
+    }
+
     res.status(201).json({ collaborator });
   } catch (error) {
     console.error('Create collaborator invite error:', error);

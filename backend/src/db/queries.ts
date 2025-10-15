@@ -329,7 +329,7 @@ export async function createCollaboratorInvite(
   invitedByUserId: number,
   email: string,
   role: CollaboratorRole = 'contributor'
-): Promise<Collaborator> {
+): Promise<{ collaborator: Collaborator; created: boolean }> {
   await ensureCollaboratorSchema();
   const normalizedEmail = email.trim().toLowerCase();
   const existing = await db.query(
@@ -337,7 +337,7 @@ export async function createCollaboratorInvite(
     [recipientId, normalizedEmail]
   );
   if (existing.rows[0]) {
-    return collaboratorRowToCollaborator(existing.rows[0] as CollaboratorRow);
+    return { collaborator: collaboratorRowToCollaborator(existing.rows[0] as CollaboratorRow), created: false };
   }
 
   const token = generateToken(16);
@@ -348,7 +348,7 @@ export async function createCollaboratorInvite(
     [recipientId, normalizedEmail, role, token, invitedByUserId]
   );
 
-  return collaboratorRowToCollaborator(result.rows[0] as CollaboratorRow);
+  return { collaborator: collaboratorRowToCollaborator(result.rows[0] as CollaboratorRow), created: true };
 }
 
 export async function listCollaborators(recipientId: number): Promise<Collaborator[]> {
@@ -409,6 +409,23 @@ export async function findCollaboratorForRecipient(
     [recipientId, collaboratorId]
   );
   return result.rows[0] ? collaboratorRowToCollaborator(result.rows[0] as CollaboratorRow) : undefined;
+}
+
+export async function resolveRecipientContextForUser(
+  user: User
+): Promise<{ recipient: Recipient; role: 'owner' | 'contributor' } | null> {
+  const ownedRecipients = await findRecipientsByUserId(user.id);
+  if (ownedRecipients.length > 0) {
+    const recipient = ownedRecipients[0];
+    await ensureOwnerCollaborator(recipient.id, user);
+    return { recipient, role: 'owner' };
+  }
+
+  const collaboratorRecipient = await findRecipientForCollaborator(user.id);
+  if (!collaboratorRecipient) {
+    return null;
+  }
+  return { recipient: collaboratorRecipient, role: 'contributor' };
 }
 
 async function touchPlanForItem(itemId: number): Promise<void> {
@@ -624,6 +641,32 @@ export async function updateAppointment(id: number, userId: number, data: Appoin
   return appointment;
 }
 
+export async function updateAppointmentForRecipient(
+  id: number,
+  recipientId: number,
+  data: AppointmentUpdateRequest
+): Promise<Appointment> {
+  await ensureCollaboratorSchema();
+  const { startLocal, endLocal, location, prepNote, summary, assignedCollaboratorId } = data;
+  const result = await db.query(
+    `UPDATE appointments AS a
+     SET start_local = $1, end_local = $2, location = $3, prep_note = $4, summary = $5,
+         assigned_collaborator_id = $6
+     FROM items i
+     WHERE a.id = $7
+       AND a.item_id = i.id
+       AND i.recipient_id = $8
+     RETURNING a.*`,
+    [startLocal, endLocal, location, prepNote, summary, assignedCollaboratorId ?? null, id, recipientId]
+  );
+  if (result.rows.length === 0) {
+    throw new Error('Appointment not found');
+  }
+  const appointment = appointmentRowToAppointment(result.rows[0]);
+  await touchPlanForItem(appointment.itemId);
+  return appointment;
+}
+
 export async function getAppointmentById(id: number, userId: number): Promise<Appointment | undefined> {
   const result = await db.query(
     `SELECT a.*
@@ -632,6 +675,17 @@ export async function getAppointmentById(id: number, userId: number): Promise<Ap
      JOIN recipients r ON i.recipient_id = r.id
      WHERE a.id = $1 AND r.user_id = $2`,
     [id, userId]
+  );
+  return result.rows[0] ? appointmentRowToAppointment(result.rows[0]) : undefined;
+}
+
+export async function getAppointmentByIdForRecipient(id: number, recipientId: number): Promise<Appointment | undefined> {
+  const result = await db.query(
+    `SELECT a.*
+     FROM appointments a
+     JOIN items i ON a.item_id = i.id
+     WHERE a.id = $1 AND i.recipient_id = $2`,
+    [id, recipientId]
   );
   return result.rows[0] ? appointmentRowToAppointment(result.rows[0]) : undefined;
 }
@@ -692,6 +746,31 @@ export async function updateBillStatus(id: number, userId: number, status: BillS
   return bill;
 }
 
+export async function updateBillStatusForRecipient(
+  id: number,
+  recipientId: number,
+  status: BillStatus
+): Promise<Bill> {
+  const result = await db.query(
+    `UPDATE bills AS b
+     SET status = $1
+     FROM items i
+     WHERE b.id = $2
+       AND b.item_id = i.id
+       AND i.recipient_id = $3
+     RETURNING b.*`,
+    [status, id, recipientId]
+  );
+
+  if (result.rows.length === 0) {
+    throw new Error('Bill not found');
+  }
+
+  const bill = billRowToBill(result.rows[0]);
+  await touchPlanForItem(bill.itemId);
+  return bill;
+}
+
 export async function getUpcomingBills(recipientId: number, startDate: Date, endDate: Date): Promise<Bill[]> {
   const result = await db.query(
     `SELECT b.* FROM bills b
@@ -732,6 +811,33 @@ export async function updateBill(id: number, userId: number, data: BillUpdateReq
   return bill;
 }
 
+export async function updateBillForRecipient(
+  id: number,
+  recipientId: number,
+  data: BillUpdateRequest
+): Promise<Bill> {
+  await ensureCollaboratorSchema();
+  const { statementDate, amount, dueDate, payUrl, status, assignedCollaboratorId } = data;
+  const sanitizedPayUrl = sanitizePayUrl(payUrl);
+  const result = await db.query(
+    `UPDATE bills AS b
+     SET statement_date = $1, amount = $2, due_date = $3, pay_url = $4, status = $5,
+         assigned_collaborator_id = $6
+     FROM items i
+     WHERE b.id = $7
+       AND b.item_id = i.id
+       AND i.recipient_id = $8
+     RETURNING b.*`,
+    [statementDate, amount, dueDate, sanitizedPayUrl, status, assignedCollaboratorId ?? null, id, recipientId]
+  );
+  if (result.rows.length === 0) {
+    throw new Error('Bill not found');
+  }
+  const bill = billRowToBill(result.rows[0]);
+  await touchPlanForItem(bill.itemId);
+  return bill;
+}
+
 export async function getBillById(id: number, userId: number): Promise<Bill | undefined> {
   const result = await db.query(
     `SELECT b.*
@@ -740,6 +846,17 @@ export async function getBillById(id: number, userId: number): Promise<Bill | un
      JOIN recipients r ON i.recipient_id = r.id
      WHERE b.id = $1 AND r.user_id = $2`,
     [id, userId]
+  );
+  return result.rows[0] ? billRowToBill(result.rows[0]) : undefined;
+}
+
+export async function getBillByIdForRecipient(id: number, recipientId: number): Promise<Bill | undefined> {
+  const result = await db.query(
+    `SELECT b.*
+     FROM bills b
+     JOIN items i ON b.item_id = i.id
+     WHERE b.id = $1 AND i.recipient_id = $2`,
+    [id, recipientId]
   );
   return result.rows[0] ? billRowToBill(result.rows[0]) : undefined;
 }

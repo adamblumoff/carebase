@@ -117,12 +117,15 @@ This ensures React Native rebuilds styles when the device appearance changes.
 - `handleSave` patches the API, updates local state with the response, and triggers a plan refresh via `emitPlanChanged()`.
 - Date/time picking runs through the shared `DateTimePickerModal` component (iOS modal + Android native picker).
 - `handleDelete` issues a `DELETE` and navigates back on success.
+- Owners get an “Assign collaborator” shortcut to hand the visit to a teammate; the modal sources names from `/api/collaborators`.
+- Contributors see a “Mark visit handled” button that stamps a prep note and returns to the plan.
 
 ### Bill Detail
 - Presents summary cards showing amount, status, and dates.
 - `Mark as paid` calls `/api/bills/:id/mark-paid`; `Delete` removes the bill.
 - If the bill has a payment URL, the primary CTA opens it via `Linking.openURL`.
 - Similar to appointments, API responses drive local state updates.
+- Owners can reassign the bill via the inline modal; contributors can still trigger “Mark as paid” without touching other fields.
 
 ---
 

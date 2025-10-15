@@ -51,12 +51,14 @@ Any `401` on subsequent requests clears `accessToken` to force re-authentication
 
 | Endpoint | Method | Triggered From | Payload | Response | Follow-up |
 |----------|--------|----------------|---------|----------|-----------|
-| `/api/appointments/:id` | `PATCH` | `AppointmentDetailScreen.handleSave()` | `{ startLocal, endLocal, summary, location?, prepNote? }` formatted via `formatForPayload` | Updated `Appointment` | Update local state, sync plan, close editing mode, show success alert. |
+| `/api/appointments/:id` | `PATCH` | Owners: `AppointmentDetailScreen.handleSave()`; Contributors: `handleMarkHandled()` | Owners send `{ startLocal, endLocal, summary, location?, prepNote?, assignedCollaboratorId? }`; contributors send `{ prepNote }` | Updated `Appointment` | Owners can edit and reassign; contributors can log prep-note confirmations and trigger plan refresh. |
 | `/api/appointments/:id` | `DELETE` | `AppointmentDetailScreen.handleDelete()` | none | Confirmation (empty body or updated plan) | Emit plan change and navigate back. |
 | `/api/appointments/:id` | `GET` | *(not currently called on mobile)* | — | — | Endpoint is defined for parity if future detail pages need fresh fetches. |
 
 **Data Flow Example:**  
 User edits time → `pendingStart`/`pendingSummary` updated locally → tap “Save” → request carries ISO strings → response replaces `currentAppointment` state → plan change emitted so overview refreshes.
+
+Owners can also send `assignedCollaboratorId` to hand off responsibility, while contributors are limited to sending a `prepNote` when marking the visit handled.
 
 ---
 
@@ -64,13 +66,16 @@ User edits time → `pendingStart`/`pendingSummary` updated locally → tap “S
 
 | Endpoint | Method | Triggered From | Payload | Response | Follow-up |
 |----------|--------|----------------|---------|----------|-----------|
-| `/api/bills/:id/mark-paid` | `POST` | `BillDetailScreen.handleMarkPaid()` | none | Updated `Bill` | Update local card, emit plan change, show success alert. |
+| `/api/bills/:id/mark-paid` | `POST` | `BillDetailScreen.handleMarkPaid()` (owner or contributor) | none | Updated `Bill` | Update local card, emit plan change, show success alert. |
 | `/api/bills/:id` | `DELETE` | `BillDetailScreen.handleDelete()` | none | Success/no content | Emit plan change, navigate back. |
-| `/api/bills/:id` | `PATCH` | *(not wired yet)* | — | — | Placeholder for future bill edits. |
+| `/api/bills/:id` | `PATCH` | Owners (assignment planned) | `{ amount?, statementDate?, dueDate?, payUrl?, status?, assignedCollaboratorId? }` | Updated `Bill` | Owners can adjust details or reassign responsibility. |
+| `/api/bills/:id` | `PATCH` | Contributors (status only) | `{ status }` | Updated `Bill` | Lets collaborators mark bills handled without touching other fields. |
 | `/api/bills/:id` | `GET` | *(not called)* | — | — | Available if detail fetch becomes necessary. |
 
 **Data Flow Example:**  
 Tap “Mark as paid” → POST marks status server-side → response returned → state updated (causing status pill + accent color change) → `emitPlanChanged()` ensures plan list reflects new bill state.
+
+Owners may PATCH to assign or edit amounts/dates; contributors stick to status-only updates (either through `PATCH` or `mark-paid`).
 
 ---
 

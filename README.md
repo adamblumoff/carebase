@@ -53,6 +53,8 @@ SESSION_SECRET=random-secret
 MOBILE_AUTH_SECRET=another-random-secret
 NODE_ENV=development
 BASE_URL=http://localhost:3000
+# Optional: link used in invite emails (defaults to BASE_URL)
+COLLABORATOR_INVITE_BASE_URL=http://localhost:3000
 
 # Mobile
 EXPO_PUBLIC_API_BASE_URL=http://localhost:3000
