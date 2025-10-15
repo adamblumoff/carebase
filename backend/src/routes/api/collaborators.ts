@@ -6,6 +6,7 @@ import {
   createCollaboratorInvite,
   listCollaborators,
   resolveRecipientContextForUser,
+  findCollaboratorByToken,
 } from '../../db/queries.js';
 import { sendCollaboratorInviteEmail } from '../../services/email.js';
 
@@ -111,6 +112,20 @@ router.post('/accept', async (req: Request, res: Response) => {
     const { token } = req.body as { token?: string };
     if (!token) {
       res.status(400).json({ error: 'Token is required' });
+      return;
+    }
+
+    const invite = await findCollaboratorByToken(token.trim());
+    if (!invite) {
+      res.status(404).json({ error: 'Invite not found' });
+      return;
+    }
+
+    const inviteEmail = invite.email.trim().toLowerCase();
+    const userEmail = user.email.trim().toLowerCase();
+
+    if (inviteEmail !== userEmail) {
+      res.status(403).json({ error: 'Invite belongs to a different email' });
       return;
     }
 

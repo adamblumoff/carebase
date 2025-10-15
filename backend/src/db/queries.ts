@@ -469,6 +469,15 @@ export async function hasCollaboratorInviteForEmail(email: string): Promise<bool
   return result.rows.length > 0;
 }
 
+export async function findCollaboratorByToken(token: string): Promise<Collaborator | undefined> {
+  await ensureCollaboratorSchema();
+  const result = await db.query(
+    `SELECT * FROM care_collaborators WHERE invite_token = $1 LIMIT 1`,
+    [token]
+  );
+  return result.rows[0] ? collaboratorRowToCollaborator(result.rows[0] as CollaboratorRow) : undefined;
+}
+
 async function touchPlanForItem(itemId: number): Promise<void> {
   await ensurePlanVersionColumns();
   const result = await db.query(
