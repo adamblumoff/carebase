@@ -6,6 +6,7 @@ import calendarRoutes from './calendar.js';
 import uploadRoutes from './upload.js';
 import settingsRoutes from './settings.js';
 import reviewRoutes from './review.js';
+import collaboratorsWebRoutes from './collaborators.js';
 
 import apiAuthRoutes from './api/auth.js';
 import apiPlanRoutes from './api/plan.js';
@@ -32,6 +33,7 @@ const routerLookup: Record<string, Router> = {
   '/upload': uploadRoutes,
   '/settings': settingsRoutes,
   '/review': reviewRoutes,
+  '/collaborators': collaboratorsWebRoutes,
   '/api/auth': apiAuthRoutes,
   '/api/plan': apiPlanRoutes,
   '/api/appointments': apiAppointmentsRoutes,

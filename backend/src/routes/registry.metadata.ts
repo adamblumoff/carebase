@@ -18,6 +18,7 @@ export const ROUTER_METADATA: RouterMeta[] = [
   { basePath: '/upload', scope: 'web', description: 'Web bill upload' },
   { basePath: '/settings', scope: 'web', description: 'Web settings' },
   { basePath: '/review', scope: 'web', description: 'Low-confidence review tools' },
+  { basePath: '/collaborators', scope: 'web', description: 'Collaborator invite landing pages' },
   { basePath: '/api/auth', scope: 'api', description: 'Mobile auth APIs' },
   { basePath: '/api/plan', scope: 'api', description: 'Plan data APIs' },
   { basePath: '/api/appointments', scope: 'api', description: 'Appointment CRUD APIs' },
