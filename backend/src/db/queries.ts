@@ -48,6 +48,59 @@ async function ensurePlanVersionColumns(): Promise<void> {
   await planVersionEnsurePromise;
 }
 
+let collaboratorSchemaEnsured = false;
+let collaboratorEnsurePromise: Promise<void> | null = null;
+
+async function ensureCollaboratorSchema(): Promise<void> {
+  if (collaboratorSchemaEnsured) {
+    return;
+  }
+
+  if (!collaboratorEnsurePromise) {
+    collaboratorEnsurePromise = (async () => {
+      try {
+        await db.query(`
+          CREATE TABLE IF NOT EXISTS care_collaborators (
+            id SERIAL PRIMARY KEY,
+            recipient_id INTEGER NOT NULL REFERENCES recipients(id) ON DELETE CASCADE,
+            user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            email VARCHAR(320) NOT NULL,
+            role VARCHAR(20) NOT NULL DEFAULT 'contributor' CHECK (role IN ('owner', 'contributor')),
+            status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted')),
+            invite_token VARCHAR(64) NOT NULL UNIQUE,
+            invited_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            invited_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            accepted_at TIMESTAMP
+          )
+        `);
+        await db.query(
+          `ALTER TABLE appointments
+             ADD COLUMN IF NOT EXISTS assigned_collaborator_id INTEGER REFERENCES care_collaborators(id) ON DELETE SET NULL`
+        );
+        await db.query(
+          `ALTER TABLE bills
+             ADD COLUMN IF NOT EXISTS assigned_collaborator_id INTEGER REFERENCES care_collaborators(id) ON DELETE SET NULL`
+        );
+        await db.query(
+          `CREATE INDEX IF NOT EXISTS idx_collaborators_recipient_id ON care_collaborators(recipient_id)`
+        );
+        await db.query(
+          `CREATE INDEX IF NOT EXISTS idx_collaborators_user_id ON care_collaborators(user_id)`
+        );
+        await db.query(
+          `CREATE UNIQUE INDEX IF NOT EXISTS idx_collaborators_recipient_email ON care_collaborators(recipient_id, email)`
+        );
+      } catch (error) {
+        console.error('Failed to ensure collaborator schema:', error);
+      } finally {
+        collaboratorSchemaEnsured = true;
+      }
+    })();
+  }
+
+  await collaboratorEnsurePromise;
+}
+
 // Helper to generate random tokens
 function generateToken(length: number = 32): string {
   return crypto.randomBytes(length).toString('hex');
@@ -250,6 +303,7 @@ function sanitizePayUrl(url?: string | null): string | null {
 // ========== COLLABORATORS ==========
 
 export async function ensureOwnerCollaborator(recipientId: number, user: User): Promise<Collaborator> {
+  await ensureCollaboratorSchema();
   const existing = await db.query(
     `SELECT * FROM care_collaborators WHERE recipient_id = $1 AND user_id = $2 LIMIT 1`,
     [recipientId, user.id]
@@ -276,6 +330,7 @@ export async function createCollaboratorInvite(
   email: string,
   role: CollaboratorRole = 'contributor'
 ): Promise<Collaborator> {
+  await ensureCollaboratorSchema();
   const normalizedEmail = email.trim().toLowerCase();
   const existing = await db.query(
     `SELECT * FROM care_collaborators WHERE recipient_id = $1 AND email = $2 LIMIT 1`,
@@ -297,6 +352,7 @@ export async function createCollaboratorInvite(
 }
 
 export async function listCollaborators(recipientId: number): Promise<Collaborator[]> {
+  await ensureCollaboratorSchema();
   const result = await db.query(
     `SELECT * FROM care_collaborators WHERE recipient_id = $1 ORDER BY role DESC, invited_at ASC`,
     [recipientId]
@@ -305,6 +361,7 @@ export async function listCollaborators(recipientId: number): Promise<Collaborat
 }
 
 export async function acceptCollaboratorInvite(token: string, user: User): Promise<Collaborator | null> {
+  await ensureCollaboratorSchema();
   const normalizedToken = token.trim();
   const result = await db.query(
     `UPDATE care_collaborators
@@ -322,6 +379,7 @@ export async function acceptCollaboratorInvite(token: string, user: User): Promi
 }
 
 export async function findRecipientForCollaborator(userId: number): Promise<Recipient | undefined> {
+  await ensureCollaboratorSchema();
   const result = await db.query(
     `SELECT r.*
      FROM care_collaborators c
@@ -336,6 +394,7 @@ export async function findRecipientForCollaborator(userId: number): Promise<Reci
 }
 
 export async function findCollaboratorById(id: number): Promise<Collaborator | undefined> {
+  await ensureCollaboratorSchema();
   const result = await db.query('SELECT * FROM care_collaborators WHERE id = $1', [id]);
   return result.rows[0] ? collaboratorRowToCollaborator(result.rows[0] as CollaboratorRow) : undefined;
 }
@@ -344,6 +403,7 @@ export async function findCollaboratorForRecipient(
   recipientId: number,
   collaboratorId: number
 ): Promise<Collaborator | undefined> {
+  await ensureCollaboratorSchema();
   const result = await db.query(
     `SELECT * FROM care_collaborators WHERE recipient_id = $1 AND id = $2 AND status = 'accepted'`,
     [recipientId, collaboratorId]
@@ -542,6 +602,7 @@ export async function getUpcomingAppointments(recipientId: number, startDate: Da
 }
 
 export async function updateAppointment(id: number, userId: number, data: AppointmentUpdateRequest): Promise<Appointment> {
+  await ensureCollaboratorSchema();
   const { startLocal, endLocal, location, prepNote, summary, assignedCollaboratorId } = data;
   const result = await db.query(
     `UPDATE appointments AS a
@@ -648,6 +709,7 @@ export async function getUpcomingBills(recipientId: number, startDate: Date, end
 }
 
 export async function updateBill(id: number, userId: number, data: BillUpdateRequest): Promise<Bill> {
+  await ensureCollaboratorSchema();
   const { statementDate, amount, dueDate, payUrl, status, assignedCollaboratorId } = data;
   const sanitizedPayUrl = sanitizePayUrl(payUrl);
   const result = await db.query(
