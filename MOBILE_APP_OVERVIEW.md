@@ -95,6 +95,7 @@ This ensures React Native rebuilds styles when the device appearance changes.
 - Bootstraps from the last cached payload in AsyncStorage (`plan_cache_v1`) so the screen can render instantly offline.
 - Fetches fresh data with up to three retries (exponential backoff) and stores success responses back into the cache.
 - Displays appointments and bills with sections, empty states, and status pills.
+- Shows collaborator assignment badges when `assignedCollaboratorId` is present, resolving emails from the plan payload’s `collaborators` array.
 - Pull-to-refresh triggers a silent retry that surfaces a toast on success/failure.
 - **Realtime Integration**:
   - `ensureRealtimeConnected()` from `utils/realtime` creates a Socket.IO client pointed at `API_BASE_URL`.
@@ -139,6 +140,7 @@ This ensures React Native rebuilds styles when the device appearance changes.
 
 ### Settings Screen
 - Static account information plus app preference placeholders.
+- Care team section fetches `/api/collaborators`, lists accepted/pending teammates, and lets owners send invite emails inline.
 - Uses the same card background (`palette.canvas`) for all tiles (see recent fix aligning colors).
 - Logout button simply replaces the stack with `Login`—backend invalidation still TODO.
 - The API base URL read from `config.ts` helps confirm environment wiring at runtime.

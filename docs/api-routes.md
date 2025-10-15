@@ -1,6 +1,6 @@
 # API Route Registry
 
-Generated 2025-10-14T21:56:49.918Z
+Generated 2025-10-15T20:02:58.821Z
 
 ## Routers
 
@@ -18,6 +18,7 @@ Generated 2025-10-14T21:56:49.918Z
 | /api/appointments | api | Appointment CRUD APIs |
 | /api/bills | api | Bill CRUD APIs |
 | /api/upload | api | Mobile photo upload API |
+| /api/collaborators | api | Care team collaborator APIs |
 
 ## Endpoints
 
@@ -37,3 +38,6 @@ Generated 2025-10-14T21:56:49.918Z
 | DELETE | /api/bills/:id | Delete bill |
 | POST | /api/bills/:id/mark-paid | Mark bill as paid |
 | POST | /api/upload/photo | Upload bill photo for OCR + ingestion |
+| GET | /api/collaborators | List collaborators for the active recipient |
+| POST | /api/collaborators | Invite a collaborator by email |
+| POST | /api/collaborators/accept | Accept a collaborator invite |

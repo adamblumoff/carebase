@@ -1,5 +1,11 @@
 import type { Request, Response } from 'express';
-import { getAppointmentById, updateAppointment, deleteAppointment } from '../../db/queries.js';
+import {
+  getAppointmentById,
+  updateAppointment,
+  deleteAppointment,
+  findRecipientsByUserId,
+  findCollaboratorForRecipient,
+} from '../../db/queries.js';
 import type { AppointmentUpdateRequest, User } from '@carebase/shared';
 
 function formatTimestampForDb(date: Date): string {
@@ -41,7 +47,7 @@ export async function patchAppointment(req: Request, res: Response): Promise<voi
     }
 
     const { id } = req.params;
-    const { summary, startLocal, endLocal, location, prepNote } = req.body;
+    const { summary, startLocal, endLocal, location, prepNote, assignedCollaboratorId } = req.body;
 
     const appointmentId = Number.parseInt(id, 10);
     const existing = await getAppointmentById(appointmentId, user.id);
@@ -57,12 +63,39 @@ export async function patchAppointment(req: Request, res: Response): Promise<voi
     if (location !== undefined) updates.location = location;
     if (prepNote !== undefined) updates.prepNote = prepNote;
 
+    let nextAssignedCollaboratorId = existing.assignedCollaboratorId;
+    if (assignedCollaboratorId !== undefined) {
+      const ownerRecipients = await findRecipientsByUserId(user.id);
+      const ownerRecipient = ownerRecipients[0];
+      if (!ownerRecipient) {
+        res.status(403).json({ error: 'Only the owner can assign collaborators' });
+        return;
+      }
+
+      if (assignedCollaboratorId === null || assignedCollaboratorId === '') {
+        nextAssignedCollaboratorId = null;
+      } else {
+        const collaboratorId = Number.parseInt(String(assignedCollaboratorId), 10);
+        if (Number.isNaN(collaboratorId)) {
+          res.status(400).json({ error: 'Invalid collaborator id' });
+          return;
+        }
+        const collaborator = await findCollaboratorForRecipient(ownerRecipient.id, collaboratorId);
+        if (!collaborator) {
+          res.status(404).json({ error: 'Collaborator not found' });
+          return;
+        }
+        nextAssignedCollaboratorId = collaborator.id;
+      }
+    }
+
     const updated = await updateAppointment(appointmentId, user.id, {
       summary: updates.summary ?? existing.summary,
       startLocal: updates.startLocal ?? formatTimestampForDb(existing.startLocal),
       endLocal: updates.endLocal ?? formatTimestampForDb(existing.endLocal),
       location: updates.location ?? existing.location ?? undefined,
       prepNote: updates.prepNote ?? existing.prepNote ?? undefined,
+      assignedCollaboratorId: nextAssignedCollaboratorId ?? null,
     });
 
     res.json(updated);

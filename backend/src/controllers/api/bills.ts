@@ -1,5 +1,12 @@
 import type { Request, Response } from 'express';
-import { getBillById, updateBill, deleteBill, updateBillStatus } from '../../db/queries.js';
+import {
+  getBillById,
+  updateBill,
+  deleteBill,
+  updateBillStatus,
+  findCollaboratorForRecipient,
+  findRecipientsByUserId,
+} from '../../db/queries.js';
 import type { BillStatus, BillUpdateData, User } from '@carebase/shared';
 
 export async function getBill(req: Request, res: Response): Promise<void> {
@@ -34,7 +41,7 @@ export async function patchBill(req: Request, res: Response): Promise<void> {
     }
 
     const { id } = req.params;
-    const { amount, dueDate, statementDate, payUrl, status } = req.body;
+    const { amount, dueDate, statementDate, payUrl, status, assignedCollaboratorId } = req.body;
 
     const updateData: BillUpdateData = {};
     if (amount !== undefined && amount !== '') updateData.amount = Number.parseFloat(amount);
@@ -42,6 +49,31 @@ export async function patchBill(req: Request, res: Response): Promise<void> {
     if (statementDate !== undefined) updateData.statementDate = statementDate;
     if (payUrl !== undefined) updateData.payUrl = payUrl;
     if (status !== undefined) updateData.status = status as BillStatus;
+
+    if (assignedCollaboratorId !== undefined) {
+      const ownerRecipients = await findRecipientsByUserId(user.id);
+      const ownerRecipient = ownerRecipients[0];
+      if (!ownerRecipient) {
+        res.status(403).json({ error: 'Only the owner can assign collaborators' });
+        return;
+      }
+
+      if (assignedCollaboratorId === null || assignedCollaboratorId === '') {
+        updateData.assignedCollaboratorId = null;
+      } else {
+        const collaboratorId = Number.parseInt(String(assignedCollaboratorId), 10);
+        if (Number.isNaN(collaboratorId)) {
+          res.status(400).json({ error: 'Invalid collaborator id' });
+          return;
+        }
+        const collaborator = await findCollaboratorForRecipient(ownerRecipient.id, collaboratorId);
+        if (!collaborator) {
+          res.status(404).json({ error: 'Collaborator not found' });
+          return;
+        }
+        updateData.assignedCollaboratorId = collaborator.id;
+      }
+    }
 
     const updated = await updateBill(Number.parseInt(id, 10), user.id, updateData);
 

@@ -2,7 +2,7 @@
  * Settings Screen
  * Streamlined account and app preferences UI
  */
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ScrollView,
   View,
@@ -10,6 +10,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -18,6 +19,7 @@ import { API_BASE_URL } from '../config';
 import { useTheme, spacing, radius, type Palette, type Shadow } from '../theme';
 import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../ui/ToastProvider';
+import { fetchCollaborators, inviteCollaborator, type CollaboratorResponse } from '../api/collaborators';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
@@ -27,9 +29,77 @@ export default function SettingsScreen({ navigation }: Props) {
   const auth = useAuth();
   const toast = useToast();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [collaborators, setCollaborators] = useState<CollaboratorResponse[]>([]);
+  const [collaboratorsLoading, setCollaboratorsLoading] = useState(true);
+  const [collaboratorError, setCollaboratorError] = useState<string | null>(null);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [invitePending, setInvitePending] = useState(false);
+  const [canInvite, setCanInvite] = useState(true);
 
   const email = auth.user?.email;
   const forwardingAddress = auth.user?.forwardingAddress ?? 'Add your forwarding address';
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      try {
+        setCollaboratorsLoading(true);
+        const data = await fetchCollaborators();
+        if (!active) return;
+        setCollaborators(data);
+        setCollaboratorError(null);
+        setCanInvite(true);
+      } catch (error) {
+        if (!active) return;
+        const status = (error as any)?.response?.status;
+        if (status === 403) {
+          setCanInvite(false);
+          setCollaboratorError('Only the plan owner can manage collaborators.');
+        } else {
+          setCollaboratorError('Unable to load collaborators.');
+        }
+      } finally {
+        if (!active) return;
+        setCollaboratorsLoading(false);
+      }
+    };
+
+    load();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleInviteCollaborator = async () => {
+    if (!inviteEmail.trim()) {
+      toast.showToast('Enter an email address');
+      return;
+    }
+    setInvitePending(true);
+    try {
+      const collaborator = await inviteCollaborator(inviteEmail.trim());
+      setCollaborators((prev) => {
+        const filtered = prev.filter((entry) => entry.id !== collaborator.id);
+        return [...filtered, collaborator].sort((a, b) => a.email.localeCompare(b.email));
+      });
+      setInviteEmail('');
+      toast.showToast('Invite sent');
+    } catch (error) {
+      const status = (error as any)?.response?.status;
+      if (status === 403) {
+        setCanInvite(false);
+        setCollaboratorError('Only the plan owner can invite collaborators.');
+        toast.showToast('Only the owner can invite collaborators');
+      } else if (status === 400) {
+        toast.showToast('Invalid email');
+      } else {
+        console.error('Invite collaborator error:', error);
+        toast.showToast('Failed to send invite');
+      }
+    } finally {
+      setInvitePending(false);
+    }
+  };
 
   const handleLogout = () => {
     if (loggingOut) return;
@@ -88,6 +158,56 @@ export default function SettingsScreen({ navigation }: Props) {
             <Text style={styles.chevronText}>Manage email rules</Text>
             <Text style={styles.chevronIcon}>›</Text>
           </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Care team</Text>
+          <View style={styles.card}>
+            {collaboratorsLoading ? (
+              <Text style={styles.cardHint}>Loading collaborators…</Text>
+            ) : collaborators.length === 0 ? (
+              <Text style={styles.cardHint}>No collaborators yet.</Text>
+            ) : (
+              collaborators
+                .sort((a, b) => a.email.localeCompare(b.email))
+                .map((collaborator) => (
+                  <View key={collaborator.id} style={styles.collaboratorRow}>
+                    <View style={styles.collaboratorInfo}>
+                      <Text style={styles.cardValue}>{collaborator.email}</Text>
+                      <Text style={styles.collaboratorMeta}>
+                        {collaborator.role === 'owner' ? 'Owner' : 'Contributor'} ·{' '}
+                        {collaborator.status === 'accepted' ? 'Accepted' : 'Pending'}
+                      </Text>
+                    </View>
+                  </View>
+                ))
+            )}
+          </View>
+          {collaboratorError ? (
+            <Text style={styles.sectionHelper}>{collaboratorError}</Text>
+          ) : null}
+          {canInvite ? (
+            <View style={styles.inviteRow}>
+              <TextInput
+                style={styles.inviteInput}
+                placeholder="name@example.com"
+                placeholderTextColor={palette.textMuted}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={inviteEmail}
+                onChangeText={setInviteEmail}
+              />
+              <TouchableOpacity
+                style={[styles.inviteButton, invitePending && styles.inviteButtonDisabled]}
+                onPress={handleInviteCollaborator}
+                disabled={invitePending}
+              >
+                <Text style={styles.inviteButtonText}>
+                  {invitePending ? 'Sending…' : 'Invite'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.section}>
@@ -207,6 +327,21 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
       marginTop: spacing(1.5),
       lineHeight: 20,
     },
+    collaboratorRow: {
+      paddingVertical: spacing(1),
+      borderBottomWidth: 1,
+      borderBottomColor: palette.border,
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    collaboratorInfo: {
+      flex: 1,
+      gap: spacing(0.5),
+    },
+    collaboratorMeta: {
+      fontSize: 12,
+      color: palette.textMuted,
+    },
     chevronRow: {
       backgroundColor: palette.canvas,
       borderRadius: radius.md,
@@ -232,6 +367,11 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
       fontSize: 22,
       color: palette.textMuted,
     },
+    sectionHelper: {
+      marginTop: spacing(1),
+      fontSize: 13,
+      color: palette.textMuted,
+    },
     logoutButton: {
       marginTop: spacing(4),
       borderRadius: radius.sm,
@@ -247,5 +387,34 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
       color: palette.danger,
       fontSize: 15,
       fontWeight: '700',
+    },
+    inviteRow: {
+      marginTop: spacing(2),
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing(1),
+    },
+    inviteInput: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: palette.border,
+      borderRadius: radius.sm,
+      paddingHorizontal: spacing(1.5),
+      paddingVertical: spacing(1),
+      color: palette.textPrimary,
+      backgroundColor: palette.canvas,
+    },
+    inviteButton: {
+      paddingHorizontal: spacing(2),
+      paddingVertical: spacing(1),
+      backgroundColor: palette.primary,
+      borderRadius: radius.sm,
+    },
+    inviteButtonDisabled: {
+      opacity: 0.5,
+    },
+    inviteButtonText: {
+      color: '#fff',
+      fontWeight: '600',
     },
   });

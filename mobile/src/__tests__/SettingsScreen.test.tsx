@@ -6,6 +6,22 @@ import { ThemeProvider } from '../theme';
 import { AuthContext } from '../auth/AuthContext';
 import { ToastProvider } from '../ui/ToastProvider';
 
+jest.mock('../api/collaborators', () => ({
+  fetchCollaborators: jest.fn().mockResolvedValue([]),
+  inviteCollaborator: jest.fn().mockResolvedValue({
+    id: 1,
+    recipientId: 1,
+    userId: null,
+    email: 'new@test.com',
+    role: 'contributor',
+    status: 'pending',
+    inviteToken: '',
+    invitedBy: 1,
+    invitedAt: new Date().toISOString(),
+    acceptedAt: null,
+  }),
+}));
+
 jest.useFakeTimers();
 
 const renderWithProviders = (ui: React.ReactElement, authOverrides = {}) => {

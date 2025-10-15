@@ -49,4 +49,11 @@ export const API_ENDPOINTS = {
 
   // Upload
   uploadPhoto: '/api/upload/photo',
+
+  // Collaborators
+  collaborators: {
+    list: '/api/collaborators',
+    invite: '/api/collaborators',
+    accept: '/api/collaborators/accept',
+  },
 };

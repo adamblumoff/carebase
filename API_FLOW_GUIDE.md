@@ -39,11 +39,11 @@ Any `401` on subsequent requests clears `accessToken` to force re-authentication
 
 | Endpoint | Method | Triggered From | Payload | Response | Follow-up |
 |----------|--------|----------------|---------|----------|-----------|
-| `/api/plan` | `GET` | `PlanScreen.fetchPlan()` on mount, refresh, realtime events, and polling | none | `{ appointments: Appointment[], bills: Bill[], dateRange, planVersion, ... }` | Updates component state (`planData`, `loading`, `refreshing`). |
+| `/api/plan` | `GET` | `PlanScreen.fetchPlan()` on mount, refresh, realtime events, and polling | none | `{ appointments, bills, dateRange, planVersion, collaborators }` with each item exposing `assignedCollaboratorId` | Updates component state (`planData`, `loading`, `refreshing`) and drives collaborator lookups for assignment badges. |
 | `/api/plan/version` | `GET` | Polling inside `useFocusEffect` every 15s when realtime disconnected | none | `{ planVersion: number }` | If version > cached value, trigger silent `fetchPlan`. |
 
 **Realtime Flow:**  
-`ensureRealtimeConnected()` creates a Socket.IO client pointing to `API_BASE_URL`. When the backend emits `plan:update`, `emitPlanChanged()` fires, causing `PlanScreen` to refetch (silent). This keeps the UI synced without manual refresh.
+`ensureRealtimeConnected()` creates a Socket.IO client pointing to `API_BASE_URL`. When the backend emits `plan:update`, `emitPlanChanged()` fires, causing `PlanScreen` to refetch (silent). This keeps the UI synced without manual refresh and delivers the collaborator roster so the client can resolve `assignedCollaboratorId` into display names.
 
 ---
 
@@ -79,6 +79,14 @@ Tap “Mark as paid” → POST marks status server-side → response returned �
 | Endpoint | Method | Triggered From | Payload | Response | Follow-up |
 |----------|--------|----------------|---------|----------|-----------|
 | `/api/upload/photo` | `POST` | `CameraScreen.handleUpload()` | `FormData` with `{ photo: { uri, name, type } }` | `{ classification: { detectedType, confidence }, item, bill, extracted, overdue, ocr }` | Display alert summarizing extraction, emit plan change, navigate back. |
+
+### Collaborator Endpoints (MVP)
+
+| Endpoint | Method | Triggered From | Payload | Response | Follow-up |
+|----------|--------|----------------|---------|----------|-----------|
+| `/api/collaborators` | `GET` | `SettingsScreen` effect on mount | none | `{ collaborators: Collaborator[] }` | Populate care team section. Tokens returned only for pending invites when caller is owner. |
+| `/api/collaborators` | `POST` | `SettingsScreen.handleInviteCollaborator()` (owner only) | `{ email, role? }` | `{ collaborator }` | Append to list and show toast. Email delivery TODO. |
+| `/api/collaborators/accept` | `POST` | Future invite acceptance flow | `{ token }` | `{ collaborator }` | Links signed-in user to the invite, unlocking plan access. |
 
 **Data Flow:**  
 Camera/library returns `imageUri` → `FormData` appended → axios POST with `multipart/form-data` header → backend returns classification details → UI surfaces details and triggers plan refresh.

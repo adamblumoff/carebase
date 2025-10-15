@@ -23,6 +23,7 @@ export const ROUTER_METADATA: RouterMeta[] = [
   { basePath: '/api/appointments', scope: 'api', description: 'Appointment CRUD APIs' },
   { basePath: '/api/bills', scope: 'api', description: 'Bill CRUD APIs' },
   { basePath: '/api/upload', scope: 'api', description: 'Mobile photo upload API' },
+  { basePath: '/api/collaborators', scope: 'api', description: 'Care team collaborator APIs' },
 ];
 
 export const API_ROUTE_METADATA: RouteMeta[] = [
@@ -40,4 +41,7 @@ export const API_ROUTE_METADATA: RouteMeta[] = [
   { method: 'DELETE', path: '/api/bills/:id', description: 'Delete bill' },
   { method: 'POST', path: '/api/bills/:id/mark-paid', description: 'Mark bill as paid' },
   { method: 'POST', path: '/api/upload/photo', description: 'Upload bill photo for OCR + ingestion' },
+  { method: 'GET', path: '/api/collaborators', description: 'List collaborators for the active recipient' },
+  { method: 'POST', path: '/api/collaborators', description: 'Invite a collaborator by email' },
+  { method: 'POST', path: '/api/collaborators/accept', description: 'Accept a collaborator invite' },
 ];

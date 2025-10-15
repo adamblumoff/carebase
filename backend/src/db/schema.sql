@@ -47,6 +47,20 @@ CREATE TABLE IF NOT EXISTS items (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Care collaborators table
+CREATE TABLE IF NOT EXISTS care_collaborators (
+  id SERIAL PRIMARY KEY,
+  recipient_id INTEGER NOT NULL REFERENCES recipients(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  email VARCHAR(320) NOT NULL,
+  role VARCHAR(20) NOT NULL DEFAULT 'contributor' CHECK (role IN ('owner', 'contributor')),
+  status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted')),
+  invite_token VARCHAR(64) NOT NULL UNIQUE,
+  invited_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  invited_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  accepted_at TIMESTAMP
+);
+
 -- Appointments table
 CREATE TABLE IF NOT EXISTS appointments (
   id SERIAL PRIMARY KEY,
@@ -57,6 +71,7 @@ CREATE TABLE IF NOT EXISTS appointments (
   prep_note TEXT,
   summary VARCHAR(500) NOT NULL,
   ics_token VARCHAR(64) NOT NULL UNIQUE,
+  assigned_collaborator_id INTEGER REFERENCES care_collaborators(id) ON DELETE SET NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -70,7 +85,21 @@ CREATE TABLE IF NOT EXISTS bills (
   pay_url TEXT,
   status VARCHAR(20) NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'overdue', 'paid')),
   task_key VARCHAR(64),
+  assigned_collaborator_id INTEGER REFERENCES care_collaborators(id) ON DELETE SET NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Care collaborators table
+CREATE TABLE IF NOT EXISTS care_collaborators (
+  id SERIAL PRIMARY KEY,
+  recipient_id INTEGER NOT NULL REFERENCES recipients(id) ON DELETE CASCADE,
+  email VARCHAR(320) NOT NULL,
+  role VARCHAR(20) NOT NULL DEFAULT 'contributor' CHECK (role IN ('owner', 'contributor')),
+  status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted')),
+  invite_token VARCHAR(64) NOT NULL UNIQUE,
+  invited_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  invited_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  accepted_at TIMESTAMP
 );
 
 -- Audit table (classification and parsing decisions)
@@ -89,4 +118,7 @@ CREATE INDEX IF NOT EXISTS idx_items_recipient_id ON items(recipient_id);
 CREATE INDEX IF NOT EXISTS idx_items_source_id ON items(source_id);
 CREATE INDEX IF NOT EXISTS idx_appointments_start_local ON appointments(start_local);
 CREATE INDEX IF NOT EXISTS idx_bills_due_date ON bills(due_date);
+CREATE INDEX IF NOT EXISTS idx_collaborators_recipient_id ON care_collaborators(recipient_id);
+CREATE INDEX IF NOT EXISTS idx_collaborators_user_id ON care_collaborators(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_collaborators_recipient_email ON care_collaborators(recipient_id, email);
 CREATE INDEX IF NOT EXISTS idx_audit_item_id ON audit(item_id);

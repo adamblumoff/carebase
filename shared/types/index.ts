@@ -66,6 +66,7 @@ export interface Appointment {
   summary: string;
   icsToken: string;
   createdAt: Date;
+  assignedCollaboratorId: number | null;
 }
 
 // ========== BILLS ==========
@@ -82,6 +83,7 @@ export interface Bill {
   status: BillStatus;
   taskKey: string;
   createdAt: Date;
+  assignedCollaboratorId: number | null;
 }
 
 // ========== AUDIT ==========
@@ -110,6 +112,7 @@ export interface AppointmentUpdateRequest {
   location?: string;
   prepNote?: string;
   summary?: string;
+  assignedCollaboratorId?: number | null;
 }
 
 export interface BillCreateRequest {
@@ -126,6 +129,7 @@ export interface BillUpdateRequest {
   dueDate?: string;
   payUrl?: string;
   status?: BillStatus;
+  assignedCollaboratorId?: number | null;
 }
 
 export type BillUpdateData = BillUpdateRequest;
@@ -159,6 +163,45 @@ export interface ReviewListResponse {
     item: Item;
     source: Source;
   }>;
+}
+
+// ========== COLLABORATORS ==========
+
+export type CollaboratorRole = 'owner' | 'contributor';
+export type CollaboratorStatus = 'pending' | 'accepted';
+
+export interface Collaborator {
+  id: number;
+  recipientId: number;
+  email: string;
+  userId: number | null;
+  role: CollaboratorRole;
+  status: CollaboratorStatus;
+  inviteToken: string;
+  invitedBy: number;
+  invitedAt: Date;
+  acceptedAt: Date | null;
+}
+
+export interface CollaboratorInviteRequest {
+  email: string;
+  role?: CollaboratorRole;
+}
+
+export interface CollaboratorInviteResponse {
+  collaborator: Collaborator;
+}
+
+export interface CollaboratorListResponse {
+  collaborators: Collaborator[];
+}
+
+export interface CollaboratorAcceptRequest {
+  token: string;
+}
+
+export interface CollaboratorAssignRequest {
+  collaboratorId: number | null;
 }
 
 export interface UploadPhotoResponse {

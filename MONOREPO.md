@@ -74,6 +74,7 @@ The backend currently runs as a web app with EJS views. Features:
 - **Database**: PostgreSQL with users, recipients, appointments, bills
 - **Jobs**: Friday digest cron job
 - **File Upload**: Multer for photo uploads with OCR
+- **Collaborators (MVP)**: Owners can invite contributors to view the shared plan and show assignment responsibility in the mobile app
 
 ### Routes
 - Route registration table: see `backend/src/routes/registry.ts` for every mounted router and API endpoint summary.

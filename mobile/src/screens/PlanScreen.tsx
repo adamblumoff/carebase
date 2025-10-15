@@ -29,6 +29,19 @@ import { useToast } from '../ui/ToastProvider';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Plan'>;
 
+type PlanCollaborator = {
+  id: number;
+  recipientId: number;
+  userId: number | null;
+  email: string;
+  role: 'owner' | 'contributor';
+  status: 'pending' | 'accepted';
+  inviteToken: string;
+  invitedBy: number;
+  invitedAt: string;
+  acceptedAt: string | null;
+};
+
 interface PlanData {
   appointments: Appointment[];
   bills: Bill[];
@@ -38,6 +51,7 @@ interface PlanData {
   };
   planVersion: number;
   planUpdatedAt?: string | null;
+  collaborators: PlanCollaborator[];
 }
 
 const MAX_FETCH_ATTEMPTS = 3;
@@ -118,7 +132,13 @@ const AnimatedStatusBadge: React.FC<{ status: string }> = ({ status }) => {
         for (let attempt = 1; attempt <= MAX_FETCH_ATTEMPTS; attempt += 1) {
           try {
             const response = await apiClient.get(API_ENDPOINTS.getPlan);
-            const data: PlanData = response.data;
+            const collaborators = Array.isArray(response.data?.collaborators)
+              ? (response.data.collaborators as PlanCollaborator[])
+              : [];
+            const data: PlanData = {
+              ...response.data,
+              collaborators,
+            };
             setPlanData(data);
             latestVersionRef.current = typeof data.planVersion === 'number' ? data.planVersion : 0;
             await AsyncStorage.setItem(PLAN_CACHE_KEY, JSON.stringify(data));
@@ -163,7 +183,13 @@ const AnimatedStatusBadge: React.FC<{ status: string }> = ({ status }) => {
       try {
         const cached = await AsyncStorage.getItem(PLAN_CACHE_KEY);
         if (cached && !cancelled) {
-          const parsed: PlanData = JSON.parse(cached);
+          const parsedRaw = JSON.parse(cached);
+          const parsed: PlanData = {
+            ...parsedRaw,
+            collaborators: Array.isArray(parsedRaw?.collaborators)
+              ? (parsedRaw.collaborators as PlanCollaborator[])
+              : [],
+          };
           cacheLoadedRef.current = true;
           setPlanData(parsed);
           latestVersionRef.current = typeof parsed.planVersion === 'number' ? parsed.planVersion : 0;
@@ -258,6 +284,17 @@ const formatTime = (dateString: string) => {
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+
+  const getCollaboratorName = useCallback(
+    (collaboratorId: number | null) => {
+      if (!collaboratorId || !planData?.collaborators) {
+        return null;
+      }
+      const match = planData.collaborators.find((collaborator) => collaborator.id === collaboratorId);
+      return match?.email ?? null;
+    },
+    [planData?.collaborators]
+  );
 
   const appointmentCount = planData?.appointments.length ?? 0;
   const billsDue = planData?.bills.filter((bill) => bill.status !== 'paid').length ?? 0;
@@ -362,6 +399,11 @@ const formatTime = (dateString: string) => {
                   {appt.prepNote ? (
                     <Text style={styles.itemNote}>{appt.prepNote}</Text>
                   ) : null}
+                  {getCollaboratorName(appt.assignedCollaboratorId) ? (
+                    <Text style={styles.assignmentText}>
+                      Assigned to {getCollaboratorName(appt.assignedCollaboratorId)}
+                    </Text>
+                  ) : null}
                 </View>
               </Pressable>
             ))
@@ -404,6 +446,11 @@ const formatTime = (dateString: string) => {
                   <Text style={styles.itemMeta}>
                     {bill.dueDate ? `Due ${formatDate(bill.dueDate)}` : 'No due date'}
                   </Text>
+                  {getCollaboratorName(bill.assignedCollaboratorId) ? (
+                    <Text style={styles.assignmentText}>
+                      Assigned to {getCollaboratorName(bill.assignedCollaboratorId)}
+                    </Text>
+                  ) : null}
                   <AnimatedStatusBadge status={bill.status} />
                 </View>
               </Pressable>
@@ -618,6 +665,12 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
       marginTop: spacing(1),
       fontSize: 12,
       color: palette.primary,
+    },
+    assignmentText: {
+      marginTop: spacing(0.75),
+      fontSize: 12,
+      color: palette.textMuted,
+      fontStyle: 'italic',
     },
     emptyCard: {
       backgroundColor: palette.surface,

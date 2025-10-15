@@ -13,7 +13,10 @@ import type {
   AppointmentCreateRequest,
   AppointmentUpdateRequest,
   BillCreateRequest,
-  BillUpdateRequest
+  BillUpdateRequest,
+  Collaborator,
+  CollaboratorRole,
+  CollaboratorStatus
 } from '@carebase/shared';
 import { getRealtimeEmitter } from '../services/realtime.js';
 
@@ -105,6 +108,7 @@ interface AppointmentRow {
   prep_note: string | null;
   summary: string;
   ics_token: string;
+  assigned_collaborator_id: number | null;
   created_at: Date;
 }
 
@@ -117,7 +121,21 @@ interface BillRow {
   pay_url: string | null;
   status: BillStatus;
   task_key: string;
+  assigned_collaborator_id: number | null;
   created_at: Date;
+}
+
+interface CollaboratorRow {
+  id: number;
+  recipient_id: number;
+  user_id: number | null;
+  email: string;
+  role: CollaboratorRole;
+  status: CollaboratorStatus;
+  invite_token: string;
+  invited_by: number;
+  invited_at: Date;
+  accepted_at: Date | null;
 }
 
 // Converters from DB rows to shared types
@@ -178,6 +196,7 @@ function appointmentRowToAppointment(row: AppointmentRow): Appointment {
     prepNote: row.prep_note,
     summary: row.summary,
     icsToken: row.ics_token,
+    assignedCollaboratorId: row.assigned_collaborator_id ?? null,
     createdAt: row.created_at
   };
 }
@@ -192,7 +211,23 @@ function billRowToBill(row: BillRow): Bill {
     payUrl: row.pay_url,
     status: row.status,
     taskKey: row.task_key,
+    assignedCollaboratorId: row.assigned_collaborator_id ?? null,
     createdAt: row.created_at
+  };
+}
+
+function collaboratorRowToCollaborator(row: CollaboratorRow): Collaborator {
+  return {
+    id: row.id,
+    recipientId: row.recipient_id,
+    userId: row.user_id,
+    email: row.email,
+    role: row.role,
+    status: row.status,
+    inviteToken: row.invite_token,
+    invitedBy: row.invited_by,
+    invitedAt: row.invited_at,
+    acceptedAt: row.accepted_at
   };
 }
 
@@ -210,6 +245,110 @@ function sanitizePayUrl(url?: string | null): string | null {
   } catch {
     return null;
   }
+}
+
+// ========== COLLABORATORS ==========
+
+export async function ensureOwnerCollaborator(recipientId: number, user: User): Promise<Collaborator> {
+  const existing = await db.query(
+    `SELECT * FROM care_collaborators WHERE recipient_id = $1 AND user_id = $2 LIMIT 1`,
+    [recipientId, user.id]
+  );
+
+  if (existing.rows[0]) {
+    return collaboratorRowToCollaborator(existing.rows[0] as CollaboratorRow);
+  }
+
+  const token = generateToken(16);
+  const result = await db.query(
+    `INSERT INTO care_collaborators (recipient_id, user_id, email, role, status, invite_token, invited_by, invited_at, accepted_at)
+     VALUES ($1, $2, $3, 'owner', 'accepted', $4, $2, NOW(), NOW())
+     RETURNING *`,
+    [recipientId, user.id, user.email, token]
+  );
+
+  return collaboratorRowToCollaborator(result.rows[0] as CollaboratorRow);
+}
+
+export async function createCollaboratorInvite(
+  recipientId: number,
+  invitedByUserId: number,
+  email: string,
+  role: CollaboratorRole = 'contributor'
+): Promise<Collaborator> {
+  const normalizedEmail = email.trim().toLowerCase();
+  const existing = await db.query(
+    `SELECT * FROM care_collaborators WHERE recipient_id = $1 AND email = $2 LIMIT 1`,
+    [recipientId, normalizedEmail]
+  );
+  if (existing.rows[0]) {
+    return collaboratorRowToCollaborator(existing.rows[0] as CollaboratorRow);
+  }
+
+  const token = generateToken(16);
+  const result = await db.query(
+    `INSERT INTO care_collaborators (recipient_id, email, role, status, invite_token, invited_by)
+     VALUES ($1, $2, $3, 'pending', $4, $5)
+     RETURNING *`,
+    [recipientId, normalizedEmail, role, token, invitedByUserId]
+  );
+
+  return collaboratorRowToCollaborator(result.rows[0] as CollaboratorRow);
+}
+
+export async function listCollaborators(recipientId: number): Promise<Collaborator[]> {
+  const result = await db.query(
+    `SELECT * FROM care_collaborators WHERE recipient_id = $1 ORDER BY role DESC, invited_at ASC`,
+    [recipientId]
+  );
+  return result.rows.map((row) => collaboratorRowToCollaborator(row as CollaboratorRow));
+}
+
+export async function acceptCollaboratorInvite(token: string, user: User): Promise<Collaborator | null> {
+  const normalizedToken = token.trim();
+  const result = await db.query(
+    `UPDATE care_collaborators
+     SET status = 'accepted', accepted_at = NOW(), user_id = $2
+     WHERE invite_token = $1
+     RETURNING *`,
+    [normalizedToken, user.id]
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return collaboratorRowToCollaborator(result.rows[0] as CollaboratorRow);
+}
+
+export async function findRecipientForCollaborator(userId: number): Promise<Recipient | undefined> {
+  const result = await db.query(
+    `SELECT r.*
+     FROM care_collaborators c
+     JOIN recipients r ON r.id = c.recipient_id
+     WHERE c.user_id = $1 AND c.status = 'accepted'
+     ORDER BY c.accepted_at DESC
+     LIMIT 1`,
+    [userId]
+  );
+
+  return result.rows[0] ? recipientRowToRecipient(result.rows[0] as RecipientRow) : undefined;
+}
+
+export async function findCollaboratorById(id: number): Promise<Collaborator | undefined> {
+  const result = await db.query('SELECT * FROM care_collaborators WHERE id = $1', [id]);
+  return result.rows[0] ? collaboratorRowToCollaborator(result.rows[0] as CollaboratorRow) : undefined;
+}
+
+export async function findCollaboratorForRecipient(
+  recipientId: number,
+  collaboratorId: number
+): Promise<Collaborator | undefined> {
+  const result = await db.query(
+    `SELECT * FROM care_collaborators WHERE recipient_id = $1 AND id = $2 AND status = 'accepted'`,
+    [recipientId, collaboratorId]
+  );
+  return result.rows[0] ? collaboratorRowToCollaborator(result.rows[0] as CollaboratorRow) : undefined;
 }
 
 async function touchPlanForItem(itemId: number): Promise<void> {
@@ -403,17 +542,18 @@ export async function getUpcomingAppointments(recipientId: number, startDate: Da
 }
 
 export async function updateAppointment(id: number, userId: number, data: AppointmentUpdateRequest): Promise<Appointment> {
-  const { startLocal, endLocal, location, prepNote, summary } = data;
+  const { startLocal, endLocal, location, prepNote, summary, assignedCollaboratorId } = data;
   const result = await db.query(
     `UPDATE appointments AS a
-     SET start_local = $1, end_local = $2, location = $3, prep_note = $4, summary = $5
+     SET start_local = $1, end_local = $2, location = $3, prep_note = $4, summary = $5,
+         assigned_collaborator_id = $6
      FROM items i
      JOIN recipients r ON i.recipient_id = r.id
-     WHERE a.id = $6
+     WHERE a.id = $7
        AND a.item_id = i.id
-       AND r.user_id = $7
+       AND r.user_id = $8
      RETURNING a.*`,
-    [startLocal, endLocal, location, prepNote, summary, id, userId]
+    [startLocal, endLocal, location, prepNote, summary, assignedCollaboratorId ?? null, id, userId]
   );
   if (result.rows.length === 0) {
     throw new Error('Appointment not found');
@@ -508,18 +648,19 @@ export async function getUpcomingBills(recipientId: number, startDate: Date, end
 }
 
 export async function updateBill(id: number, userId: number, data: BillUpdateRequest): Promise<Bill> {
-  const { statementDate, amount, dueDate, payUrl, status } = data;
+  const { statementDate, amount, dueDate, payUrl, status, assignedCollaboratorId } = data;
   const sanitizedPayUrl = sanitizePayUrl(payUrl);
   const result = await db.query(
     `UPDATE bills AS b
-     SET statement_date = $1, amount = $2, due_date = $3, pay_url = $4, status = $5
+     SET statement_date = $1, amount = $2, due_date = $3, pay_url = $4, status = $5,
+         assigned_collaborator_id = $6
      FROM items i
      JOIN recipients r ON i.recipient_id = r.id
-     WHERE b.id = $6
+     WHERE b.id = $7
        AND b.item_id = i.id
-       AND r.user_id = $7
+       AND r.user_id = $8
      RETURNING b.*`,
-    [statementDate, amount, dueDate, sanitizedPayUrl, status, id, userId]
+    [statementDate, amount, dueDate, sanitizedPayUrl, status, assignedCollaboratorId ?? null, id, userId]
   );
   if (result.rows.length === 0) {
     throw new Error('Bill not found');
