@@ -55,7 +55,7 @@ NODE_ENV=development
 BASE_URL=http://localhost:3000
 # Optional: link used in invite emails (defaults to BASE_URL)
 COLLABORATOR_INVITE_BASE_URL=http://localhost:3000
-COLLABORATOR_APP_OPEN_URL=carebase://open
+COLLABORATOR_APP_OPEN_URL=carebase://invite?token={token}
 COLLABORATOR_APP_DOWNLOAD_URL=https://your-download-link.example.com
 
 # Mobile

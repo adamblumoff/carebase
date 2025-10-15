@@ -150,10 +150,12 @@ export async function sendDigestEmail(to: string, data: DigestEmailData): Promis
 interface CollaboratorInviteEmailData {
   inviterEmail: string;
   acceptUrl: string;
+  appOpenUrl?: string;
+  appDownloadUrl?: string;
 }
 
 function generateCollaboratorInviteHTML(data: CollaboratorInviteEmailData): string {
-  const { inviterEmail, acceptUrl } = data;
+  const { inviterEmail, acceptUrl, appOpenUrl, appDownloadUrl } = data;
   return `
 <!DOCTYPE html>
 <html>
@@ -178,6 +180,12 @@ function generateCollaboratorInviteHTML(data: CollaboratorInviteEmailData): stri
         <p style="margin-bottom: 0;"><a class="cta" href="${acceptUrl}">Accept invite</a></p>
         <p>If the button doesn't work, copy and paste this link into your browser:</p>
         <p style="word-break: break-all;">${acceptUrl}</p>
+        ${appOpenUrl
+          ? `<p style="margin-top: 24px;">Already have the app? <a class="cta" href="${appOpenUrl}" style="display:inline-block;margin-top:8px;">Open Carebase</a></p>`
+          : ''}
+        ${appDownloadUrl
+          ? `<p style="margin-top: 16px;">Need the app first? <a href="${appDownloadUrl}">Download Carebase</a></p>`
+          : ''}
       </div>
       <div class="footer">
         Questions? Reply to this email and we'll help you out.

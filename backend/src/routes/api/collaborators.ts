@@ -9,6 +9,18 @@ import {
 } from '../../db/queries.js';
 import { sendCollaboratorInviteEmail } from '../../services/email.js';
 
+function formatAppLink(template: string, token: string): string {
+  if (!template) return '';
+  if (!token) return template;
+  if (template.includes('{token}')) {
+    return template.replace('{token}', encodeURIComponent(token));
+  }
+  const hasQuery = template.includes('?');
+  const endsWithQuery = template.endsWith('?') || template.endsWith('&');
+  const separator = endsWithQuery ? '' : hasQuery ? '&' : '?';
+  return `${template}${separator}token=${encodeURIComponent(token)}`;
+}
+
 const router = express.Router();
 
 router.use((req, res, next) => {
@@ -68,13 +80,19 @@ router.post('/', async (req: Request, res: Response) => {
       role
     );
 
+    const baseUrl =
+      process.env.COLLABORATOR_INVITE_BASE_URL || process.env.BASE_URL || 'http://localhost:3000';
+    const acceptUrl = `${baseUrl.replace(/\/$/, '')}/collaborators/accept?token=${collaborator.inviteToken}`;
+    const rawAppOpenUrl = process.env.COLLABORATOR_APP_OPEN_URL || '';
+    const appDownloadUrl = process.env.COLLABORATOR_APP_DOWNLOAD_URL || '';
+    const resolvedAppOpenUrl = formatAppLink(rawAppOpenUrl, collaborator.inviteToken);
+
     if (created || resent) {
-      const baseUrl =
-        process.env.COLLABORATOR_INVITE_BASE_URL || process.env.BASE_URL || 'http://localhost:3000';
-      const acceptUrl = `${baseUrl.replace(/\/$/, '')}/collaborators/accept?token=${collaborator.inviteToken}`;
       await sendCollaboratorInviteEmail(collaborator.email, {
         inviterEmail: user.email,
         acceptUrl,
+        appOpenUrl: resolvedAppOpenUrl,
+        appDownloadUrl,
       }).catch((err) => {
         console.warn('Failed to send collaborator invite email:', err);
       });

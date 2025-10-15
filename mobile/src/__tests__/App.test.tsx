@@ -3,6 +3,22 @@ import { render, waitFor } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import App from '../../App';
 import apiClient from '../api/client';
+import { Linking as RNLinking } from 'react-native';
+
+jest.mock('../api/collaborators', () => ({
+  acceptCollaboratorInvite: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('../ui/ToastProvider', () => {
+  const React = require('react');
+  const ToastContext = React.createContext({ showToast: jest.fn() });
+  return {
+    __esModule: true,
+    ToastProvider: ({ children }: { children: React.ReactNode }) =>
+      React.createElement(ToastContext.Provider, { value: { showToast: jest.fn() } }, children),
+    useToast: () => ({ showToast: jest.fn() }),
+  };
+});
 
 const mockAppNavigator = jest.fn();
 
@@ -33,6 +49,12 @@ describe('App bootstrap auth', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+    jest.spyOn(RNLinking, 'addEventListener').mockReturnValue({ remove: jest.fn() } as any);
+    jest.spyOn(RNLinking, 'getInitialURL').mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('renders login flow when no token', async () => {
