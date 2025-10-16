@@ -11,11 +11,11 @@ carebase/
 ├── backend/                # Express + TypeScript API
 │   ├── src/
 │   │   ├── auth/           # Passport + mobile token helpers
-│   │   ├── controllers/    # REST handlers (business logic)
+│   │   ├── controllers/    # REST handlers (thin HTTP wrappers)
 │   │   ├── db/             # Query helpers + pg client
 │   │   ├── middleware/     # Express middleware
 │   │   ├── routes/         # Express routers
-│   │   ├── services/       # Parser, Google sync, storage, email
+│   │   ├── services/       # Domain/business logic (plan, bills, Google, etc.)
 │   │   └── server.ts       # App bootstrap
 │   ├── scripts/            # DB utilities (migrations, docs)
 │   └── package.json
@@ -74,26 +74,29 @@ npm run env:mobile:prod      # Expo → carebase.dev
 
 ### Request Pipeline
 1. `server.ts` loads env, mounts middleware (JSON, session, bearer-token attach) and registers routers via `routes/registry.ts`.
-2. API routers delegate to controllers in `backend/src/controllers` for business logic.
-3. Database queries now live under `backend/src/db/queries/` (with a barrel file at `backend/src/db/queries.ts`) and share the same connection pool exported by `db/client.ts`.
-4. Controller actions should remain thin; business logic belongs in `backend/src/services/`. For example, `planService.ts` builds responses consumed by `controllers/api/plan.ts`.
-5. Route input validation uses zod schemas via `utils/validation.ts`; controller code receives typed data and throws `HttpError` subclasses (`ValidationError`, `NotFoundError`, etc.) handled by `utils/httpHandler.ts`.
+2. API routers delegate to controllers in `backend/src/controllers`, which now act as thin HTTP wrappers.
+3. Database queries live under `backend/src/db/queries/` (with a barrel file at `backend/src/db/queries.ts`) and share the same connection pool exported by `db/client.ts`.
+4. Domain/business logic belongs in `backend/src/services/`:
+   - `planService.ts` builds plan payloads consumed by `/api/plan`.
+   - `appointmentService.ts`/`billService.ts` encapsulate owner vs collaborator behavior (including Google-sync side effects).
+   - `googleIntegrationService.ts` handles OAuth URL creation, token exchange, manual sync, and disconnect flows.
+5. Route input validation uses zod via `utils/validation.ts`; controllers call `validateBody/validateParams`, and throw `HttpError` subclasses (`UnauthorizedError`, `ValidationError`, `NotFoundError`, etc.) handled uniformly by `utils/httpHandler.ts`.
 
 ### Email Ingestion
 - Postmark webhook hits `/webhook/inbound-email`.
 - `parser.ts` classifies text as bill/appointment/noise and extracts structured payloads.
-- Parsed appointments/bills are stored under `appointments`/`bills` tables; `touchPlanForUser` bumps plan version + realtime notifications.
+- Parsed appointments/bills are stored under `appointments`/`bills`; `touchPlanForUser` bumps plan version + realtime notifications.
 
 ### Collaborators
 - `/api/collaborators` handles listing/inviting/accepting.
-- Acceptance now enforces email match (`emailsMatch`) to prevent the owner from redeeming invites.
-- `/collaborators/accept` serves a static HTML landing page (no EJS dependencies remaining).
+- Acceptance enforces email match (`emailsMatch`) to prevent the owner from redeeming invites.
+- `/collaborators/accept` serves a static HTML landing page (no EJS dependencies).
 
 ### Google Calendar Sync
 - OAuth endpoints at `/api/integrations/google/*`.
 - Tokens are stored in `google_credentials`; per-item sync metadata in `google_sync_links`.
-- `services/googleSync.ts` manages job scheduling, de-bounces syncs, and reconciles remote vs local changes. Run-time configuration is centralized in `services/googleSync/config.ts` and logging goes through `services/googleSync/logger.ts`.
-- Mobile Settings screen surfaces status, manual sync, and disconnect actions.
+- `services/googleSync.ts` manages job scheduling, de-bounces syncs, and reconciles remote vs local changes. Run-time configuration lives in `services/googleSync/config.ts`, and logs go through `services/googleSync/logger.ts`.
+- `services/googleIntegrationService.ts` wraps OAuth URL creation, token exchange (client & server), manual sync, and disconnect logic used by the controller.
 
 ### Realtime & Versioning
 - Socket.io pushes `plan:update` events on plan writes (`services/realtime.ts`).
@@ -124,6 +127,9 @@ npm run env:mobile:prod      # Expo → carebase.dev
 - `src/api/client.ts` configures Axios client with baseURL from env and bearer token interceptor (reads `AsyncStorage`).
 - Individual feature APIs live under `src/api/` (collaborators, Google integration, etc.).
 
+### Utilities
+- Shared date helpers (`src/utils/date.ts`) centralize parsing/formatting used across Plan and Appointment screens.
+
 ### Testing
 - Jest + `@testing-library/react-native`.
 - Suite covers bootstrap (`App.test.tsx`), settings flows, and Google integration hook.
@@ -133,7 +139,7 @@ npm run env:mobile:prod      # Expo → carebase.dev
 
 ## 5. Contracts & Shared Types
 - `shared/types/index.ts` defines canonical domain models (`User`, `Recipient`, `Appointment`, `Bill`, `Collaborator`, `PlanPayload`, ...).
-- Contracts workspace (`tests/`) spins up an in-memory Postgres (`pg-mem`) and hits `/api/plan` + `/api/collaborators` to ensure responses stay aligned with shared payload types.
+- Contracts workspace (`tests/`) spins up pg-mem and hits `/api/plan` + `/api/collaborators` to ensure responses stay aligned with shared payload types.
 
 ---
 
@@ -166,15 +172,15 @@ npm run coverage                # backend + mobile coverage
 ### Railway Deployment
 - Install: `npm install`
 - Start command: `npm run start --workspace=backend`
-- Environment: set `CAREBASE_ENV=production`, `BASE_URL=https://carebase.dev`, Google/Postmark secrets, etc.
+- Env: set `CAREBASE_ENV=production`, `BASE_URL=https://carebase.dev`, Google/Postmark secrets, etc.
 
 ---
 
 ## 7. Coding & Review Guidelines
 - TypeScript everywhere; default to `const`, 2-space indentation, trailing semicolons.
-- Routes do minimal work—delegate to controllers/services.
-- Update `backend/src/routes/registry.metadata.ts` when adding/removing routers so docs remain accurate.
-- Tests live next to the code (`*.test.ts` or `*.test.tsx`).
+- Controllers stay thin and delegate to services. Throw `HttpError` subclasses for predictable responses.
+- Update `backend/src/routes/registry.metadata.ts` when adding/removing routers so docs stay accurate.
+- Tests live next to the code (`*.test.ts` / `*.test.tsx`).
 - Commit after each logical change; keep messages imperative.
 - PR template: summary, testing notes (commands run), new env vars, migration IDs, screenshots if UI-affecting.
 

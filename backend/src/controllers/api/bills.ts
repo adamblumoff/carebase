@@ -1,219 +1,67 @@
 import type { Request, Response } from 'express';
+import type { BillStatus, User } from '@carebase/shared';
 import {
-  getBillById,
-  getBillByIdForRecipient,
-  updateBill,
-  updateBillForRecipient,
-  deleteBill,
-  updateBillStatus,
-  updateBillStatusForRecipient,
-  findCollaboratorForRecipient,
-  resolveRecipientContextForUser,
-  markGoogleSyncPending,
-} from '../../db/queries.js';
-import type { BillStatus, BillUpdateData, User } from '@carebase/shared';
+  deleteBillAsOwner,
+  fetchBillForUser,
+  markBillPaid as markBillPaidService,
+  updateBillAsCollaborator,
+  updateBillAsOwner
+} from '../../services/billService.js';
+import { billContributorUpdateSchema, billIdParamsSchema, billOwnerUpdateSchema } from '../../validators/bills.ts';
+import { validateBody, validateParams } from '../../utils/validation.js';
+import { route } from '../../utils/httpHandler.js';
+import { UnauthorizedError } from '../../utils/errors.js';
 
-export async function getBill(req: Request, res: Response): Promise<void> {
-  try {
-    const user = req.user as User | undefined;
-    if (!user) {
-      res.status(401).json({ error: 'Not authenticated' });
-      return;
-    }
-
-    const { id } = req.params;
-    const context = await resolveRecipientContextForUser(user);
-    if (!context) {
-      res.status(404).json({ error: 'No recipient found' });
-      return;
-    }
-
-    const billId = Number.parseInt(id, 10);
-    const bill =
-      context.role === 'owner'
-        ? await getBillById(billId, user.id)
-        : await getBillByIdForRecipient(billId, context.recipient.id);
-
-    if (!bill) {
-      res.status(404).json({ error: 'Bill not found' });
-      return;
-    }
-
-    res.json(bill);
-  } catch (error) {
-    console.error('Get bill error:', error);
-    res.status(500).json({ error: 'Failed to fetch bill' });
+export const getBill = route(async (req: Request, res: Response) => {
+  const user = req.user as User | undefined;
+  if (!user) {
+    throw new UnauthorizedError();
   }
-}
 
-export async function patchBill(req: Request, res: Response): Promise<void> {
-  try {
-    const user = req.user as User | undefined;
-    if (!user) {
-      res.status(401).json({ error: 'Not authenticated' });
-      return;
-    }
+  const { id } = validateParams(req, billIdParamsSchema);
+  const bill = await fetchBillForUser(user, id);
+  res.json(bill);
+});
 
-    const { id } = req.params;
-    const context = await resolveRecipientContextForUser(user);
-    if (!context) {
-      res.status(404).json({ error: 'No recipient found' });
-      return;
-    }
+export const patchBill = route(async (req: Request, res: Response) => {
+  const user = req.user as User | undefined;
+  if (!user) {
+    throw new UnauthorizedError();
+  }
 
-    const billId = Number.parseInt(id, 10);
+  const { id } = validateParams(req, billIdParamsSchema);
+  const body = req.body;
 
-    if (context.role === 'owner') {
-      const existing = await getBillById(billId, user.id);
-      if (!existing) {
-        res.status(404).json({ error: 'Bill not found' });
-        return;
-      }
-
-      const { amount, dueDate, statementDate, payUrl, status, assignedCollaboratorId } = req.body;
-
-      const updateData: BillUpdateData = {};
-      if (amount !== undefined && amount !== '') updateData.amount = Number.parseFloat(amount);
-      if (dueDate !== undefined) updateData.dueDate = dueDate;
-      if (statementDate !== undefined) updateData.statementDate = statementDate;
-      if (payUrl !== undefined) updateData.payUrl = payUrl;
-      if (status !== undefined) updateData.status = status as BillStatus;
-
-      if (assignedCollaboratorId !== undefined) {
-        if (assignedCollaboratorId === null || assignedCollaboratorId === '') {
-          updateData.assignedCollaboratorId = null;
-        } else {
-          const collaboratorId = Number.parseInt(String(assignedCollaboratorId), 10);
-          if (Number.isNaN(collaboratorId)) {
-            res.status(400).json({ error: 'Invalid collaborator id' });
-            return;
-          }
-          const collaborator = await findCollaboratorForRecipient(context.recipient.id, collaboratorId);
-          if (!collaborator) {
-            res.status(404).json({ error: 'Collaborator not found' });
-            return;
-          }
-          updateData.assignedCollaboratorId = collaborator.id;
-        }
-      }
-
-      const updated = await updateBill(billId, user.id, {
-        statementDate:
-          updateData.statementDate ?? (existing.statementDate ? existing.statementDate.toISOString().split('T')[0] : undefined),
-        amount: updateData.amount ?? existing.amount ?? undefined,
-        dueDate:
-          updateData.dueDate ?? (existing.dueDate ? existing.dueDate.toISOString().split('T')[0] : undefined),
-        payUrl: updateData.payUrl ?? existing.payUrl ?? undefined,
-        status: updateData.status ?? existing.status,
-        assignedCollaboratorId:
-          updateData.assignedCollaboratorId ?? existing.assignedCollaboratorId ?? null,
-      });
-      await markGoogleSyncPending(updated.itemId);
-      res.json(updated);
-      return;
-    }
-
-    const existing = await getBillByIdForRecipient(billId, context.recipient.id);
-    if (!existing) {
-      res.status(404).json({ error: 'Bill not found' });
-      return;
-    }
-
-    const { status } = req.body as { status?: BillStatus };
-    if (!status) {
-      res.status(403).json({ error: 'Contributors can only update status' });
-      return;
-    }
-
-    const allowedStatuses: BillStatus[] = ['todo', 'paid', 'overdue'];
-    if (!allowedStatuses.includes(status)) {
-      res.status(400).json({ error: 'Invalid status value' });
-      return;
-    }
-
-    const updated = await updateBillForRecipient(billId, context.recipient.id, {
-      statementDate: existing.statementDate ? existing.statementDate.toISOString().split('T')[0] : undefined,
-      amount: existing.amount ?? undefined,
-      dueDate: existing.dueDate ? existing.dueDate.toISOString().split('T')[0] : undefined,
-      payUrl: existing.payUrl ?? undefined,
-      status,
-      assignedCollaboratorId: existing.assignedCollaboratorId ?? null,
-    });
-
-    await markGoogleSyncPending(updated.itemId);
+  if ((body as { status?: BillStatus }).status !== undefined) {
+    const contributorPayload = validateBody(req, billContributorUpdateSchema);
+    const updated = await updateBillAsCollaborator(user, id, contributorPayload.status);
     res.json(updated);
-  } catch (error) {
-    if (error instanceof Error && error.message === 'Bill not found') {
-      res.status(404).json({ error: 'Bill not found' });
-      return;
-    }
-    console.error('Update bill error:', error);
-    res.status(500).json({ error: 'Failed to update bill' });
+    return;
   }
-}
 
-export async function removeBill(req: Request, res: Response): Promise<void> {
-  try {
-    const user = req.user as User | undefined;
-    if (!user) {
-      res.status(401).json({ error: 'Not authenticated' });
-      return;
-    }
+  const ownerPayload = validateBody(req, billOwnerUpdateSchema);
+  const updated = await updateBillAsOwner(user, id, ownerPayload);
+  res.json(updated);
+});
 
-    const { id } = req.params;
-    const context = await resolveRecipientContextForUser(user);
-    if (!context) {
-      res.status(404).json({ error: 'No recipient found' });
-      return;
-    }
-
-    if (context.role !== 'owner') {
-      res.status(403).json({ error: 'Only the owner can delete bills' });
-      return;
-    }
-
-    await deleteBill(Number.parseInt(id, 10), user.id);
-
-    res.json({ success: true });
-  } catch (error) {
-    if (error instanceof Error && error.message === 'Bill not found') {
-      res.status(404).json({ error: 'Bill not found' });
-      return;
-    }
-    console.error('Delete bill error:', error);
-    res.status(500).json({ error: 'Failed to delete bill' });
+export const removeBill = route(async (req: Request, res: Response) => {
+  const user = req.user as User | undefined;
+  if (!user) {
+    throw new UnauthorizedError();
   }
-}
 
-export async function markBillPaid(req: Request, res: Response): Promise<void> {
-  try {
-    const user = req.user as User | undefined;
-    if (!user) {
-      res.status(401).json({ error: 'Not authenticated' });
-      return;
-    }
+  const { id } = validateParams(req, billIdParamsSchema);
+  await deleteBillAsOwner(user, id);
+  res.json({ success: true });
+});
 
-    const { id } = req.params;
-    const context = await resolveRecipientContextForUser(user);
-    if (!context) {
-      res.status(404).json({ error: 'No recipient found' });
-      return;
-    }
-
-    const billId = Number.parseInt(id, 10);
-    const updated =
-      context.role === 'owner'
-        ? await updateBillStatus(billId, user.id, 'paid')
-        : await updateBillStatusForRecipient(billId, context.recipient.id, 'paid');
-
-    await markGoogleSyncPending(updated.itemId);
-    res.json(updated);
-  } catch (error) {
-    if (error instanceof Error && error.message === 'Bill not found') {
-      res.status(404).json({ error: 'Bill not found' });
-      return;
-    }
-    console.error('Mark bill paid error:', error);
-    res.status(500).json({ error: 'Failed to mark bill as paid' });
+export const markBillPaid = route(async (req: Request, res: Response) => {
+  const user = req.user as User | undefined;
+  if (!user) {
+    throw new UnauthorizedError();
   }
-}
+
+  const { id } = validateParams(req, billIdParamsSchema);
+  const updated = await markBillPaidService(user, id);
+  res.json(updated);
+});
