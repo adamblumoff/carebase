@@ -49,7 +49,7 @@ router.get(
         res.redirect(redirectUrl);
       } else {
         // Redirect to web app
-        res.redirect('/plan');
+        res.redirect('/');
       }
     } catch (error) {
       console.error('Error creating default recipient:', error);

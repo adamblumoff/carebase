@@ -1,11 +1,6 @@
 import type { Express, Router } from 'express';
 import authRoutes from './auth.js';
 import webhookRoutes from './webhook.js';
-import planRoutes from './plan.js';
-import calendarRoutes from './calendar.js';
-import uploadRoutes from './upload.js';
-import settingsRoutes from './settings.js';
-import reviewRoutes from './review.js';
 import collaboratorsWebRoutes from './collaborators.js';
 
 import apiAuthRoutes from './api/auth.js';
@@ -29,11 +24,6 @@ export interface RouteDefinition extends RouteMeta {}
 const routerLookup: Record<string, Router> = {
   '/auth': authRoutes,
   '/webhook': webhookRoutes,
-  '/plan': planRoutes,
-  '/calendar': calendarRoutes,
-  '/upload': uploadRoutes,
-  '/settings': settingsRoutes,
-  '/review': reviewRoutes,
   '/collaborators': collaboratorsWebRoutes,
   '/api/auth': apiAuthRoutes,
   '/api/plan': apiPlanRoutes,

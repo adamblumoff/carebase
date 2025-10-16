@@ -5,7 +5,7 @@ import './env.js';
 import express, { Request, Response } from 'express';
 import session from 'express-session';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname } from 'path';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 
@@ -15,7 +15,6 @@ const __dirname = dirname(__filename);
 import passportConfig from './auth/passport.js';
 import { registerRoutes } from './routes/registry.js';
 
-import { scheduleFridayDigest } from './jobs/digest.js';
 import { attachBearerUser } from './middleware/attachBearerUser.js';
 import { initRealtime } from './services/realtime.js';
 
@@ -51,25 +50,16 @@ app.use(passportSession);
 app.use(attachBearerUser);
 
 // View engine
-app.set('view engine', 'ejs');
-app.set('views', join(__dirname, 'views'));
-
-// Static files
-app.use(express.static(join(__dirname, 'public')));
-
 // Routes
-app.get('/', (req: Request, res: Response) => {
-  res.render('index', { user: req.user });
+app.get('/', (_req: Request, res: Response) => {
+  res.json({ status: 'ok', message: 'Carebase API is running' });
 });
 
-app.get('/health', (req: Request, res: Response) => {
+app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok' });
 });
 
 registerRoutes(app);
-
-// Schedule jobs
-scheduleFridayDigest();
 
 // Initialize realtime
 const io = new SocketIOServer(server, {

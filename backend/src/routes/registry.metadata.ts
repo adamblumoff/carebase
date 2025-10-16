@@ -13,11 +13,6 @@ export interface RouteMeta {
 export const ROUTER_METADATA: RouterMeta[] = [
   { basePath: '/auth', scope: 'web', description: 'Web auth + session management' },
   { basePath: '/webhook', scope: 'web', description: 'Inbound Postmark webhook' },
-  { basePath: '/plan', scope: 'web', description: 'Web plan viewer' },
-  { basePath: '/calendar', scope: 'web', description: 'ICS feeds' },
-  { basePath: '/upload', scope: 'web', description: 'Web bill upload' },
-  { basePath: '/settings', scope: 'web', description: 'Web settings' },
-  { basePath: '/review', scope: 'web', description: 'Low-confidence review tools' },
   { basePath: '/collaborators', scope: 'web', description: 'Collaborator invite landing pages' },
   { basePath: '/api/auth', scope: 'api', description: 'Mobile auth APIs' },
   { basePath: '/api/plan', scope: 'api', description: 'Plan data APIs' },

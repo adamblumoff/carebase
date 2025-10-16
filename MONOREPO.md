@@ -85,7 +85,7 @@ cp mobile/.env.production.local.example mobile/.env.production.local
 ```
 
 - Local feature work: keep `CAREBASE_ENV=development` (default) and point the development env files to your ngrok tunnel.
-- Production smoke test: run `CAREBASE_ENV=production npm run dev:backend` to target `https://carebase.dev`, and start Expo with the prod env file, e.g. `npx expo start --env-file .env.production.local`.
+- Production smoke test: use `npm run dev:backend:prod` to start the API against `https://carebase.dev`, and run `npm run env:mobile:prod` followed by `npx expo start --clear` to point the Expo app at production. Swap back with `npm run dev:backend` / `npm run env:mobile:dev` when returning to ngrok development.
 
 ### Continuous Integration
 
