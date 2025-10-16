@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 import { existsSync, copyFileSync, renameSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
-const root = process.cwd();
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const root = join(scriptDir, '..');
 const mobileDir = join(root, 'mobile');
 const devFile = join(mobileDir, '.env.development.local');
 const prodFile = join(mobileDir, '.env.production.local');
