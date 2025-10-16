@@ -19,7 +19,7 @@ import { API_BASE_URL } from '../config';
 import { useTheme, spacing, radius, type Palette, type Shadow } from '../theme';
 import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../ui/ToastProvider';
-import { fetchCollaborators, inviteCollaborator, type CollaboratorResponse } from '../api/collaborators';
+import { useCollaborators } from '../collaborators/CollaboratorProvider';
 import { useGoogleCalendarIntegration } from '../hooks/useGoogleCalendarIntegration';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
@@ -30,12 +30,16 @@ export default function SettingsScreen({ navigation }: Props) {
   const auth = useAuth();
   const toast = useToast();
   const [loggingOut, setLoggingOut] = useState(false);
-  const [collaborators, setCollaborators] = useState<CollaboratorResponse[]>([]);
-  const [collaboratorsLoading, setCollaboratorsLoading] = useState(true);
-  const [collaboratorError, setCollaboratorError] = useState<string | null>(null);
+  const {
+    collaborators,
+    loading: collaboratorsLoading,
+    error: collaboratorError,
+    canInvite,
+    invite,
+    refresh,
+  } = useCollaborators();
   const [inviteEmail, setInviteEmail] = useState('');
   const [invitePending, setInvitePending] = useState(false);
-  const [canInvite, setCanInvite] = useState(true);
   const googleIntegration = useGoogleCalendarIntegration();
 
   const email = auth.user?.email;
@@ -94,35 +98,10 @@ export default function SettingsScreen({ navigation }: Props) {
   };
 
   useEffect(() => {
-    let active = true;
-    const load = async () => {
-      try {
-        setCollaboratorsLoading(true);
-        const data = await fetchCollaborators();
-        if (!active) return;
-        setCollaborators(data);
-        setCollaboratorError(null);
-        setCanInvite(true);
-      } catch (error) {
-        if (!active) return;
-        const status = (error as any)?.response?.status;
-        if (status === 403) {
-          setCanInvite(false);
-          setCollaboratorError('Only the plan owner can manage collaborators.');
-        } else {
-          setCollaboratorError('Unable to load collaborators.');
-        }
-      } finally {
-        if (!active) return;
-        setCollaboratorsLoading(false);
-      }
-    };
-
-    load();
-    return () => {
-      active = false;
-    };
-  }, []);
+    refresh().catch(() => {
+      // errors surfaced via collaboratorError
+    });
+  }, [refresh]);
 
   const handleInviteCollaborator = async () => {
     if (!inviteEmail.trim()) {
@@ -131,11 +110,7 @@ export default function SettingsScreen({ navigation }: Props) {
     }
     setInvitePending(true);
     try {
-      const collaborator = await inviteCollaborator(inviteEmail.trim());
-      setCollaborators((prev) => {
-        const filtered = prev.filter((entry) => entry.id !== collaborator.id);
-        return [...filtered, collaborator].sort((a, b) => a.email.localeCompare(b.email));
-      });
+      await invite(inviteEmail.trim());
       setInviteEmail('');
       toast.showToast('Invite sent');
     } catch (error) {

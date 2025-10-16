@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import apiClient from '../api/client';
-import { API_ENDPOINTS } from '../config';
+import { checkSession, logout as apiLogout } from '../api/auth';
 import { authEvents } from './authEvents';
 
 interface AuthContextValue {
@@ -29,7 +28,7 @@ const signIn = useCallback((nextUser?: any) => {
     }
     signOutInProgress.current = true;
     try {
-      await apiClient.post(API_ENDPOINTS.logout).catch((error) => {
+      await apiLogout().catch((error) => {
         console.warn('Logout call failed', error);
       });
     } catch (error) {
@@ -66,9 +65,9 @@ const signIn = useCallback((nextUser?: any) => {
         }
 
         try {
-          const response = await apiClient.get(API_ENDPOINTS.checkSession);
-          if (response.data?.authenticated && mounted) {
-            setUser(response.data.user ?? null);
+          const response = await checkSession();
+          if (response.authenticated && mounted) {
+            setUser(response.user ?? null);
             setStatus('signedIn');
             return;
           }

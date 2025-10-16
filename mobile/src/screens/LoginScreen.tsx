@@ -16,8 +16,8 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import * as WebBrowser from 'expo-web-browser';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import apiClient from '../api/client';
-import { API_ENDPOINTS, API_BASE_URL } from '../config';
+import { mobileLogin, checkSession } from '../api/auth';
+import { API_BASE_URL } from '../config';
 import { useTheme, spacing, radius, type Palette, type Shadow } from '../theme';
 import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../ui/ToastProvider';
@@ -56,8 +56,7 @@ export default function LoginScreen({ navigation }: Props) {
         return;
       }
 
-      const exchangeResponse = await apiClient.post(API_ENDPOINTS.mobileLogin, { authToken: loginToken });
-      const { accessToken } = exchangeResponse.data;
+      const { accessToken } = await mobileLogin(loginToken);
       if (!accessToken) {
         throw new Error('Access token missing from response');
       }
@@ -65,9 +64,9 @@ export default function LoginScreen({ navigation }: Props) {
       await AsyncStorage.setItem('accessToken', accessToken);
       await AsyncStorage.removeItem('sessionCookie');
 
-      const sessionCheck = await apiClient.get(API_ENDPOINTS.checkSession);
-      if (sessionCheck.data.authenticated) {
-        auth.signIn(sessionCheck.data.user);
+      const session = await checkSession();
+      if (session.authenticated) {
+        auth.signIn(session.user);
         toast.showToast('Signed in');
       } else {
         throw new Error('Session not established');

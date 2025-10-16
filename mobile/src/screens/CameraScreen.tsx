@@ -16,11 +16,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import * as ImagePicker from 'expo-image-picker';
-import apiClient from '../api/client';
-import { API_ENDPOINTS } from '../config';
+import { uploadBillPhoto } from '../api/uploads';
 import { useTheme, spacing, radius, type Palette, type Shadow } from '../theme';
 import { emitPlanChanged } from '../utils/planEvents';
-import type { UploadPhotoResponse } from '@carebase/shared';
+import { formatCurrency } from '../utils/format';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Camera'>;
 
@@ -29,9 +28,6 @@ export default function CameraScreen({ navigation }: Props) {
   const styles = useMemo(() => createStyles(palette, shadow), [palette, shadow]);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
-
   const requestPermissions = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
@@ -73,22 +69,13 @@ export default function CameraScreen({ navigation }: Props) {
 
     setUploading(true);
     try {
-      const formData = new FormData();
       const filename = imageUri.split('/').pop() || 'photo.jpg';
       const match = /\.(\w+)$/.exec(filename);
       const type = match ? `image/${match[1]}` : 'image/jpeg';
 
-      formData.append('photo', {
-        uri: imageUri,
-        name: filename,
-        type,
-      } as any);
+      const response = await uploadBillPhoto({ uri: imageUri, fileName: filename, contentType: type });
 
-      const response = await apiClient.post<UploadPhotoResponse>(API_ENDPOINTS.uploadPhoto, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-
-      const { classification, extracted, overdue } = response.data;
+      const { classification, extracted, overdue } = response;
       emitPlanChanged();
       const details: string[] = [];
       if (extracted?.amount) {
@@ -103,7 +90,7 @@ export default function CameraScreen({ navigation }: Props) {
 
       const detectedType =
         classification?.detectedType ??
-        response.data.item?.detectedType ??
+        response.item?.detectedType ??
         'document';
       const message = details.length > 0
         ? `Captured a ${detectedType} document.\n${details.join('\n')}`

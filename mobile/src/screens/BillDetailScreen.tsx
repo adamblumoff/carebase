@@ -11,17 +11,17 @@ import {
   TouchableOpacity,
   Alert,
   Linking,
-  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
-import apiClient from '../api/client';
-import { API_ENDPOINTS } from '../config';
+import { markBillPaid, deleteBill, updateBill } from '../api/bills';
 import { useTheme, spacing, radius, type Palette } from '../theme';
 import { emitPlanChanged } from '../utils/planEvents';
 import { useAuth } from '../auth/AuthContext';
-import { fetchCollaborators, type CollaboratorResponse } from '../api/collaborators';
+import { useCollaborators } from '../collaborators/CollaboratorProvider';
+import AssignmentModal from '../ui/AssignmentModal';
+import { formatCurrency } from '../utils/format';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'BillDetail'>;
 
@@ -34,8 +34,7 @@ export default function BillDetailScreen({ route, navigation }: Props) {
   const returnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { palette, shadow } = useTheme();
   const styles = useMemo(() => createStyles(palette), [palette]);
-  const [collaborators, setCollaborators] = useState<CollaboratorResponse[]>([]);
-  const [collaboratorsLoading, setCollaboratorsLoading] = useState(true);
+  const { collaborators, loading: collaboratorsLoading } = useCollaborators();
   const [assignmentModalVisible, setAssignmentModalVisible] = useState(false);
   const [assignmentSaving, setAssignmentSaving] = useState(false);
 
@@ -44,30 +43,6 @@ export default function BillDetailScreen({ route, navigation }: Props) {
       if (returnTimerRef.current) {
         clearTimeout(returnTimerRef.current);
       }
-    };
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    const load = async () => {
-      try {
-        const data = await fetchCollaborators();
-        if (!active) return;
-        setCollaborators(data);
-      } catch (error) {
-        if (process.env.NODE_ENV !== 'test') {
-          console.warn('Failed to load collaborators', error);
-        }
-      } finally {
-        if (active) {
-          setCollaboratorsLoading(false);
-        }
-      }
-    };
-
-    load();
-    return () => {
-      active = false;
     };
   }, []);
 
@@ -90,14 +65,6 @@ export default function BillDetailScreen({ route, navigation }: Props) {
       day: 'numeric',
       year: 'numeric',
     });
-  };
-
-  const formatCurrency = (amount: number | null | undefined) => {
-    if (amount === null || amount === undefined) return 'Unknown amount';
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
   };
 
   const acceptedCollaborators = useMemo(
@@ -124,8 +91,8 @@ export default function BillDetailScreen({ route, navigation }: Props) {
     }
     setUpdating(true);
     try {
-      const response = await apiClient.post(API_ENDPOINTS.markBillPaid(currentBill.id));
-      setCurrentBill(response.data);
+      const updated = await markBillPaid(currentBill.id);
+      setCurrentBill(updated);
       emitPlanChanged();
       scheduleReturnToPlan('Bill marked as paid. Returning to plan...');
     } catch (error) {
@@ -147,7 +114,7 @@ export default function BillDetailScreen({ route, navigation }: Props) {
         style: 'destructive',
         onPress: async () => {
           try {
-            await apiClient.delete(API_ENDPOINTS.deleteBill(currentBill.id));
+            await deleteBill(currentBill.id);
             emitPlanChanged();
             scheduleReturnToPlan('Bill deleted. Returning to plan...');
           } catch (error) {
@@ -172,10 +139,10 @@ export default function BillDetailScreen({ route, navigation }: Props) {
     if (assignmentSaving) return;
     setAssignmentSaving(true);
     try {
-      const response = await apiClient.patch(API_ENDPOINTS.updateBill(currentBill.id), {
+      const updated = await updateBill(currentBill.id, {
         assignedCollaboratorId: targetId,
       });
-      setCurrentBill(response.data);
+      setCurrentBill(updated);
       setAssignmentModalVisible(false);
       emitPlanChanged();
     } catch (error) {
@@ -210,7 +177,7 @@ export default function BillDetailScreen({ route, navigation }: Props) {
           />
           <View style={styles.summaryBody}>
             <Text style={styles.summaryLabel}>Amount due</Text>
-            <Text style={styles.summaryAmount}>{formatCurrency(currentBill.amount ?? null)}</Text>
+            <Text style={styles.summaryAmount}>{formatCurrency(currentBill.amount)}</Text>
             <Text style={styles.summaryStatus}>
               Status:{' '}
               <Text
@@ -286,63 +253,17 @@ export default function BillDetailScreen({ route, navigation }: Props) {
         </View>
       </ScrollView>
       {isOwner && (
-        <Modal
+        <AssignmentModal
           visible={assignmentModalVisible}
-          transparent
-          animationType="fade"
-          onRequestClose={() => {
-            if (!assignmentSaving) setAssignmentModalVisible(false);
+          selectedId={currentBill.assignedCollaboratorId}
+          collaborators={acceptedCollaborators}
+          loading={assignmentSaving}
+          emptyMessage="Invite a collaborator to assign this bill."
+          onSelect={(id) => {
+            handleAssignCollaborator(id).catch(() => {});
           }}
-        >
-          <View style={styles.modalBackdrop}>
-            <View style={[styles.modalCard, shadow.card]}>
-              <Text style={styles.modalTitle}>Assign to…</Text>
-              <TouchableOpacity
-                style={[
-                  styles.modalOption,
-                  currentBill.assignedCollaboratorId === null && styles.modalOptionSelected,
-                ]}
-                onPress={() => handleAssignCollaborator(null)}
-                disabled={assignmentSaving}
-              >
-                <Text style={styles.modalOptionText}>
-                  {assignmentSaving && currentBill.assignedCollaboratorId === null
-                    ? 'Assigning…'
-                    : 'Unassigned'}
-                </Text>
-              </TouchableOpacity>
-              {acceptedCollaborators.length === 0 ? (
-                <Text style={styles.modalEmpty}>Invite a collaborator to assign this bill.</Text>
-              ) : (
-                acceptedCollaborators.map((collaborator) => {
-                  const isSelected = collaborator.id === currentBill.assignedCollaboratorId;
-                  return (
-                    <TouchableOpacity
-                      key={collaborator.id}
-                      style={[
-                        styles.modalOption,
-                        isSelected && styles.modalOptionSelected,
-                      ]}
-                      onPress={() => handleAssignCollaborator(collaborator.id)}
-                      disabled={assignmentSaving}
-                    >
-                      <Text style={styles.modalOptionText}>
-                        {assignmentSaving && isSelected ? 'Assigning…' : collaborator.email}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })
-              )}
-              <TouchableOpacity
-                style={styles.modalCancel}
-                onPress={() => setAssignmentModalVisible(false)}
-                disabled={assignmentSaving}
-              >
-                <Text style={styles.modalCancelText}>Close</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
+          onClose={() => setAssignmentModalVisible(false)}
+        />
       )}
     </SafeAreaView>
   );
@@ -500,57 +421,6 @@ const createStyles = (palette: Palette) =>
       color: palette.danger,
       fontSize: 15,
       fontWeight: '600',
-    },
-    modalBackdrop: {
-      flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.4)',
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: spacing(3),
-    },
-    modalCard: {
-      width: '100%',
-      maxWidth: 360,
-      backgroundColor: palette.canvas,
-      borderRadius: radius.md,
-      padding: spacing(3),
-    },
-    modalTitle: {
-      fontSize: 16,
-      fontWeight: '700',
-      color: palette.textPrimary,
-      marginBottom: spacing(2),
-    },
-    modalOption: {
-      paddingVertical: spacing(1.25),
-      paddingHorizontal: spacing(1.5),
-      borderRadius: radius.sm,
-      borderWidth: 1,
-      borderColor: palette.border,
-      marginBottom: spacing(1),
-    },
-    modalOptionSelected: {
-      borderColor: palette.primary,
-      backgroundColor: palette.primarySoft,
-    },
-    modalOptionText: {
-      fontSize: 15,
-      color: palette.textPrimary,
-      fontWeight: '600',
-    },
-    modalEmpty: {
-      fontSize: 13,
-      color: palette.textMuted,
-      marginBottom: spacing(1.5),
-    },
-    modalCancel: {
-      marginTop: spacing(1.5),
-      alignSelf: 'flex-end',
-    },
-    modalCancelText: {
-      color: palette.primary,
-      fontWeight: '600',
-      fontSize: 14,
     },
     noteCard: {
       backgroundColor: palette.surface,

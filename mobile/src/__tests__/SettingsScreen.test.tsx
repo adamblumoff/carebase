@@ -4,6 +4,7 @@ import { Alert } from 'react-native';
 import SettingsScreen from '../screens/SettingsScreen';
 import { ThemeProvider } from '../theme';
 import { AuthContext } from '../auth/AuthContext';
+import { CollaboratorProvider } from '../collaborators/CollaboratorProvider';
 
 const mockToast = jest.fn();
 
@@ -110,7 +111,9 @@ const renderWithProviders = (ui: React.ReactElement, authOverrides = {}) => {
   return render(
     <ThemeProvider>
       <AuthContext.Provider value={authValue}>
-        <ToastProvider>{ui}</ToastProvider>
+        <CollaboratorProvider>
+          <ToastProvider>{ui}</ToastProvider>
+        </CollaboratorProvider>
       </AuthContext.Provider>
     </ThemeProvider>
   );
