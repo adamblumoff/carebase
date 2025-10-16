@@ -12,7 +12,8 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace=backend",
-    "dev:backend": "npm run dev --workspace=backend",
+    "dev:backend": "node scripts/run-backend.js development",
+    "dev:backend:prod": "node scripts/run-backend.js production",
     "dev:mobile": "npm run dev --workspace=mobile",
     "env:mobile:prod": "node scripts/swap-mobile-env.js prod",
     "env:mobile:dev": "node scripts/swap-mobile-env.js dev",
