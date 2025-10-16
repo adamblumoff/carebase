@@ -57,7 +57,7 @@ npm run dev:mobile         # Start Expo development server
 npm test                                # Run all tests across workspaces
 npm test --workspace=@carebase/backend  # Backend suite (unit + pg-mem integration)
 npm test --workspace=@carebase/shared   # Shared type guards
-npm test --workspace tests           # Cross-workspace API contracts
+npm run test --prefix tests     # Cross-workspace API contracts
 ```
 
 The backend suite includes unit specs and pg-mem powered integration coverage (e.g., inbound email webhook). Running backend tests does not require a local Postgres instance.

@@ -32,7 +32,7 @@ jobs:
         run: npm run test --workspace=shared
 
       - name: Contract tests
-        run: npm run test --workspace tests
+        run: npm run test --prefix tests
 
       - name: Coverage (backend + mobile)
         run: npm run coverage
