@@ -14,6 +14,8 @@
     "dev": "npm run dev --workspace=backend",
     "dev:backend": "npm run dev --workspace=backend",
     "dev:mobile": "npm run dev --workspace=mobile",
+    "env:mobile:prod": "node scripts/swap-mobile-env.js prod",
+    "env:mobile:dev": "node scripts/swap-mobile-env.js dev",
     "test": "npm run test --workspaces --if-present",
     "test:backend": "npm run test --workspace=backend",
     "test:contracts": "npm run test --prefix tests",

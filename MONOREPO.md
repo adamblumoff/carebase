@@ -70,7 +70,7 @@ npm run coverage            # Backend Node test coverage + mobile Jest coverage
 
 ### Environment Configuration
 
-Environment variables are layered. The backend loads, in order, `.env`, `.env.<env>`, `.env.local`, `.env.<env>.local`, where `<env>` is taken from `CAREBASE_ENV` (fallback `NODE_ENV`, default `development`). Later files override earlier ones.
+Environment variables are layered. The backend only reads `.env.<env>` and `.env.<env>.local` (in that order) where `<env>` comes from `CAREBASE_ENV` (fallback `NODE_ENV`, default `development`). The `.local` variant overrides the base file.
 
 **Bootstrap templates**
 

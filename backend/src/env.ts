@@ -14,9 +14,7 @@ const backendDir = join(__dirname, '../');
 
 const envName = (process.env.CAREBASE_ENV || process.env.NODE_ENV || 'development').trim();
 const candidateFiles = [
-  '.env',
   `.env.${envName}`,
-  '.env.local',
   `.env.${envName}.local`
 ];
 
