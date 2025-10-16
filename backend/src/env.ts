@@ -9,17 +9,34 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const rootDir = join(__dirname, '../../');
+const backendDir = join(__dirname, '../');
 
-// Try root first, then backend directory
-const envPath = existsSync(join(__dirname, '../../.env.local'))
-  ? join(__dirname, '../../.env.local')
-  : join(__dirname, '../.env.local');
+const envName = (process.env.CAREBASE_ENV || process.env.NODE_ENV || 'development').trim();
+const candidateFiles = [
+  '.env',
+  `.env.${envName}`,
+  '.env.local',
+  `.env.${envName}.local`
+];
 
-if (existsSync(envPath)) {
-  dotenv.config({ path: envPath });
-  console.log('📝 Loaded environment from', envPath);
+const searchDirs = [rootDir, backendDir];
+const loadedFiles: string[] = [];
+
+for (const candidate of candidateFiles) {
+  for (const dir of searchDirs) {
+    const fullPath = join(dir, candidate);
+    if (existsSync(fullPath) && !loadedFiles.includes(fullPath)) {
+      dotenv.config({ path: fullPath, override: true });
+      loadedFiles.push(fullPath);
+    }
+  }
+}
+
+if (loadedFiles.length > 0) {
+  console.log('📝 Loaded environment files:', loadedFiles.join(', '));
 } else {
-  console.warn('⚠️  No .env.local file found at', envPath);
+  console.warn('⚠️  No environment files found. Expected one of', candidateFiles.join(', '));
 }
 
 // Verify critical env vars

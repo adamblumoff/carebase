@@ -6,7 +6,7 @@
 // For development on device, point EXPO_PUBLIC_API_BASE_URL to your ngrok tunnel.
 // Defaults fall back to localhost for emulator/simulator.
 const DEFAULT_DEV_URL = 'http://localhost:3000';
-const DEFAULT_PROD_URL = 'https://your-production-url.com';
+const DEFAULT_PROD_URL = 'https://carebase.dev';
 
 const envVars = (typeof process !== 'undefined' && process.env) ? process.env : {};
 

@@ -68,6 +68,25 @@ The backend suite includes unit specs and pg-mem powered integration coverage (e
 npm run coverage            # Backend Node test coverage + mobile Jest coverage
 ```
 
+### Environment Configuration
+
+Environment variables are layered. The backend loads, in order, `.env`, `.env.<env>`, `.env.local`, `.env.<env>.local`, where `<env>` is taken from `CAREBASE_ENV` (fallback `NODE_ENV`, default `development`). Later files override earlier ones.
+
+**Bootstrap templates**
+
+```bash
+# Backend (local + prod templates)
+cp env.development.local.example .env.development.local
+cp env.production.local.example .env.production.local
+
+# Mobile Expo app
+cp mobile/.env.development.local.example mobile/.env.development.local
+cp mobile/.env.production.local.example mobile/.env.production.local
+```
+
+- Local feature work: keep `CAREBASE_ENV=development` (default) and point the development env files to your ngrok tunnel.
+- Production smoke test: run `CAREBASE_ENV=production npm run dev:backend` to target `https://carebase.dev`, and start Expo with the prod env file, e.g. `npx expo start --env-file .env.production.local`.
+
 ### Continuous Integration
 
 - Workflow: `.github/workflows/ci.yml`
