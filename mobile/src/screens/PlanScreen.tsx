@@ -26,6 +26,7 @@ import { addPlanChangeListener } from '../utils/planEvents';
 import { ensureRealtimeConnected, isRealtimeConnected } from '../utils/realtime';
 import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../ui/ToastProvider';
+import { formatDisplayDate, formatDisplayTime, parseServerDate } from '../utils/date';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Plan'>;
 
@@ -237,29 +238,20 @@ const AnimatedStatusBadge: React.FC<{ status: string }> = ({ status }) => {
     }, [fetchPlan])
   );
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    fetchPlan({ silent: true, manual: true });
-  }, [fetchPlan]);
+const onRefresh = useCallback(() => {
+  setRefreshing(true);
+  fetchPlan({ silent: true, manual: true });
+}, [fetchPlan]);
 
-const parseServerDate = (value: string) => new Date(value);
+const formatDate = useCallback(
+  (dateString: string) => formatDisplayDate(parseServerDate(dateString)),
+  []
+);
 
-const formatDate = (dateString: string) => {
-  const date = parseServerDate(dateString);
-  return date.toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  });
-};
-
-const formatTime = (dateString: string) => {
-  const date = parseServerDate(dateString);
-  return date.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-  };
+const formatTime = useCallback(
+  (dateString: string) => formatDisplayTime(parseServerDate(dateString)),
+  []
+);
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);

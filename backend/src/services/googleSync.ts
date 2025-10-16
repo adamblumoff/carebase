@@ -18,23 +18,22 @@ import {
   findGoogleSyncLinkByEvent,
   type GoogleCredential
 } from '../db/queries.js';
+import { getGoogleSyncConfig, isTestEnv } from './googleSync/config.js';
+import { logError, logInfo, logWarn } from './googleSync/logger.js';
 
 const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
-const DEFAULT_LOOKBACK_DAYS = 30;
-const IS_TEST_ENV = process.env.NODE_ENV === 'test';
-const ENABLE_SYNC_IN_TEST = process.env.GOOGLE_SYNC_ENABLE_TEST === 'true';
 
-const DEFAULT_DEBOUNCE_MS = IS_TEST_ENV && !ENABLE_SYNC_IN_TEST
-  ? 0
-  : Number.parseInt(process.env.GOOGLE_SYNC_DEBOUNCE_MS ?? '', 10) || 15_000;
-const DEFAULT_RETRY_BASE_MS = IS_TEST_ENV && !ENABLE_SYNC_IN_TEST
-  ? 1_000
-  : Number.parseInt(process.env.GOOGLE_SYNC_RETRY_BASE_MS ?? '', 10) || 60_000;
-const MAX_RETRY_MS = IS_TEST_ENV && !ENABLE_SYNC_IN_TEST
-  ? 5_000
-  : Number.parseInt(process.env.GOOGLE_SYNC_RETRY_MAX_MS ?? '', 10) || 300_000;
-const DEFAULT_POLL_INTERVAL_MS = Number.parseInt(process.env.GOOGLE_SYNC_POLL_INTERVAL_MS ?? '', 10) || 5 * 60 * 1000;
+const {
+  lookbackDays: DEFAULT_LOOKBACK_DAYS,
+  debounceMs: DEFAULT_DEBOUNCE_MS,
+  retryBaseMs: DEFAULT_RETRY_BASE_MS,
+  retryMaxMs: MAX_RETRY_MS,
+  pollIntervalMs: DEFAULT_POLL_INTERVAL_MS,
+  enableInTest: ENABLE_SYNC_IN_TEST
+} = getGoogleSyncConfig();
+
+const IS_TEST_ENV = isTestEnv();
 
 interface RetryState {
   attempt: number;
@@ -1040,13 +1039,13 @@ async function performSync(userId: number): Promise<void> {
   try {
     const summary = await syncRunner(userId, { pullRemote: true });
     retryTimers.delete(userId);
-    console.log(
-      `[GoogleSync] user=${userId} pushed=${summary.pushed} pulled=${summary.pulled} deleted=${summary.deleted} errors=${summary.errors.length}`
+    logInfo(
+      `user=${userId} pushed=${summary.pushed} pulled=${summary.pulled} deleted=${summary.deleted} errors=${summary.errors.length}`
     );
   } catch (error) {
     const delay = computeRetryDelay(userId);
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`[GoogleSync] user=${userId} sync failed (${message}). Retrying in ${delay}ms`);
+    logError(`user=${userId} sync failed (${message}). Retrying in ${delay}ms`);
     const existing = retryTimers.get(userId);
     if (existing?.timer) {
       clearTimeout(existing.timer);
@@ -1121,7 +1120,7 @@ async function runGoogleSyncPolling(): Promise<void> {
       scheduleGoogleSyncForUser(userId);
     }
   } catch (error) {
-    console.error('[GoogleSync] polling error:', error instanceof Error ? error.message : error);
+    logError('polling error', error instanceof Error ? error.message : error);
   }
 }
 

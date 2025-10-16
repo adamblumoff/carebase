@@ -76,6 +76,8 @@ npm run env:mobile:prod      # Expo → carebase.dev
 1. `server.ts` loads env, mounts middleware (JSON, session, bearer-token attach) and registers routers via `routes/registry.ts`.
 2. API routers delegate to controllers in `backend/src/controllers` for business logic.
 3. Database queries now live under `backend/src/db/queries/` (with a barrel file at `backend/src/db/queries.ts`) and share the same connection pool exported by `db/client.ts`.
+4. Controller actions should remain thin; business logic belongs in `backend/src/services/`. For example, `planService.ts` builds responses consumed by `controllers/api/plan.ts`.
+5. Route input validation uses zod schemas via `utils/validation.ts`; controller code receives typed data and throws `HttpError` subclasses (`ValidationError`, `NotFoundError`, etc.) handled by `utils/httpHandler.ts`.
 
 ### Email Ingestion
 - Postmark webhook hits `/webhook/inbound-email`.
@@ -90,7 +92,7 @@ npm run env:mobile:prod      # Expo → carebase.dev
 ### Google Calendar Sync
 - OAuth endpoints at `/api/integrations/google/*`.
 - Tokens are stored in `google_credentials`; per-item sync metadata in `google_sync_links`.
-- `services/googleSync.ts` manages job scheduling, de-bounces syncs, and reconciles remote vs local changes.
+- `services/googleSync.ts` manages job scheduling, de-bounces syncs, and reconciles remote vs local changes. Run-time configuration is centralized in `services/googleSync/config.ts` and logging goes through `services/googleSync/logger.ts`.
 - Mobile Settings screen surfaces status, manual sync, and disconnect actions.
 
 ### Realtime & Versioning

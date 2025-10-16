@@ -22,12 +22,9 @@ import { KeyboardScreen } from '../components/KeyboardScreen';
 import DateTimePickerModal from '../components/DateTimePickerModal';
 import { useAuth } from '../auth/AuthContext';
 import { fetchCollaborators, type CollaboratorResponse } from '../api/collaborators';
+import { formatDisplayDate, formatDisplayTime, formatForPayload, parseServerDate } from '../utils/date';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AppointmentDetail'>;
-
-const pad = (value: number) => value.toString().padStart(2, '0');
-
-const parseServerDate = (value: string) => new Date(value);
 
 const formatDisplayDateTime = (date: Date) =>
   date.toLocaleString('en-US', {
@@ -38,24 +35,6 @@ const formatDisplayDateTime = (date: Date) =>
     hour: 'numeric',
     minute: '2-digit',
   });
-const formatDisplayDate = (date: Date) =>
-  date.toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  });
-
-const formatDisplayTime = (date: Date) =>
-  date.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-
-const formatForPayload = (date: Date) =>
-  `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
-    date.getHours()
-  )}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-
 export default function AppointmentDetailScreen({ route, navigation }: Props) {
   const { appointment } = route.params;
   const { palette, shadow } = useTheme();
