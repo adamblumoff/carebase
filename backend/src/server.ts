@@ -17,6 +17,7 @@ import { registerRoutes } from './routes/registry.js';
 
 import { attachBearerUser } from './middleware/attachBearerUser.js';
 import { initRealtime } from './services/realtime.js';
+import { startGoogleSyncPolling } from './services/googleSync.js';
 
 const app = express();
 const server = createServer(app);
@@ -72,6 +73,7 @@ io.use((socket, next) => sessionMiddleware(socket.request as any, {} as any, nex
 io.use((socket, next) => initializePassport(socket.request as any, {} as any, next as any));
 io.use((socket, next) => passportSession(socket.request as any, {} as any, next as any));
 initRealtime(io);
+startGoogleSyncPolling();
 
 // Start server
 server.listen(PORT, '0.0.0.0', () => {

@@ -1151,6 +1151,12 @@ export async function findCollaboratorByToken(token: string): Promise<Collaborat
   return result.rows[0] ? collaboratorRowToCollaborator(result.rows[0] as CollaboratorRow) : undefined;
 }
 
+export async function listGoogleConnectedUserIds(): Promise<number[]> {
+  await ensureGoogleIntegrationSchema();
+  const result = await db.query('SELECT user_id FROM google_credentials');
+  return result.rows.map((row) => Number(row.user_id)).filter((id) => Number.isFinite(id));
+}
+
 async function touchPlanForItem(itemId: number): Promise<void> {
   await ensurePlanVersionColumns();
   const result = await db.query(

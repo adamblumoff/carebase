@@ -14,6 +14,7 @@ import {
   updateAppointment,
   updateBill,
   markGoogleSyncPending,
+  listGoogleConnectedUserIds,
   type GoogleCredential
 } from '../db/queries.js';
 
@@ -32,6 +33,7 @@ const DEFAULT_RETRY_BASE_MS = IS_TEST_ENV && !ENABLE_SYNC_IN_TEST
 const MAX_RETRY_MS = IS_TEST_ENV && !ENABLE_SYNC_IN_TEST
   ? 5_000
   : Number.parseInt(process.env.GOOGLE_SYNC_RETRY_MAX_MS ?? '', 10) || 300_000;
+const DEFAULT_POLL_INTERVAL_MS = Number.parseInt(process.env.GOOGLE_SYNC_POLL_INTERVAL_MS ?? '', 10) || 5 * 60 * 1000;
 
 interface RetryState {
   attempt: number;
@@ -42,6 +44,7 @@ const debounceTimers = new Map<number, NodeJS.Timeout>();
 const retryTimers = new Map<number, RetryState>();
 const runningSyncs = new Set<number>();
 const followUpRequested = new Set<number>();
+let pollingTimer: NodeJS.Timeout | null = null;
 
 type SyncRunner = (userId: number, options?: GoogleSyncOptions) => Promise<GoogleSyncSummary>;
 let syncRunner: SyncRunner;
@@ -891,4 +894,38 @@ export function __resetGoogleSyncStateForTests(): void {
   runningSyncs.clear();
   followUpRequested.clear();
   syncRunner = syncUserWithGoogle;
+}
+
+async function runGoogleSyncPolling(): Promise<void> {
+  try {
+    const userIds = await listGoogleConnectedUserIds();
+    for (const userId of userIds) {
+      scheduleGoogleSyncForUser(userId);
+    }
+  } catch (error) {
+    console.error('[GoogleSync] polling error:', error instanceof Error ? error.message : error);
+  }
+}
+
+export function startGoogleSyncPolling(): void {
+  if (IS_TEST_ENV && !ENABLE_SYNC_IN_TEST) {
+    return;
+  }
+  if (pollingTimer) {
+    return;
+  }
+
+  // Kick off immediately so we don't wait for the first interval.
+  void runGoogleSyncPolling();
+
+  pollingTimer = setInterval(() => {
+    void runGoogleSyncPolling();
+  }, DEFAULT_POLL_INTERVAL_MS);
+}
+
+export function stopGoogleSyncPolling(): void {
+  if (pollingTimer) {
+    clearInterval(pollingTimer);
+    pollingTimer = null;
+  }
 }
