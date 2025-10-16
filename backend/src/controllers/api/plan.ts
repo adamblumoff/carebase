@@ -152,7 +152,21 @@ export async function getPlanVersionHandler(req: Request, res: Response): Promis
       return;
     }
 
-    const { planVersion, planUpdatedAt } = await getPlanVersion(user.id);
+    let ownerUserId = user.id;
+
+    const recipients = await findRecipientsByUserId(user.id);
+    if (recipients.length === 0) {
+      const collaboratorRecipient = await findRecipientForCollaborator(user.id);
+      if (!collaboratorRecipient) {
+        res.status(404).json({ error: 'No recipient found' });
+        return;
+      }
+      ownerUserId = collaboratorRecipient.userId;
+    } else {
+      ownerUserId = recipients[0].userId;
+    }
+
+    const { planVersion, planUpdatedAt } = await getPlanVersion(ownerUserId);
     const normalizedPlanUpdatedAt = planUpdatedAt ? new Date(planUpdatedAt).toISOString() : null;
     res.json({ planVersion, planUpdatedAt: normalizedPlanUpdatedAt });
   } catch (error) {

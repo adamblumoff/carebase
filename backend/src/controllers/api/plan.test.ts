@@ -231,8 +231,17 @@ test('getPlan returns 404 when user has no recipient context', async () => {
   mock.restoreAll();
 });
 
-test('getPlanVersionHandler returns version payload for authenticated user', async () => {
+test('getPlanVersionHandler returns owner plan version for owner users', async () => {
   const queries = await import('../../db/queries.js');
+  const ownerRecipient = {
+    id: 55,
+    userId: 1,
+    displayName: 'Alex Patient',
+    createdAt: new Date()
+  } satisfies Recipient;
+
+  const findRecipientsMock = mock.method(queries, 'findRecipientsByUserId', async () => [ownerRecipient]);
+  const findCollaboratorMock = mock.method(queries, 'findRecipientForCollaborator', async () => undefined);
   const getPlanVersionMock = mock.method(queries, 'getPlanVersion', async () => ({
     planVersion: 12,
     planUpdatedAt: '2025-10-15T15:30:00.000Z'
@@ -261,6 +270,54 @@ test('getPlanVersionHandler returns version payload for authenticated user', asy
     planUpdatedAt: '2025-10-15T15:30:00.000Z'
   });
   assert.equal(getPlanVersionMock.mock.callCount(), 1);
+  assert.equal(getPlanVersionMock.mock.calls[0].arguments[0], 1);
+  assert.equal(findRecipientsMock.mock.callCount(), 1);
+  assert.equal(findCollaboratorMock.mock.callCount(), 0);
+
+  mock.restoreAll();
+});
+
+test('getPlanVersionHandler returns owner plan version for collaborators', async () => {
+  const queries = await import('../../db/queries.js');
+  const findRecipientsMock = mock.method(queries, 'findRecipientsByUserId', async () => []);
+  const collaboratorRecipient = {
+    id: 77,
+    userId: 42,
+    displayName: 'Jordan Patient',
+    createdAt: new Date()
+  } satisfies Recipient;
+  const findCollaboratorMock = mock.method(queries, 'findRecipientForCollaborator', async () => collaboratorRecipient);
+  const getPlanVersionMock = mock.method(queries, 'getPlanVersion', async () => ({
+    planVersion: 7,
+    planUpdatedAt: '2025-10-16T11:00:00.000Z'
+  }));
+
+  const req = {
+    user: {
+      id: 200,
+      email: 'collab@example.com',
+      googleId: 'collab-google',
+      forwardingAddress: 'collab-forward@example.com',
+      planSecret: 'secret',
+      createdAt: new Date(),
+      planVersion: 0,
+      planUpdatedAt: new Date()
+    }
+  } as unknown as Request;
+  const { res, getStatus, getJson } = createResponseHarness();
+
+  await getPlanVersionHandler(req, res);
+
+  assert.equal(getStatus(), null);
+  const payload = getJson<{ planVersion: number; planUpdatedAt: string }>();
+  assert.deepEqual(payload, {
+    planVersion: 7,
+    planUpdatedAt: '2025-10-16T11:00:00.000Z'
+  });
+  assert.equal(getPlanVersionMock.mock.callCount(), 1);
+  assert.equal(getPlanVersionMock.mock.calls[0].arguments[0], 42);
+  assert.equal(findRecipientsMock.mock.callCount(), 1);
+  assert.equal(findCollaboratorMock.mock.callCount(), 1);
 
   mock.restoreAll();
 });
