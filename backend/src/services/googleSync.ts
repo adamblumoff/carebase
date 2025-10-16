@@ -450,6 +450,9 @@ async function pushAppointment(
   const encodedCalendarId = encodeURIComponent(calendarId);
   const baseUrl = `${GOOGLE_CALENDAR_API}/calendars/${encodedCalendarId}/events`;
   const existingEventId = appointment.googleSync?.eventId;
+  const previousRemoteUpdatedAt = appointment.googleSync?.remoteUpdatedAt
+    ? new Date(appointment.googleSync.remoteUpdatedAt)
+    : null;
 
   try {
     const result: GoogleEventResource = existingEventId
@@ -461,6 +464,13 @@ async function pushAppointment(
           method: 'POST',
           body: JSON.stringify(payload)
         });
+
+    if (previousRemoteUpdatedAt && result.updated) {
+      const remoteTimestamp = new Date(result.updated);
+      if (previousRemoteUpdatedAt.getTime() > remoteTimestamp.getTime()) {
+        throw new GoogleSyncException('Remote appointment updated after local edit', 409, 'remote_newer');
+      }
+    }
 
     await markGoogleSyncSuccess(appointment.itemId, {
       calendarId,
@@ -492,6 +502,9 @@ async function pushBill(
   const encodedCalendarId = encodeURIComponent(calendarId);
   const baseUrl = `${GOOGLE_CALENDAR_API}/calendars/${encodedCalendarId}/events`;
   const existingEventId = bill.googleSync?.eventId;
+  const previousRemoteUpdatedAt = bill.googleSync?.remoteUpdatedAt
+    ? new Date(bill.googleSync.remoteUpdatedAt)
+    : null;
 
   try {
     const result: GoogleEventResource = existingEventId
@@ -503,6 +516,13 @@ async function pushBill(
           method: 'POST',
           body: JSON.stringify(payload)
         });
+
+    if (previousRemoteUpdatedAt && result.updated) {
+      const remoteTimestamp = new Date(result.updated);
+      if (previousRemoteUpdatedAt.getTime() > remoteTimestamp.getTime()) {
+        throw new GoogleSyncException('Remote bill updated after local edit', 409, 'remote_newer');
+      }
+    }
 
     await markGoogleSyncSuccess(bill.itemId, {
       calendarId,
@@ -772,8 +792,21 @@ export async function syncUserWithGoogle(userId: number, options: GoogleSyncOpti
           continue;
         }
         const localHash = calculateAppointmentHash(appointment);
-        await pushAppointment(accessToken, calendarId, appointment, localHash);
-        summary.pushed += 1;
+        try {
+          await pushAppointment(accessToken, calendarId, appointment, localHash);
+          summary.pushed += 1;
+        } catch (error) {
+          if (error instanceof GoogleSyncException && error.code === 'remote_newer') {
+            await markGoogleSyncPending(appointment.itemId, localHash);
+            const ownerUserId = await getItemOwnerUserId(appointment.itemId);
+            if (ownerUserId) {
+              scheduleGoogleSyncForUser(ownerUserId, 0);
+            }
+            summary.errors.push({ itemId: appointment.itemId, message: error.message });
+            continue;
+          }
+          throw error;
+        }
       } else if (item.itemType === 'bill') {
         const bill = await getBillByItemId(item.itemId);
         if (!bill) {
@@ -781,8 +814,21 @@ export async function syncUserWithGoogle(userId: number, options: GoogleSyncOpti
           continue;
         }
         const localHash = calculateBillHash(bill);
-        await pushBill(accessToken, calendarId, bill, localHash);
-        summary.pushed += 1;
+        try {
+          await pushBill(accessToken, calendarId, bill, localHash);
+          summary.pushed += 1;
+        } catch (error) {
+          if (error instanceof GoogleSyncException && error.code === 'remote_newer') {
+            await markGoogleSyncPending(bill.itemId, localHash);
+            const ownerUserId = await getItemOwnerUserId(bill.itemId);
+            if (ownerUserId) {
+              scheduleGoogleSyncForUser(ownerUserId, 0);
+            }
+            summary.errors.push({ itemId: bill.itemId, message: error.message });
+            continue;
+          }
+          throw error;
+        }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown Google sync error';
