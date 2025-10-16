@@ -68,6 +68,12 @@ The backend suite includes unit specs and pg-mem powered integration coverage (e
 npm run coverage            # Backend Node test coverage + mobile Jest coverage
 ```
 
+### Continuous Integration
+
+- Workflow: `.github/workflows/ci.yml`
+- Runs on pushes and pull requests targeting `dev` and `main`
+- Steps: install dependencies, run backend/mobile/shared/contracts suites, execute `npm run coverage`, upload backend/mobile coverage artifacts
+
 ### Database
 ```bash
 npm run db:migrate         # Run database migrations
