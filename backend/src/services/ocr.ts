@@ -1,57 +1,44 @@
-/**
- * OCR service using Google Cloud Vision API
- */
+import vision from '@google-cloud/vision';
 
-/**
- * Extract text from image using Google Cloud Vision
- * @param imageBuffer - Image file buffer
- * @returns Extracted text
- */
-export async function extractTextFromImage(imageBuffer: Buffer): Promise<string> {
-  try {
-    // Check if Google Cloud credentials are configured
-    if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-      console.warn('Google Cloud Vision not configured, using mock OCR');
-      return 'MOCK OCR: Bill Amount $125.00 Due Date: Dec 31, 2024 Patient Account';
-    }
+let visionClient: vision.ImageAnnotatorClient | null = null;
 
-    // Import Vision API client
-    const vision = await import('@google-cloud/vision');
-    const client = new vision.ImageAnnotatorClient();
-
-    // Perform text detection
-    const [result] = await client.textDetection({
-      image: { content: imageBuffer }
-    });
-
-    const detections = result.textAnnotations;
-
-    if (!detections || detections.length === 0) {
-      return '';
-    }
-
-    // First annotation contains the full text
-    const fullText = detections[0].description || '';
-
-    return fullText.trim();
-  } catch (error) {
-    console.error('OCR error:', error);
-    throw new Error('Failed to extract text from image');
-  }
+try {
+  // Only instantiate if credentials are present; this allows local dev without GCP config.
+  visionClient = new vision.ImageAnnotatorClient();
+} catch (error) {
+  visionClient = null;
+  console.warn('[OCR] Google Vision client not initialized:', (error as Error).message);
 }
 
 /**
- * Extract short excerpt from OCR text (first few lines)
- * @param text - Full OCR text
- * @param maxLength - Maximum length (default 500)
- * @returns Short excerpt
+ * Extract full text from an image buffer using Google Cloud Vision.
+ * Throws if the Vision client is unavailable.
  */
-export function getShortExcerpt(text: string, maxLength: number = 500): string {
-  if (!text) return '';
+export async function extractTextFromImage(buffer: Buffer): Promise<string> {
+  if (!visionClient) {
+    throw new Error('Google Cloud Vision is not configured');
+  }
 
-  // Take first N characters or first few lines
-  const lines = text.split('\n').slice(0, 10);
-  const excerpt = lines.join('\n');
+  const [result] = await visionClient.documentTextDetection({ image: { content: buffer } });
 
-  return excerpt.substring(0, maxLength);
+  const fullText = result.fullTextAnnotation?.text;
+  if (!fullText) {
+    return '';
+  }
+
+  return fullText;
+}
+
+/**
+ * Reduce large OCR payloads to a short excerpt for previews/logging.
+ */
+export function getShortExcerpt(text: string, maxLength = 280): string {
+  if (!text) {
+    return '';
+  }
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxLength - 1)}…`;
 }
