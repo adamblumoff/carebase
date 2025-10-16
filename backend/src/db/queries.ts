@@ -1176,13 +1176,16 @@ export const __testTouchPlanForItem = touchPlanForItem;
 
 export async function touchPlanForUser(userId: number): Promise<void> {
   await ensurePlanVersionColumns();
-  await db.query(
+  const result = await db.query(
     `UPDATE users
      SET plan_version = COALESCE(plan_version, 0) + 1,
          plan_updated_at = NOW()
      WHERE id = $1`,
     [userId]
   );
+  if (result.rowCount === 0) {
+    return;
+  }
   const realtime = getRealtimeEmitter();
   realtime?.emitPlanUpdate(userId);
   await scheduleGoogleSync(userId);

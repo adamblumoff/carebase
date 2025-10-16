@@ -18,7 +18,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { RootStackParamList } from '../navigation/AppNavigator';
-import type { Appointment, Bill } from '@carebase/shared';
+import type { PlanPayload } from '@carebase/shared';
 import apiClient from '../api/client';
 import { API_ENDPOINTS } from '../config';
 import { useTheme, spacing, radius, type Palette, type Shadow } from '../theme';
@@ -29,30 +29,9 @@ import { useToast } from '../ui/ToastProvider';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Plan'>;
 
-type PlanCollaborator = {
-  id: number;
-  recipientId: number;
-  userId: number | null;
-  email: string;
-  role: 'owner' | 'contributor';
-  status: 'pending' | 'accepted';
-  inviteToken: string;
-  invitedBy: number;
-  invitedAt: string;
-  acceptedAt: string | null;
-};
+type PlanCollaborator = PlanPayload['collaborators'][number];
 
-interface PlanData {
-  appointments: Appointment[];
-  bills: Bill[];
-  dateRange: {
-    start: string;
-    end: string;
-  };
-  planVersion: number;
-  planUpdatedAt?: string | null;
-  collaborators: PlanCollaborator[];
-}
+type PlanData = PlanPayload;
 
 const MAX_FETCH_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 600;

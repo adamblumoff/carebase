@@ -95,6 +95,12 @@ export interface Appointment {
   googleSync: GoogleSyncMetadata | null;
 }
 
+export interface AppointmentPayload extends Omit<Appointment, 'startLocal' | 'endLocal' | 'createdAt'> {
+  startLocal: string;
+  endLocal: string;
+  createdAt: string;
+}
+
 // ========== BILLS ==========
 
 export type BillStatus = 'todo' | 'overdue' | 'paid';
@@ -111,6 +117,12 @@ export interface Bill {
   createdAt: Date;
   assignedCollaboratorId: number | null;
   googleSync: GoogleSyncMetadata | null;
+}
+
+export interface BillPayload extends Omit<Bill, 'statementDate' | 'dueDate' | 'createdAt'> {
+  statementDate: string | null;
+  dueDate: string | null;
+  createdAt: string;
 }
 
 // ========== AUDIT ==========
@@ -194,8 +206,10 @@ export interface ReviewListResponse {
 
 // ========== COLLABORATORS ==========
 
-export type CollaboratorRole = 'owner' | 'contributor';
-export type CollaboratorStatus = 'pending' | 'accepted';
+export const COLLABORATOR_ROLES = ['owner', 'contributor'] as const;
+export type CollaboratorRole = typeof COLLABORATOR_ROLES[number];
+export const COLLABORATOR_STATUSES = ['pending', 'accepted'] as const;
+export type CollaboratorStatus = typeof COLLABORATOR_STATUSES[number];
 
 export interface Collaborator {
   id: number;
@@ -208,6 +222,27 @@ export interface Collaborator {
   invitedBy: number;
   invitedAt: Date;
   acceptedAt: Date | null;
+}
+
+export interface CollaboratorPayload extends Omit<Collaborator, 'invitedAt' | 'acceptedAt'> {
+  invitedAt: string;
+  acceptedAt: string | null;
+}
+
+export interface PlanPayload {
+  recipient: {
+    id: number;
+    displayName: string | null;
+  };
+  dateRange: {
+    start: string;
+    end: string;
+  };
+  appointments: AppointmentPayload[];
+  bills: BillPayload[];
+  planVersion: number;
+  planUpdatedAt: string | null;
+  collaborators: CollaboratorPayload[];
 }
 
 export interface CollaboratorInviteRequest {

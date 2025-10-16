@@ -30,6 +30,11 @@ const dbAny = dbClientModule.default as unknown as {
   query: (text: string, params?: any[]) => Promise<any>;
 };
 
+const realtimeModule = await import('../services/realtime.js');
+const { __setRealtimeEmitterForTests } = realtimeModule as unknown as {
+  __setRealtimeEmitterForTests: (emitter: { emitPlanUpdate(userId: number): void } | null) => void;
+};
+
 function createSummary(): GoogleSyncSummary {
   return { pushed: 0, pulled: 0, deleted: 0, errors: [], calendarId: 'primary' };
 }
@@ -65,6 +70,33 @@ test('touchPlanForUser schedules a Google sync job', async () => {
   assert.equal(scheduledUser, 123);
 
   __setGoogleSyncSchedulerForTests(null);
+  dbAny.query = originalQuery;
+  __resetGoogleSyncStateForTests();
+});
+
+test('touchPlanForUser skips realtime and scheduler when no rows updated', async () => {
+  const originalQuery = dbAny.query;
+  dbAny.query = async () => ({ rows: [], rowCount: 0, command: 'UPDATE', fields: [], oid: 0 });
+
+  let scheduledUser: number | null = null;
+  __setGoogleSyncSchedulerForTests((userId) => {
+    scheduledUser = userId;
+  });
+
+  let emitted = false;
+  __setRealtimeEmitterForTests({
+    emitPlanUpdate() {
+      emitted = true;
+    }
+  });
+
+  await touchPlanForUser(321);
+
+  assert.equal(scheduledUser, null);
+  assert.equal(emitted, false);
+
+  __setGoogleSyncSchedulerForTests(null);
+  __setRealtimeEmitterForTests(null);
   dbAny.query = originalQuery;
   __resetGoogleSyncStateForTests();
 });

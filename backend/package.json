@@ -9,6 +9,7 @@
     "dev": "tsx watch src/server.ts",
     "db:migrate": "tsx src/db/migrate.ts",
     "test": "NODE_ENV=test tsx --test src/**/*.test.ts",
+    "test:coverage": "rm -rf coverage && NODE_ENV=test NODE_V8_COVERAGE=coverage tsx --test src/**/*.test.ts",
     "docs:routes": "tsx scripts/generate-route-docs.ts"
   },
   "keywords": [

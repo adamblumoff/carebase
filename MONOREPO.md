@@ -37,6 +37,7 @@ This repo uses npm workspaces to manage multiple packages:
 - `@carebase/backend` - Backend API server
 - `@carebase/mobile` - React Native mobile app
 - `@carebase/shared` - Shared TypeScript types
+- `@carebase/contracts` - Cross-workspace API contract tests (Express + shared types)
 
 ## Development Scripts
 
@@ -53,11 +54,19 @@ npm run dev:mobile         # Start Expo development server
 
 ### Testing
 ```bash
-npm test                   # Run all tests across workspaces
-npm test --workspace=@carebase/backend  # Run backend tests only
+npm test                                # Run all tests across workspaces
+npm test --workspace=@carebase/backend  # Backend suite (unit + pg-mem integration)
+npm test --workspace=@carebase/shared   # Shared type guards
+npm test --workspace=tests              # Cross-workspace API contracts
 ```
 
-The backend suite includes unit specs and a pg-mem powered integration test that exercises the inbound email webhook end to end (ensuring plan versions bump and realtime notifications fire). Running `npm test --workspace=@carebase/backend` is safe without a local Postgres instance.
+The backend suite includes unit specs and pg-mem powered integration coverage (e.g., inbound email webhook). Running backend tests does not require a local Postgres instance.
+
+### Coverage
+
+```bash
+npm run coverage            # Backend Node test coverage + mobile Jest coverage
+```
 
 ### Database
 ```bash

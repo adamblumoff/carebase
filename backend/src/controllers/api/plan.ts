@@ -8,22 +8,63 @@ import {
   listCollaborators,
   findRecipientForCollaborator,
 } from '../../db/queries.js';
-import type { Appointment, Bill, Collaborator, User } from '@carebase/shared';
+import type {
+  Appointment,
+  AppointmentPayload,
+  Bill,
+  BillPayload,
+  Collaborator,
+  CollaboratorPayload,
+  PlanPayload,
+  User
+} from '@carebase/shared';
 
-interface PlanResponse {
-  recipient: {
-    id: number;
-    displayName: string | null;
+function toCollaboratorPayload(collaborator: Collaborator): CollaboratorPayload {
+  return {
+    ...collaborator,
+    invitedAt: collaborator.invitedAt instanceof Date
+      ? collaborator.invitedAt.toISOString()
+      : new Date(collaborator.invitedAt).toISOString(),
+    acceptedAt: collaborator.acceptedAt
+      ? collaborator.acceptedAt instanceof Date
+        ? collaborator.acceptedAt.toISOString()
+        : new Date(collaborator.acceptedAt).toISOString()
+      : null,
   };
-  dateRange: {
-    start: string;
-    end: string;
+}
+
+function toAppointmentPayload(appointment: Appointment): AppointmentPayload {
+  return {
+    ...appointment,
+    startLocal: appointment.startLocal instanceof Date
+      ? appointment.startLocal.toISOString()
+      : new Date(appointment.startLocal).toISOString(),
+    endLocal: appointment.endLocal instanceof Date
+      ? appointment.endLocal.toISOString()
+      : new Date(appointment.endLocal).toISOString(),
+    createdAt: appointment.createdAt instanceof Date
+      ? appointment.createdAt.toISOString()
+      : new Date(appointment.createdAt).toISOString()
   };
-  appointments: Appointment[];
-  bills: Bill[];
-  planVersion: number;
-  planUpdatedAt: string | null;
-  collaborators: Collaborator[];
+}
+
+function toBillPayload(bill: Bill): BillPayload {
+  return {
+    ...bill,
+    statementDate: bill.statementDate
+      ? bill.statementDate instanceof Date
+        ? bill.statementDate.toISOString()
+        : new Date(bill.statementDate).toISOString()
+      : null,
+    dueDate: bill.dueDate
+      ? bill.dueDate instanceof Date
+        ? bill.dueDate.toISOString()
+        : new Date(bill.dueDate).toISOString()
+      : null,
+    createdAt: bill.createdAt instanceof Date
+      ? bill.createdAt.toISOString()
+      : new Date(bill.createdAt).toISOString()
+  };
 }
 
 export async function getPlan(req: Request, res: Response): Promise<void> {
@@ -67,7 +108,10 @@ export async function getPlan(req: Request, res: Response): Promise<void> {
       listCollaborators(recipient.id),
     ]);
 
-    const sanitizedCollaborators = collaborators.map((collaborator) => ({
+    const collaboratorPayloads = collaborators.map(toCollaboratorPayload);
+    const appointmentPayloads = appointments.map(toAppointmentPayload);
+    const billPayloads = bills.map(toBillPayload);
+    const sanitizedCollaborators = collaboratorPayloads.map((collaborator) => ({
       ...collaborator,
       inviteToken:
         !collaboratorView && collaborator.status === 'pending'
@@ -75,7 +119,7 @@ export async function getPlan(req: Request, res: Response): Promise<void> {
           : ''
     }));
 
-    const payload: PlanResponse = {
+    const payload: PlanPayload = {
       recipient: {
         id: recipient.id,
         displayName: recipient.displayName,
@@ -84,10 +128,10 @@ export async function getPlan(req: Request, res: Response): Promise<void> {
         start: startDate.toISOString(),
         end: endDate.toISOString(),
       },
-      appointments,
-      bills,
+      appointments: appointmentPayloads,
+      bills: billPayloads,
       planVersion,
-      planUpdatedAt,
+      planUpdatedAt: planUpdatedAt ? new Date(planUpdatedAt).toISOString() : null,
       collaborators: sanitizedCollaborators.filter((collab) =>
         collaboratorView ? collab.status === 'accepted' : true
       ),
@@ -109,7 +153,8 @@ export async function getPlanVersionHandler(req: Request, res: Response): Promis
     }
 
     const { planVersion, planUpdatedAt } = await getPlanVersion(user.id);
-    res.json({ planVersion, planUpdatedAt });
+    const normalizedPlanUpdatedAt = planUpdatedAt ? new Date(planUpdatedAt).toISOString() : null;
+    res.json({ planVersion, planUpdatedAt: normalizedPlanUpdatedAt });
   } catch (error) {
     console.error('Get plan version error:', error);
     res.status(500).json({ error: 'Failed to fetch plan version' });

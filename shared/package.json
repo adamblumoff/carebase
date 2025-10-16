@@ -8,9 +8,14 @@
     ".": "./index.ts",
     "./types": "./types/index.ts"
   },
-  "scripts": {},
+  "scripts": {
+    "test": "NODE_ENV=test tsx --test types/constants.test.ts"
+  },
   "keywords": [],
   "author": "",
   "license": "UNLICENSED",
-  "dependencies": {}
+  "dependencies": {},
+  "devDependencies": {
+    "tsx": "^4.20.6"
+  }
 }
