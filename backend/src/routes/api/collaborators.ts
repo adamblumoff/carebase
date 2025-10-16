@@ -40,17 +40,20 @@ router.use((req, res, next) => {
 router.get('/', async (req: Request, res: Response) => {
   try {
     const user = req.user as User;
-    const context = await resolveRecipientContextForUser(user);
-    if (!context) {
+    const context = await resolveRecipientContextForUser(user.id);
+    const { recipient, collaborator: existingCollaborator } = context;
+
+    if (!recipient) {
       res.status(404).json({ error: 'No recipient found' });
       return;
     }
 
-    const collaborators = await listCollaborators(context.recipient.id);
-    const response = collaborators.map((collaborator) => ({
-      ...collaborator,
-      inviteToken:
-        context.role === 'owner' && collaborator.status === 'pending' ? collaborator.inviteToken : ''
+    const role: 'owner' | 'collaborator' = existingCollaborator ? 'collaborator' : 'owner';
+
+    const collaborators = await listCollaborators(recipient.id);
+    const response = collaborators.map((collab) => ({
+      ...collab,
+      inviteToken: role === 'owner' && collab.status === 'pending' ? collab.inviteToken : ''
     }));
     res.json({ collaborators: response });
   } catch (error) {
@@ -62,12 +65,16 @@ router.get('/', async (req: Request, res: Response) => {
 router.post('/', async (req: Request, res: Response) => {
   try {
     const user = req.user as User;
-    const context = await resolveRecipientContextForUser(user);
-    if (!context) {
+    const context = await resolveRecipientContextForUser(user.id);
+    const { recipient, collaborator: existingCollaborator } = context;
+
+    if (!recipient) {
       res.status(404).json({ error: 'No recipient found' });
       return;
     }
-    if (context.role !== 'owner') {
+
+    const contextRole: 'owner' | 'collaborator' = existingCollaborator ? 'collaborator' : 'owner';
+    if (contextRole !== 'owner') {
       res.status(403).json({ error: 'Only the owner can invite collaborators' });
       return;
     }
@@ -79,7 +86,7 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     const { collaborator, created, resent } = await createCollaboratorInvite(
-      context.recipient.id,
+      recipient.id,
       user.id,
       email,
       role
