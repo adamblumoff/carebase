@@ -27,6 +27,24 @@ import { getRealtimeEmitter } from '../services/realtime.js';
 let planVersionColumnsEnsured = false;
 let planVersionEnsurePromise: Promise<void> | null = null;
 
+let scheduleGoogleSyncForUserFn: ((userId: number, debounceMs?: number) => void) | null = null;
+
+async function scheduleGoogleSync(userId: number): Promise<void> {
+  try {
+    if (!scheduleGoogleSyncForUserFn) {
+      const mod = await import('../services/googleSync.js');
+      scheduleGoogleSyncForUserFn = mod.scheduleGoogleSyncForUser;
+    }
+    scheduleGoogleSyncForUserFn?.(userId);
+  } catch (error) {
+    console.error('Failed to schedule Google sync for user', userId, error);
+  }
+}
+
+export function __setGoogleSyncSchedulerForTests(scheduler: ((userId: number) => void) | null): void {
+  scheduleGoogleSyncForUserFn = scheduler;
+}
+
 async function ensurePlanVersionColumns(): Promise<void> {
   if (planVersionColumnsEnsured) {
     return;
@@ -1150,8 +1168,11 @@ async function touchPlanForItem(itemId: number): Promise<void> {
   if (userRow?.id) {
     const realtime = getRealtimeEmitter();
     realtime?.emitPlanUpdate(userRow.id as number);
+    await scheduleGoogleSync(userRow.id as number);
   }
 }
+
+export const __testTouchPlanForItem = touchPlanForItem;
 
 export async function touchPlanForUser(userId: number): Promise<void> {
   await ensurePlanVersionColumns();
@@ -1164,6 +1185,7 @@ export async function touchPlanForUser(userId: number): Promise<void> {
   );
   const realtime = getRealtimeEmitter();
   realtime?.emitPlanUpdate(userId);
+  await scheduleGoogleSync(userId);
 }
 
 export async function getPlanVersion(userId: number): Promise<{ planVersion: number; planUpdatedAt: Date | null }> {

@@ -20,6 +20,31 @@ import {
 const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
 const DEFAULT_LOOKBACK_DAYS = 30;
+const IS_TEST_ENV = process.env.NODE_ENV === 'test';
+const ENABLE_SYNC_IN_TEST = process.env.GOOGLE_SYNC_ENABLE_TEST === 'true';
+
+const DEFAULT_DEBOUNCE_MS = IS_TEST_ENV && !ENABLE_SYNC_IN_TEST
+  ? 0
+  : Number.parseInt(process.env.GOOGLE_SYNC_DEBOUNCE_MS ?? '', 10) || 15_000;
+const DEFAULT_RETRY_BASE_MS = IS_TEST_ENV && !ENABLE_SYNC_IN_TEST
+  ? 1_000
+  : Number.parseInt(process.env.GOOGLE_SYNC_RETRY_BASE_MS ?? '', 10) || 60_000;
+const MAX_RETRY_MS = IS_TEST_ENV && !ENABLE_SYNC_IN_TEST
+  ? 5_000
+  : Number.parseInt(process.env.GOOGLE_SYNC_RETRY_MAX_MS ?? '', 10) || 300_000;
+
+interface RetryState {
+  attempt: number;
+  timer: NodeJS.Timeout | null;
+}
+
+const debounceTimers = new Map<number, NodeJS.Timeout>();
+const retryTimers = new Map<number, RetryState>();
+const runningSyncs = new Set<number>();
+const followUpRequested = new Set<number>();
+
+type SyncRunner = (userId: number, options?: GoogleSyncOptions) => Promise<GoogleSyncSummary>;
+let syncRunner: SyncRunner;
 
 interface GoogleSyncOptions {
   forceFull?: boolean;
@@ -773,4 +798,97 @@ export async function syncUserWithGoogle(userId: number, options: GoogleSyncOpti
   }
 
   return summary;
+}
+
+syncRunner = syncUserWithGoogle;
+
+function computeRetryDelay(userId: number): number {
+  const current = retryTimers.get(userId);
+  const attempt = (current?.attempt ?? 0) + 1;
+  const delay = Math.min(DEFAULT_RETRY_BASE_MS * 2 ** (attempt - 1), MAX_RETRY_MS);
+  return delay;
+}
+
+async function performSync(userId: number): Promise<void> {
+  if (runningSyncs.has(userId)) {
+    followUpRequested.add(userId);
+    return;
+  }
+
+  runningSyncs.add(userId);
+  try {
+    const summary = await syncRunner(userId, { pullRemote: true });
+    retryTimers.delete(userId);
+    console.log(
+      `[GoogleSync] user=${userId} pushed=${summary.pushed} pulled=${summary.pulled} deleted=${summary.deleted} errors=${summary.errors.length}`
+    );
+  } catch (error) {
+    const delay = computeRetryDelay(userId);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[GoogleSync] user=${userId} sync failed (${message}). Retrying in ${delay}ms`);
+    const existing = retryTimers.get(userId);
+    if (existing?.timer) {
+      clearTimeout(existing.timer);
+    }
+    const timer = setTimeout(() => {
+      retryTimers.delete(userId);
+      void performSync(userId);
+    }, delay);
+    retryTimers.set(userId, { attempt: (existing?.attempt ?? 0) + 1, timer });
+    return;
+  } finally {
+    runningSyncs.delete(userId);
+  }
+
+  if (followUpRequested.has(userId)) {
+    followUpRequested.delete(userId);
+    scheduleGoogleSyncForUser(userId);
+  }
+}
+
+export function scheduleGoogleSyncForUser(userId: number, debounceMs: number = DEFAULT_DEBOUNCE_MS): void {
+  if (IS_TEST_ENV && !ENABLE_SYNC_IN_TEST) {
+    return;
+  }
+  if (runningSyncs.has(userId)) {
+    followUpRequested.add(userId);
+    return;
+  }
+
+  const existing = debounceTimers.get(userId);
+  if (existing) {
+    clearTimeout(existing);
+  }
+
+  const retry = retryTimers.get(userId);
+  if (retry?.timer) {
+    clearTimeout(retry.timer);
+  }
+  retryTimers.delete(userId);
+
+  if (debounceMs <= 0) {
+    debounceTimers.delete(userId);
+    void performSync(userId);
+    return;
+  }
+
+  const timer = setTimeout(() => {
+    debounceTimers.delete(userId);
+    void performSync(userId);
+  }, debounceMs);
+  debounceTimers.set(userId, timer);
+}
+
+export function __setGoogleSyncRunnerForTests(runner?: SyncRunner): void {
+  syncRunner = runner ?? syncUserWithGoogle;
+}
+
+export function __resetGoogleSyncStateForTests(): void {
+  debounceTimers.forEach((timer) => clearTimeout(timer));
+  debounceTimers.clear();
+  retryTimers.forEach(({ timer }) => timer && clearTimeout(timer));
+  retryTimers.clear();
+  runningSyncs.clear();
+  followUpRequested.clear();
+  syncRunner = syncUserWithGoogle;
 }
