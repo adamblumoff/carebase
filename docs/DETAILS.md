@@ -75,7 +75,7 @@ npm run env:mobile:prod      # Expo → carebase.dev
 ### Request Pipeline
 1. `server.ts` loads env, mounts middleware (JSON, session, bearer-token attach) and registers routers via `routes/registry.ts`.
 2. API routers delegate to controllers in `backend/src/controllers` for business logic.
-3. Database queries live in `backend/src/db/queries.ts`, built on a shared pool in `db/client.ts`.
+3. Database queries now live under `backend/src/db/queries/` (with a barrel file at `backend/src/db/queries.ts`) and share the same connection pool exported by `db/client.ts`.
 
 ### Email Ingestion
 - Postmark webhook hits `/webhook/inbound-email`.
