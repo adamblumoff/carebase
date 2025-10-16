@@ -2,6 +2,15 @@ import express, { Request, Response } from 'express';
 
 const router = express.Router();
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function formatAppLink(template: string, token: string): string {
   if (!template) return '';
   if (!token) return template;
@@ -17,6 +26,9 @@ function formatAppLink(template: string, token: string): string {
 function renderAcceptPage(params: { token: string; appOpenUrl: string; appDownloadUrl: string }): string {
   const { token, appOpenUrl, appDownloadUrl } = params;
   const hasDeepLink = Boolean(appOpenUrl);
+  const safeToken = token ? escapeHtml(token) : '';
+  const safeAppOpenUrl = appOpenUrl ? escapeHtml(appOpenUrl) : '';
+  const safeAppDownloadUrl = appDownloadUrl ? escapeHtml(appDownloadUrl) : '';
   return `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -40,10 +52,10 @@ function renderAcceptPage(params: { token: string; appOpenUrl: string; appDownlo
       <h1>You're almost in</h1>
       <p>To accept this invitation, open the Carebase app. If the app doesn't open automatically, you can copy the invite token below and paste it into the "Accept invite" screen.</p>
       <div class="actions">
-        ${hasDeepLink ? `<a class="button primary" href="${appOpenUrl}">Open Carebase App</a>` : ''}
-        ${appDownloadUrl ? `<a class="button secondary" href="${appDownloadUrl}">Get the Carebase App</a>` : ''}
+        ${hasDeepLink ? `<a class="button primary" href="${safeAppOpenUrl}">Open Carebase App</a>` : ''}
+        ${appDownloadUrl ? `<a class="button secondary" href="${safeAppDownloadUrl}">Get the Carebase App</a>` : ''}
       </div>
-      ${token ? `<div class="token"><strong>Invite token:</strong><br/>${token}</div>` : ''}
+      ${token ? `<div class="token"><strong>Invite token:</strong><br/>${safeToken}</div>` : ''}
     </main>
   </body>
 </html>`;
