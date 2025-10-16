@@ -220,6 +220,11 @@ async function ensureGoogleIntegrationSchema(): Promise<void> {
   await googleIntegrationEnsurePromise;
 }
 
+export function __setGoogleIntegrationSchemaEnsuredForTests(ensured: boolean): void {
+  googleIntegrationSchemaEnsured = ensured;
+  googleIntegrationEnsurePromise = ensured ? Promise.resolve() : null;
+}
+
 // Helper to generate random tokens
 function generateToken(length: number = 32): string {
   return crypto.randomBytes(length).toString('hex');

@@ -15,6 +15,7 @@ import {
   updateBill,
   markGoogleSyncPending,
   listGoogleConnectedUserIds,
+  findGoogleSyncLinkByEvent,
   type GoogleCredential
 } from '../db/queries.js';
 
@@ -99,12 +100,14 @@ interface GoogleEventResource {
 class GoogleSyncException extends Error {
   status?: number;
   code?: string;
+  context?: Record<string, unknown>;
 
-  constructor(message: string, status?: number, code?: string) {
+  constructor(message: string, status?: number, code?: string, context?: Record<string, unknown>) {
     super(message);
     this.name = 'GoogleSyncException';
     this.status = status;
     this.code = code;
+    this.context = context;
   }
 }
 
@@ -266,6 +269,32 @@ function ensureIsoDateTime(date: Date): string {
 
 function formatDateOnly(date: Date): string {
   return new Date(date).toISOString().split('T')[0];
+}
+
+function extractLocalDateTime(
+  eventDate: GoogleEventResource['start'] | GoogleEventResource['end'] | undefined
+): string | null {
+  if (!eventDate) {
+    return null;
+  }
+  if (eventDate.dateTime) {
+    let value = eventDate.dateTime;
+    const offsetMatch = value.match(/([+-]\d{2}:\d{2}|Z)$/);
+    if (offsetMatch) {
+      value = value.slice(0, value.length - offsetMatch[0].length);
+    }
+    if (value.includes('.')) {
+      value = value.split('.')[0];
+    }
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) {
+      return `${value}:00`;
+    }
+    return value;
+  }
+  if (eventDate.date) {
+    return `${eventDate.date}T00:00:00`;
+  }
+  return null;
 }
 
 function buildAppointmentEventPayload(appointment: Appointment): Record<string, unknown> {
@@ -449,10 +478,36 @@ async function pushAppointment(
   const payload = buildAppointmentEventPayload(appointment);
   const encodedCalendarId = encodeURIComponent(calendarId);
   const baseUrl = `${GOOGLE_CALENDAR_API}/calendars/${encodedCalendarId}/events`;
-  const existingEventId = appointment.googleSync?.eventId;
+  let existingEventId = appointment.googleSync?.eventId;
   const previousRemoteUpdatedAt = appointment.googleSync?.remoteUpdatedAt
     ? new Date(appointment.googleSync.remoteUpdatedAt)
     : null;
+  if (existingEventId) {
+    try {
+      const remoteEvent: GoogleEventResource = await googleJsonRequest(
+        accessToken,
+        `${baseUrl}/${encodeURIComponent(existingEventId)}`,
+        { method: 'GET' }
+      );
+      const remoteUpdatedAt = remoteEvent.updated ? new Date(remoteEvent.updated) : null;
+      if (
+        remoteUpdatedAt &&
+        previousRemoteUpdatedAt &&
+        remoteUpdatedAt.getTime() > previousRemoteUpdatedAt.getTime()
+      ) {
+        throw new GoogleSyncException('Remote appointment updated after local edit', 409, 'remote_newer', {
+          remoteEvent,
+          itemType: 'appointment'
+        });
+      }
+    } catch (error) {
+      if (error instanceof GoogleSyncException && error.status === 404) {
+        existingEventId = null;
+      } else {
+        throw error;
+      }
+    }
+  }
 
   try {
     const result: GoogleEventResource = existingEventId
@@ -501,10 +556,36 @@ async function pushBill(
   const payload = buildBillEventPayload(bill);
   const encodedCalendarId = encodeURIComponent(calendarId);
   const baseUrl = `${GOOGLE_CALENDAR_API}/calendars/${encodedCalendarId}/events`;
-  const existingEventId = bill.googleSync?.eventId;
+  let existingEventId = bill.googleSync?.eventId;
   const previousRemoteUpdatedAt = bill.googleSync?.remoteUpdatedAt
     ? new Date(bill.googleSync.remoteUpdatedAt)
     : null;
+  if (existingEventId) {
+    try {
+      const remoteEvent: GoogleEventResource = await googleJsonRequest(
+        accessToken,
+        `${baseUrl}/${encodeURIComponent(existingEventId)}`,
+        { method: 'GET' }
+      );
+      const remoteUpdatedAt = remoteEvent.updated ? new Date(remoteEvent.updated) : null;
+      if (
+        remoteUpdatedAt &&
+        previousRemoteUpdatedAt &&
+        remoteUpdatedAt.getTime() > previousRemoteUpdatedAt.getTime()
+      ) {
+        throw new GoogleSyncException('Remote bill updated after local edit', 409, 'remote_newer', {
+          remoteEvent,
+          itemType: 'bill'
+        });
+      }
+    } catch (error) {
+      if (error instanceof GoogleSyncException && error.status === 404) {
+        existingEventId = null;
+      } else {
+        throw error;
+      }
+    }
+  }
 
   try {
     const result: GoogleEventResource = existingEventId
@@ -560,13 +641,16 @@ function parseEventDate(event: GoogleEventResource['start'] | undefined): Date |
 async function applyGoogleAppointmentUpdate(
   calendarId: string,
   event: GoogleEventResource,
-  summary: GoogleSyncSummary
+  summary: GoogleSyncSummary,
+  existingAppointment?: Appointment
 ): Promise<void> {
   const privateProps = event.extendedProperties?.private ?? {};
-  const itemId = privateProps.carebaseItemId ? Number(privateProps.carebaseItemId) : NaN;
-  if (!Number.isFinite(itemId)) {
+  const fallbackItemId = existingAppointment?.itemId;
+  const itemIdCandidate = privateProps.carebaseItemId ? Number(privateProps.carebaseItemId) : fallbackItemId ?? NaN;
+  if (!Number.isFinite(itemIdCandidate)) {
     return;
   }
+  const itemId = Number(itemIdCandidate);
 
   if (event.status === 'cancelled') {
     await deleteGoogleSyncLink(itemId);
@@ -574,9 +658,21 @@ async function applyGoogleAppointmentUpdate(
     return;
   }
 
-  const appointment = await getAppointmentByItemId(itemId);
+  const appointment = existingAppointment ?? await getAppointmentByItemId(itemId);
   if (!appointment) {
     await deleteGoogleSyncLink(itemId);
+    return;
+  }
+
+  const remoteUpdatedAt = event.updated ? new Date(event.updated) : null;
+  const previousRemoteUpdatedAt = appointment.googleSync?.remoteUpdatedAt
+    ? new Date(appointment.googleSync.remoteUpdatedAt)
+    : null;
+  if (
+    remoteUpdatedAt &&
+    previousRemoteUpdatedAt &&
+    remoteUpdatedAt.getTime() <= previousRemoteUpdatedAt.getTime()
+  ) {
     return;
   }
 
@@ -584,6 +680,11 @@ async function applyGoogleAppointmentUpdate(
   const end = parseEventDate(event.end);
   if (!start || !end) {
     throw new GoogleSyncException('Google event missing start/end time', 400, 'invalid_event');
+  }
+  const startLocalStr = extractLocalDateTime(event.start);
+  const endLocalStr = extractLocalDateTime(event.end);
+  if (!startLocalStr || !endLocalStr) {
+    throw new GoogleSyncException('Unable to extract local start/end time', 400, 'invalid_event_time');
   }
 
   const ownerUserId = await getItemOwnerUserId(itemId);
@@ -593,8 +694,8 @@ async function applyGoogleAppointmentUpdate(
 
   const updated = await updateAppointment(appointment.id, ownerUserId, {
     summary: event.summary ?? appointment.summary,
-    startLocal: ensureIsoDateTime(start),
-    endLocal: ensureIsoDateTime(end),
+    startLocal: startLocalStr,
+    endLocal: endLocalStr,
     location: event.location ?? appointment.location ?? undefined,
     prepNote: event.description ?? appointment.prepNote ?? undefined,
     assignedCollaboratorId: appointment.assignedCollaboratorId ?? null
@@ -617,13 +718,16 @@ async function applyGoogleAppointmentUpdate(
 async function applyGoogleBillUpdate(
   calendarId: string,
   event: GoogleEventResource,
-  summary: GoogleSyncSummary
+  summary: GoogleSyncSummary,
+  existingBill?: Bill
 ): Promise<void> {
   const privateProps = event.extendedProperties?.private ?? {};
-  const itemId = privateProps.carebaseItemId ? Number(privateProps.carebaseItemId) : NaN;
-  if (!Number.isFinite(itemId)) {
+  const fallbackItemId = existingBill?.itemId;
+  const itemIdCandidate = privateProps.carebaseItemId ? Number(privateProps.carebaseItemId) : fallbackItemId ?? NaN;
+  if (!Number.isFinite(itemIdCandidate)) {
     return;
   }
+  const itemId = Number(itemIdCandidate);
 
   if (event.status === 'cancelled') {
     await deleteGoogleSyncLink(itemId);
@@ -631,9 +735,21 @@ async function applyGoogleBillUpdate(
     return;
   }
 
-  const bill = await getBillByItemId(itemId);
+  const bill = existingBill ?? await getBillByItemId(itemId);
   if (!bill) {
     await deleteGoogleSyncLink(itemId);
+    return;
+  }
+
+  const remoteUpdatedAt = event.updated ? new Date(event.updated) : null;
+  const previousRemoteUpdatedAt = bill.googleSync?.remoteUpdatedAt
+    ? new Date(bill.googleSync.remoteUpdatedAt)
+    : null;
+  if (
+    remoteUpdatedAt &&
+    previousRemoteUpdatedAt &&
+    remoteUpdatedAt.getTime() <= previousRemoteUpdatedAt.getTime()
+  ) {
     return;
   }
 
@@ -705,13 +821,47 @@ async function pullGoogleChanges(
       const items: GoogleEventResource[] = Array.isArray(payload.items) ? payload.items : [];
       for (const event of items) {
         const privateProps = event.extendedProperties?.private ?? {};
-        if (!privateProps.carebaseItemId) {
+        const carebaseItemId = privateProps.carebaseItemId;
+
+        let itemId = Number.isFinite(Number(carebaseItemId)) ? Number(carebaseItemId) : NaN;
+        let preloadedAppointment: Appointment | undefined;
+        let preloadedBill: Bill | undefined;
+
+        if (!Number.isFinite(itemId)) {
+          const link = await findGoogleSyncLinkByEvent(event.id);
+          if (link) {
+            itemId = link.itemId;
+          }
+        }
+
+        if (!Number.isFinite(itemId)) {
           continue;
         }
+
+        let handled = false;
+
         if (privateProps.carebaseType === 'appointment') {
           await applyGoogleAppointmentUpdate(calendarId, event, summary);
+          handled = true;
         } else if (privateProps.carebaseType === 'bill') {
           await applyGoogleBillUpdate(calendarId, event, summary);
+          handled = true;
+        } else {
+          preloadedAppointment = await getAppointmentByItemId(itemId);
+          if (preloadedAppointment) {
+            await applyGoogleAppointmentUpdate(calendarId, event, summary, preloadedAppointment);
+            handled = true;
+          } else {
+            preloadedBill = await getBillByItemId(itemId);
+            if (preloadedBill) {
+              await applyGoogleBillUpdate(calendarId, event, summary, preloadedBill);
+              handled = true;
+            }
+          }
+        }
+
+        if (!handled) {
+          await deleteGoogleSyncLink(itemId);
         }
       }
 
@@ -797,6 +947,17 @@ export async function syncUserWithGoogle(userId: number, options: GoogleSyncOpti
           summary.pushed += 1;
         } catch (error) {
           if (error instanceof GoogleSyncException && error.code === 'remote_newer') {
+            const remoteEvent = error.context?.remoteEvent as GoogleEventResource | undefined;
+            if (remoteEvent) {
+              try {
+                await applyGoogleAppointmentUpdate(calendarId, remoteEvent, summary, appointment);
+              } catch (applyError) {
+                const message =
+                  applyError instanceof Error ? applyError.message : 'Failed to apply remote appointment update';
+                summary.errors.push({ itemId: appointment.itemId, message });
+              }
+              continue;
+            }
             await markGoogleSyncPending(appointment.itemId, localHash);
             const ownerUserId = await getItemOwnerUserId(appointment.itemId);
             if (ownerUserId) {
@@ -819,6 +980,17 @@ export async function syncUserWithGoogle(userId: number, options: GoogleSyncOpti
           summary.pushed += 1;
         } catch (error) {
           if (error instanceof GoogleSyncException && error.code === 'remote_newer') {
+            const remoteEvent = error.context?.remoteEvent as GoogleEventResource | undefined;
+            if (remoteEvent) {
+              try {
+                await applyGoogleBillUpdate(calendarId, remoteEvent, summary, bill);
+              } catch (applyError) {
+                const message =
+                  applyError instanceof Error ? applyError.message : 'Failed to apply remote bill update';
+                summary.errors.push({ itemId: bill.itemId, message });
+              }
+              continue;
+            }
             await markGoogleSyncPending(bill.itemId, localHash);
             const ownerUserId = await getItemOwnerUserId(bill.itemId);
             if (ownerUserId) {
