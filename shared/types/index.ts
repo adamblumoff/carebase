@@ -54,6 +54,31 @@ export interface Item {
   createdAt: Date;
 }
 
+// ========== GOOGLE SYNC ==========
+
+export type GoogleSyncDirection = 'push' | 'pull';
+export type GoogleSyncStatus = 'idle' | 'pending' | 'error';
+
+export interface GoogleSyncMetadata {
+  calendarId: string | null;
+  eventId: string | null;
+  etag: string | null;
+  lastSyncedAt: Date | null;
+  lastSyncDirection: GoogleSyncDirection | null;
+  localHash: string | null;
+  remoteUpdatedAt: Date | null;
+  syncStatus: GoogleSyncStatus;
+  lastError: string | null;
+}
+
+export interface GoogleIntegrationStatus {
+  connected: boolean;
+  calendarId: string | null;
+  lastSyncedAt: Date | null;
+  syncPendingCount: number;
+  lastError: string | null;
+}
+
 // ========== APPOINTMENTS ==========
 
 export interface Appointment {
@@ -67,6 +92,7 @@ export interface Appointment {
   icsToken: string;
   createdAt: Date;
   assignedCollaboratorId: number | null;
+  googleSync: GoogleSyncMetadata | null;
 }
 
 // ========== BILLS ==========
@@ -84,6 +110,7 @@ export interface Bill {
   taskKey: string;
   createdAt: Date;
   assignedCollaboratorId: number | null;
+  googleSync: GoogleSyncMetadata | null;
 }
 
 // ========== AUDIT ==========

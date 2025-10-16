@@ -62,7 +62,13 @@ router.post('/photo', ensureAuthenticated, ensureRecipient, upload.single('photo
 
     // Process source (same as email webhook)
     const { parseSource } = await import('../services/parser.js');
-    const { createItem, createAppointment, createBill, createAuditLog } = await import('../db/queries.js');
+    const {
+      createItem,
+      createAppointment,
+      createBill,
+      createAuditLog,
+      markGoogleSyncPending
+    } = await import('../db/queries.js');
 
     const parsed = parseSource(source, ocrText);
     const { classification, appointmentData, billData, billOverdue } = parsed;
@@ -77,9 +83,11 @@ router.post('/photo', ensureAuthenticated, ensureRecipient, upload.single('photo
 
     // Create appointment or bill based on classification
     if (classification.type === 'appointment' && appointmentData) {
-      await createAppointment(item.id, appointmentData);
+      const appointment = await createAppointment(item.id, appointmentData);
+      await markGoogleSyncPending(appointment.itemId);
     } else if (classification.type === 'bill' && billData) {
-      await createBill(item.id, billData);
+      const bill = await createBill(item.id, billData);
+      await markGoogleSyncPending(bill.itemId);
     }
 
     // Log audit entry

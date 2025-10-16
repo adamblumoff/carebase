@@ -1,5 +1,13 @@
 import express, { Request, Response } from 'express';
-import { createSource, createItem, createAppointment, createBill, createAuditLog, findUserById } from '../db/queries.js';
+import {
+  createSource,
+  createItem,
+  createAppointment,
+  createBill,
+  createAuditLog,
+  findUserById,
+  markGoogleSyncPending
+} from '../db/queries.js';
 import { parseSource } from '../services/parser.js';
 import { storeText } from '../services/storage.js';
 import type { Source } from '@carebase/shared';
@@ -81,9 +89,11 @@ async function processSource(source: Source): Promise<void> {
 
   // Create appointment or bill based on classification
   if (classification.type === 'appointment' && appointmentData) {
-    await createAppointment(item.id, appointmentData);
+    const appointment = await createAppointment(item.id, appointmentData);
+    await markGoogleSyncPending(appointment.itemId);
   } else if (classification.type === 'bill' && billData) {
-    await createBill(item.id, billData);
+    const bill = await createBill(item.id, billData);
+    await markGoogleSyncPending(bill.itemId);
   }
 
   // Log audit entry

@@ -1,7 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { getLowConfidenceItems, reclassifyItem, findItemById, findSourceById } from '../db/queries.js';
 import { parseSource } from '../services/parser.js';
-import { createAppointment, createBill, createAuditLog } from '../db/queries.js';
+import { createAppointment, createBill, createAuditLog, markGoogleSyncPending } from '../db/queries.js';
 import type { ItemType } from '@carebase/shared';
 
 const router = express.Router();
@@ -69,7 +69,8 @@ router.post('/:itemId/reclassify', requireAuth, async (req: Request, res: Respon
         prepNote: undefined,
         summary: source.subject || 'Appointment (needs review)'
       };
-      await createAppointment(parseInt(itemId), appointmentData);
+      const appointment = await createAppointment(parseInt(itemId), appointmentData);
+      await markGoogleSyncPending(appointment.itemId);
     } else if (newType === 'bill') {
       const parsed = parseSource(source);
       // Force create bill even if parser couldn't extract all fields
@@ -80,7 +81,8 @@ router.post('/:itemId/reclassify', requireAuth, async (req: Request, res: Respon
         payUrl: undefined,
         status: 'todo' as const
       };
-      await createBill(parseInt(itemId), billData);
+      const bill = await createBill(parseInt(itemId), billData);
+      await markGoogleSyncPending(bill.itemId);
     }
 
     // Log manual reclassification

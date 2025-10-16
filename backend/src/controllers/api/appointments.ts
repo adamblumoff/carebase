@@ -7,6 +7,7 @@ import {
   deleteAppointment,
   findCollaboratorForRecipient,
   resolveRecipientContextForUser,
+  markGoogleSyncPending,
 } from '../../db/queries.js';
 import type { AppointmentUpdateRequest, User } from '@carebase/shared';
 
@@ -118,6 +119,7 @@ export async function patchAppointment(req: Request, res: Response): Promise<voi
         assignedCollaboratorId: nextAssignedCollaboratorId ?? null,
       });
 
+      await markGoogleSyncPending(updated.itemId);
       res.json(updated);
       return;
     }
@@ -143,6 +145,7 @@ export async function patchAppointment(req: Request, res: Response): Promise<voi
       assignedCollaboratorId: existing.assignedCollaboratorId ?? null,
     });
 
+    await markGoogleSyncPending(updated.itemId);
     res.json(updated);
   } catch (error) {
     if (error instanceof Error && error.message === 'Appointment not found') {

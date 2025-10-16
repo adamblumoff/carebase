@@ -2,7 +2,7 @@
  * Settings Screen
  * Streamlined account and app preferences UI
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ScrollView,
   View,
@@ -20,6 +20,7 @@ import { useTheme, spacing, radius, type Palette, type Shadow } from '../theme';
 import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../ui/ToastProvider';
 import { fetchCollaborators, inviteCollaborator, type CollaboratorResponse } from '../api/collaborators';
+import { useGoogleCalendarIntegration } from '../hooks/useGoogleCalendarIntegration';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
@@ -35,9 +36,62 @@ export default function SettingsScreen({ navigation }: Props) {
   const [inviteEmail, setInviteEmail] = useState('');
   const [invitePending, setInvitePending] = useState(false);
   const [canInvite, setCanInvite] = useState(true);
+  const googleIntegration = useGoogleCalendarIntegration();
 
   const email = auth.user?.email;
   const forwardingAddress = auth.user?.forwardingAddress ?? 'Add your forwarding address';
+
+  const formatLastSynced = useCallback((date: Date | null) => {
+    if (!date) return 'Never synced';
+    try {
+      return date.toLocaleString();
+    } catch {
+      return 'Unknown';
+    }
+  }, []);
+
+  const handleConnectGoogle = async () => {
+    try {
+      const outcome = await googleIntegration.connect();
+      if (outcome === 'success') {
+        toast.showToast('Google Calendar connected');
+      } else {
+        toast.showToast('Google connection cancelled');
+      }
+    } catch (error) {
+      console.error('Google connect failed', error);
+      toast.showToast('Failed to connect Google Calendar');
+    }
+  };
+
+  const handleDisconnectGoogle = () => {
+    Alert.alert('Disconnect Google Calendar', 'This will stop syncing appointments and bills. Continue?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Disconnect',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await googleIntegration.disconnect();
+            toast.showToast('Disconnected Google Calendar');
+          } catch (error) {
+            console.error('Disconnect Google Calendar failed', error);
+            toast.showToast('Failed to disconnect Google Calendar');
+          }
+        }
+      }
+    ]);
+  };
+
+  const handleManualSync = async () => {
+    try {
+      const summary = await googleIntegration.manualSync();
+      toast.showToast(`Synced with Google (${summary.pushed} pushed, ${summary.pulled} pulled)`);
+    } catch (error) {
+      console.error('Manual Google sync failed', error);
+      toast.showToast('Failed to sync with Google Calendar');
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -211,6 +265,84 @@ export default function SettingsScreen({ navigation }: Props) {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Calendar sync</Text>
+          <View style={styles.card}>
+            <View style={styles.integrationHeader}>
+              <Text style={styles.cardLabel}>Google Calendar</Text>
+              <View
+                style={[
+                  styles.statusPill,
+                  googleIntegration.status?.connected ? styles.statusPillConnected : styles.statusPillDisconnected
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.statusPillText,
+                    googleIntegration.status?.connected ? styles.statusPillTextConnected : styles.statusPillTextDisconnected
+                  ]}
+                >
+                  {googleIntegration.status?.connected ? 'Connected' : 'Not connected'}
+                </Text>
+              </View>
+            </View>
+
+            {googleIntegration.loading ? (
+              <Text style={styles.cardHint}>Checking your Google connection…</Text>
+            ) : (
+              <>
+                <Text style={styles.cardValue}>Last sync</Text>
+                <Text style={styles.cardHint}>{formatLastSynced(googleIntegration.status?.lastSyncedAt ?? null)}</Text>
+                <Text style={[styles.cardValue, { marginTop: spacing(2) }]}>Pending updates</Text>
+                <Text style={styles.cardHint}>
+                  {googleIntegration.status?.syncPendingCount ?? 0} waiting to push
+                </Text>
+                {googleIntegration.status?.lastError ? (
+                  <Text style={styles.integrationError}>{googleIntegration.status.lastError}</Text>
+                ) : null}
+              </>
+            )}
+
+            <View style={styles.integrationActions}>
+              {googleIntegration.status?.connected ? (
+                <>
+                  <TouchableOpacity
+                    style={[styles.integrationButton, googleIntegration.syncing && styles.integrationButtonDisabled]}
+                    onPress={handleManualSync}
+                    disabled={googleIntegration.syncing}
+                  >
+                    <Text style={styles.integrationButtonText}>
+                      {googleIntegration.syncing ? 'Syncing…' : 'Sync now'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.integrationSecondaryButton}
+                    onPress={handleDisconnectGoogle}
+                    disabled={googleIntegration.connecting}
+                  >
+                    <Text style={styles.integrationSecondaryText}>
+                      {googleIntegration.connecting ? 'Disconnecting…' : 'Disconnect'}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.integrationButton, (!googleIntegration.requestReady || googleIntegration.connecting) && styles.integrationButtonDisabled]}
+                  onPress={handleConnectGoogle}
+                  disabled={!googleIntegration.requestReady || googleIntegration.connecting}
+                >
+                  <Text style={styles.integrationButtonText}>
+                    {googleIntegration.connecting ? 'Connecting…' : 'Connect Google Calendar'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+          {googleIntegration.error ? (
+            <Text style={styles.sectionHelper}>{googleIntegration.error}</Text>
+          ) : null}
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>App preferences</Text>
           <TouchableOpacity style={styles.chevronRow}>
             <Text style={styles.chevronText}>Notifications</Text>
@@ -341,6 +473,66 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
     collaboratorMeta: {
       fontSize: 12,
       color: palette.textMuted,
+    },
+    integrationHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: spacing(1.5),
+    },
+    statusPill: {
+      paddingHorizontal: spacing(1.5),
+      paddingVertical: spacing(0.75),
+      borderRadius: 999,
+    },
+    statusPillConnected: {
+      backgroundColor: palette.success,
+    },
+    statusPillDisconnected: {
+      backgroundColor: palette.border,
+    },
+    statusPillText: {
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    statusPillTextConnected: {
+      color: '#ffffff',
+    },
+    statusPillTextDisconnected: {
+      color: palette.textMuted,
+    },
+    integrationActions: {
+      marginTop: spacing(2),
+      gap: spacing(1),
+    },
+    integrationButton: {
+      backgroundColor: palette.primary,
+      borderRadius: radius.md,
+      paddingVertical: spacing(1.5),
+      alignItems: 'center',
+    },
+    integrationButtonDisabled: {
+      opacity: 0.6,
+    },
+    integrationButtonText: {
+      color: '#ffffff',
+      fontWeight: '600',
+    },
+    integrationSecondaryButton: {
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: palette.border,
+      paddingVertical: spacing(1.25),
+      alignItems: 'center',
+    },
+    integrationSecondaryText: {
+      color: palette.textSecondary,
+      fontWeight: '600',
+    },
+    integrationError: {
+      marginTop: spacing(1.5),
+      color: palette.danger,
+      fontSize: 13,
     },
     chevronRow: {
       backgroundColor: palette.canvas,

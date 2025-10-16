@@ -9,6 +9,7 @@ import {
   updateBillStatusForRecipient,
   findCollaboratorForRecipient,
   resolveRecipientContextForUser,
+  markGoogleSyncPending,
 } from '../../db/queries.js';
 import type { BillStatus, BillUpdateData, User } from '@carebase/shared';
 
@@ -107,6 +108,7 @@ export async function patchBill(req: Request, res: Response): Promise<void> {
         assignedCollaboratorId:
           updateData.assignedCollaboratorId ?? existing.assignedCollaboratorId ?? null,
       });
+      await markGoogleSyncPending(updated.itemId);
       res.json(updated);
       return;
     }
@@ -138,6 +140,7 @@ export async function patchBill(req: Request, res: Response): Promise<void> {
       assignedCollaboratorId: existing.assignedCollaboratorId ?? null,
     });
 
+    await markGoogleSyncPending(updated.itemId);
     res.json(updated);
   } catch (error) {
     if (error instanceof Error && error.message === 'Bill not found') {
@@ -203,6 +206,7 @@ export async function markBillPaid(req: Request, res: Response): Promise<void> {
         ? await updateBillStatus(billId, user.id, 'paid')
         : await updateBillStatusForRecipient(billId, context.recipient.id, 'paid');
 
+    await markGoogleSyncPending(updated.itemId);
     res.json(updated);
   } catch (error) {
     if (error instanceof Error && error.message === 'Bill not found') {

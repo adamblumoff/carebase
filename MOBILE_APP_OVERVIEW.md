@@ -61,7 +61,7 @@ This ensures React Native rebuilds styles when the device appearance changes.
 
 ### Environment Setup
 - `API_BASE_URL` resolves to `EXPO_PUBLIC_API_BASE_URL` if provided; otherwise defaults to `http://localhost:3000` in development and a placeholder production URL.
-- Google OAuth IDs (`GOOGLE_CLIENT_ID`) are also read from Expo env vars. The defaults are placeholders—remember to update them before production use.
+- Google OAuth IDs (`GOOGLE_CLIENT_ID`) are also read from Expo env vars. Provide platform-specific values via `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, and `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` so both login and Calendar sync can complete successfully. The defaults in `config.ts` are placeholders—replace them before any external testing.
 
 ### Axios Client (`src/api/client.ts`)
 - Configured with the base URL, JSON headers, 10s timeout.
@@ -147,6 +147,8 @@ This ensures React Native rebuilds styles when the device appearance changes.
 - Uses the same card background (`palette.canvas`) for all tiles (see recent fix aligning colors).
 - Logout button simply replaces the stack with `Login`—backend invalidation still TODO.
 - The API base URL read from `config.ts` helps confirm environment wiring at runtime.
+- Calendar sync card consumes `useGoogleCalendarIntegration` to drive Google OAuth (PKCE), expose connect/disconnect/manual sync actions, and surface backend status fields (last sync timestamp, pending count, error message).
+- Calendar sync card now mirrors the login flow: the hook asks the backend for a consent URL, launches `WebBrowser.openAuthSessionAsync` against the ngrok-hosted API, and listens for the `carebase://integrations/google` deep link to determine success or failure.
 
 ### KeyboardScreen Component
 - Wraps children in `SafeAreaView`, `KeyboardAvoidingView`, and `ScrollView`.
@@ -173,7 +175,7 @@ This ensures React Native rebuilds styles when the device appearance changes.
 ## 12. Developer Workflow Notes
 
 - **Running Locally**: From repo root, `npm install`, then `npm run dev:mobile`. Provide `EXPO_PUBLIC_API_BASE_URL` so the app can reach the backend (use ngrok when running on a device).
-- **Testing**: No Jest suite yet. When adding tests use `jest-expo` and mock AsyncStorage + theme context.
+- **Testing**: `npm test --workspace=mobile` runs `jest-expo` with mocks for `expo-auth-session`, AsyncStorage, and theming. Pair it with `npm test --workspace=@carebase/backend` whenever you touch shared integration flows.
 - **Tokens**: Debug stored tokens with `AsyncStorage.getItem('accessToken')` via React Native DevTools or by instrumenting the interceptors.
 - **Caching**: After editing `app.json` or adding native modules ensure you stop Expo and run `npx expo start -c`.
 - **API Docs**: Run `npm run docs:routes --workspace=backend` whenever routes change to refresh `docs/api-routes.md`.

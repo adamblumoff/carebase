@@ -15,6 +15,11 @@ Collaborator invite configuration:
 - Backend requires `COLLABORATOR_INVITE_BASE_URL`, `COLLABORATOR_APP_OPEN_URL` (include `{token}` placeholder), and optionally `COLLABORATOR_APP_DOWNLOAD_URL`. Expo deep links such as `exp://…/invite?token={token}` work when running through a tunnel.
 - When testing via ngrok, restart the backend after updating env vars and resend invites so the new URLs propagate.
 
+Google Calendar integration configuration:
+- Backend reads `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET` (falls back to `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` if unset) plus `GOOGLE_AUTH_STATE_SECRET` for signing OAuth state. The Google Calendar API must be enabled for the project.
+- Expo must provide `EXPO_PUBLIC_GOOGLE_WEB|IOS|ANDROID_CLIENT_ID`. The mobile client now calls `/api/integrations/google/connect/start`, opens the returned ngrok-safe consent URL, and receives the result via `carebase://integrations/google`—same pattern as the login flow.
+- New REST endpoints live under `/api/integrations/google/*`; update `backend/src/routes/registry.metadata.ts` whenever those change so the docs stay accurate.
+
 ## Coding Style & Naming Conventions
 Backend and shared code use strict TypeScript with ES modules; keep 2-space indentation, trailing semicolons, and `const` by default. Route files live under `routes/` where they simply bind Express routes to controller functions in `controllers/`. The full API matrix lives in `routes/registry.ts`—update it whenever you add or remove endpoints. Exported types stay in `shared/types` using PascalCase interfaces. In the mobile app, components are PascalCase under `src/screens` or `src/components`. Always derive colors and spacing from `useTheme()` (`mobile/src/theme.tsx`) within React components: memoize StyleSheets with `useMemo(() => createStyles(palette, shadow), [palette, shadow])` and avoid importing the palette directly. Keep environment bootstrapping imports (see `backend/src/server.ts`) at the top so `env.ts` loads before other modules. Never hard-code personal tunnel URLs; rely on configurable env vars (`BASE_URL`, `EXPO_PUBLIC_API_BASE_URL`).
 
@@ -25,6 +30,10 @@ Collaborator invite testing tips:
 - `backend/src/routes/api/collaborators.test.ts` contains simple unit coverage for email matching; expand it if validation logic grows.
 - Add integration tests when touching acceptance to confirm `/api/collaborators/accept` rejects mismatched emails and updates existing rows.
 - Mobile deep-link logic is exercised in `App.tsx`; when writing Jest tests, mock `Linking.getInitialURL` / `addEventListener` and `ToastProvider`.
+
+Google Calendar testing tips:
+- Backend Google sync helpers live in `backend/src/services/googleSync.ts` with coverage in `backend/src/routes/api/integrations/google.test.ts`; exercise both happy-path sync and auth edge cases when touching them.
+- The Expo hook `useGoogleCalendarIntegration` is unit-tested via `mobile/src/__tests__/SettingsScreen.test.tsx`; mock `expo-auth-session` and the integration API when adding new UI paths.
 
 ## Commit & Pull Request Guidelines
 Commits should stay concise, imperative, and focused (e.g., “Replace cookie manager with AsyncStorage”). Reference issues in the body if applicable and avoid batching unrelated changes. Pull requests need a short summary, testing notes (`npm run test:backend`, `npm test --workspace=mobile`, simulator screenshots, etc.), call out new env vars, and include migration IDs when schema changes apply. When modifying theming or Expo config, mention whether you cleared the Metro cache and confirmed both light/dark modes. Regenerate API route docs with `npm run docs:routes --workspace=backend` whenever routers change.

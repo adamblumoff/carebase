@@ -86,6 +86,7 @@ The backend currently runs as a web app with EJS views. Features:
 - `/upload` - Photo upload for bills
 - `/webhook/inbound-email` - Postmark webhook
 - `/calendar/:token.ics` - ICS file download
+- `/api/integrations/google/*` - Connect, sync, and disconnect Google Calendar events
 
 ## Mobile App Overview
 
@@ -97,6 +98,7 @@ Current features shipped in the Expo client:
 - Settings hub with account, preferences, and system metadata
 - Camera capture + library import for bill uploads
 - Shared theming via `ThemeProvider` (`mobile/src/theme.tsx`) with automatic light/dark palettes
+- Google Calendar sync panel with OAuth connect/disconnect and manual sync actions
 
 ## Shared Types
 
@@ -126,6 +128,12 @@ GOOGLE_CLIENT_ID=your-client-id
 GOOGLE_CLIENT_SECRET=your-client-secret
 GOOGLE_CALLBACK_URL=http://localhost:3000/auth/google/callback
 
+# Google Calendar integration (server-side)
+# Optional: falls back to GOOGLE_CLIENT_ID/SECRET when undefined
+GOOGLE_OAUTH_CLIENT_ID=your-calendar-client-id
+GOOGLE_OAUTH_CLIENT_SECRET=your-calendar-client-secret
+GOOGLE_AUTH_STATE_SECRET=super-secret-for-google-state
+
 # Email
 RESEND_API_KEY=your-resend-key
 INBOUND_EMAIL_DOMAIN=inbound.yourapp.com
@@ -139,6 +147,12 @@ NODE_ENV=development
 COLLABORATOR_INVITE_BASE_URL=http://localhost:3000
 COLLABORATOR_APP_OPEN_URL=carebase://invite?token={token}
 COLLABORATOR_APP_DOWNLOAD_URL=https://your-download-link.example.com
+
+# Mobile Expo env
+EXPO_PUBLIC_API_BASE_URL=http://localhost:3000
+EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=your-web-client-id.apps.googleusercontent.com
+EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=your-ios-client-id.apps.googleusercontent.com
+EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=your-android-client-id.apps.googleusercontent.com
 ```
 
 ### Collaborator Invite Flow

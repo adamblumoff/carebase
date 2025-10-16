@@ -25,6 +25,7 @@ export const ROUTER_METADATA: RouterMeta[] = [
   { basePath: '/api/bills', scope: 'api', description: 'Bill CRUD APIs' },
   { basePath: '/api/upload', scope: 'api', description: 'Mobile photo upload API' },
   { basePath: '/api/collaborators', scope: 'api', description: 'Care team collaborator APIs' },
+  { basePath: '/api/integrations/google', scope: 'api', description: 'Google Calendar integration APIs' },
 ];
 
 export const API_ROUTE_METADATA: RouteMeta[] = [
@@ -45,4 +46,10 @@ export const API_ROUTE_METADATA: RouteMeta[] = [
   { method: 'GET', path: '/api/collaborators', description: 'List collaborators for the active recipient' },
   { method: 'POST', path: '/api/collaborators', description: 'Invite a collaborator by email' },
   { method: 'POST', path: '/api/collaborators/accept', description: 'Accept a collaborator invite' },
+  { method: 'GET', path: '/api/integrations/google/status', description: 'Fetch Google integration status for the user' },
+  { method: 'POST', path: '/api/integrations/google/connect/start', description: 'Generate Google OAuth URL for calendar sync (mobile)' },
+  { method: 'POST', path: '/api/integrations/google/connect', description: 'Store Google OAuth tokens and trigger initial sync' },
+  { method: 'DELETE', path: '/api/integrations/google/connect', description: 'Disconnect Google Calendar integration' },
+  { method: 'POST', path: '/api/integrations/google/sync', description: 'Manually trigger Google Calendar sync' },
+  { method: 'GET', path: '/api/integrations/google/callback', description: 'OAuth callback endpoint for Google Calendar integration' },
 ];

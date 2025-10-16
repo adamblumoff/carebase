@@ -35,6 +35,33 @@ jest.mock('../api/collaborators', () => ({
   acceptCollaboratorInvite: jest.fn(),
 }));
 
+jest.mock('../api/googleIntegration', () => ({
+  fetchGoogleIntegrationStatus: jest.fn().mockResolvedValue({
+    connected: false,
+    calendarId: null,
+    lastSyncedAt: null,
+    syncPendingCount: 0,
+    lastError: null,
+  }),
+  beginGoogleIntegrationConnect: jest.fn().mockResolvedValue({
+    authUrl: 'https://example.com/google-auth',
+    redirectUri: 'https://example.com/callback',
+  }),
+  disconnectGoogleIntegration: jest.fn().mockResolvedValue(undefined),
+  triggerGoogleManualSync: jest.fn().mockResolvedValue({
+    pushed: 0,
+    pulled: 0,
+    deleted: 0,
+    errors: [],
+    calendarId: 'primary',
+  }),
+}));
+
+jest.mock('expo-web-browser', () => ({
+  maybeCompleteAuthSession: jest.fn(),
+  openAuthSessionAsync: jest.fn().mockResolvedValue({ type: 'dismiss' }),
+}));
+
 jest.useFakeTimers();
 
 const renderWithProviders = (ui: React.ReactElement, authOverrides = {}) => {

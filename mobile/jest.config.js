@@ -9,5 +9,6 @@ module.exports = {
     '^socket.io-client/dist/socket.io.esm.min.js$': '<rootDir>/src/__mocks__/socket.io-client.ts',
     '^@react-native-community/datetimepicker$': '<rootDir>/src/__mocks__/datetimepicker.ts',
     '^expo(/.*)?$': '<rootDir>/src/__mocks__/expo.ts',
+    '^expo-auth-session$': '<rootDir>/src/__mocks__/expo-auth-session.ts',
   },
 };

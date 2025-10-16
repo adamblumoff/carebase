@@ -56,4 +56,11 @@ export const API_ENDPOINTS = {
     invite: '/api/collaborators',
     accept: '/api/collaborators/accept',
   },
+
+  // Integrations
+  googleIntegration: {
+    status: '/api/integrations/google/status',
+    connect: '/api/integrations/google/connect',
+    sync: '/api/integrations/google/sync',
+  },
 };

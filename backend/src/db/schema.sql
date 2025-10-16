@@ -89,6 +89,110 @@ CREATE TABLE IF NOT EXISTS bills (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Google sync links table
+CREATE TABLE IF NOT EXISTS google_sync_links (
+  id SERIAL PRIMARY KEY,
+  item_id INTEGER NOT NULL UNIQUE REFERENCES items(id) ON DELETE CASCADE,
+  calendar_id TEXT,
+  event_id TEXT,
+  etag TEXT,
+  last_synced_at TIMESTAMP,
+  last_sync_direction VARCHAR(10) CHECK (last_sync_direction IN ('push', 'pull')),
+  local_hash VARCHAR(128),
+  remote_updated_at TIMESTAMP,
+  sync_status VARCHAR(20) NOT NULL DEFAULT 'idle' CHECK (sync_status IN ('idle', 'pending', 'error')),
+  last_error TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE google_sync_links
+  ADD COLUMN IF NOT EXISTS calendar_id TEXT;
+
+ALTER TABLE google_sync_links
+  ADD COLUMN IF NOT EXISTS event_id TEXT;
+
+ALTER TABLE google_sync_links
+  ADD COLUMN IF NOT EXISTS etag TEXT;
+
+ALTER TABLE google_sync_links
+  ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMP;
+
+ALTER TABLE google_sync_links
+  ADD COLUMN IF NOT EXISTS last_sync_direction VARCHAR(10) CHECK (last_sync_direction IN ('push', 'pull'));
+
+ALTER TABLE google_sync_links
+  ADD COLUMN IF NOT EXISTS local_hash VARCHAR(128);
+
+ALTER TABLE google_sync_links
+  ADD COLUMN IF NOT EXISTS remote_updated_at TIMESTAMP;
+
+ALTER TABLE google_sync_links
+  ADD COLUMN IF NOT EXISTS sync_status VARCHAR(20) NOT NULL DEFAULT 'idle' CHECK (sync_status IN ('idle', 'pending', 'error'));
+
+ALTER TABLE google_sync_links
+  ADD COLUMN IF NOT EXISTS last_error TEXT;
+
+ALTER TABLE google_sync_links
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+ALTER TABLE google_sync_links
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+CREATE INDEX IF NOT EXISTS idx_google_sync_links_event ON google_sync_links(event_id);
+CREATE INDEX IF NOT EXISTS idx_google_sync_links_calendar ON google_sync_links(calendar_id);
+
+-- Google OAuth credentials table
+CREATE TABLE IF NOT EXISTS google_credentials (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  access_token TEXT NOT NULL,
+  refresh_token TEXT NOT NULL,
+  scope TEXT[],
+  expires_at TIMESTAMP,
+  token_type VARCHAR(50),
+  id_token TEXT,
+  calendar_id TEXT,
+  sync_token TEXT,
+  last_pulled_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE google_credentials
+  ADD COLUMN IF NOT EXISTS access_token TEXT;
+
+ALTER TABLE google_credentials
+  ADD COLUMN IF NOT EXISTS refresh_token TEXT;
+
+ALTER TABLE google_credentials
+  ADD COLUMN IF NOT EXISTS scope TEXT[];
+
+ALTER TABLE google_credentials
+  ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP;
+
+ALTER TABLE google_credentials
+  ADD COLUMN IF NOT EXISTS token_type VARCHAR(50);
+
+ALTER TABLE google_credentials
+  ADD COLUMN IF NOT EXISTS id_token TEXT;
+
+ALTER TABLE google_credentials
+  ADD COLUMN IF NOT EXISTS calendar_id TEXT;
+
+ALTER TABLE google_credentials
+  ADD COLUMN IF NOT EXISTS sync_token TEXT;
+
+ALTER TABLE google_credentials
+  ADD COLUMN IF NOT EXISTS last_pulled_at TIMESTAMP;
+
+ALTER TABLE google_credentials
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+ALTER TABLE google_credentials
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+CREATE INDEX IF NOT EXISTS idx_google_credentials_expires_at ON google_credentials(expires_at);
+
 -- Care collaborators table
 CREATE TABLE IF NOT EXISTS care_collaborators (
   id SERIAL PRIMARY KEY,
