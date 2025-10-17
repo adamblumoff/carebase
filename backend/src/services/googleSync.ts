@@ -1432,6 +1432,8 @@ export async function syncUserWithGoogle(userId: number, options: GoogleSyncOpti
 
 syncRunner = syncUserWithGoogle;
 
+export { pullGoogleChanges };
+
 function computeRetryDelay(userId: number): number {
   const current = retryTimers.get(userId);
   const attempt = (current?.attempt ?? 0) + 1;

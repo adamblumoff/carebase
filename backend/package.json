@@ -10,6 +10,7 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "test": "NODE_ENV=test tsx --test src/**/*.test.ts",
     "test:coverage": "rm -rf coverage && NODE_ENV=test NODE_V8_COVERAGE=coverage tsx --test src/**/*.test.ts",
+    "test:vitest": "NODE_ENV=test vitest run",
     "docs:routes": "tsx scripts/generate-route-docs.ts"
   },
   "keywords": [
@@ -46,6 +47,7 @@
     "@types/supertest": "^6.0.3",
     "pg-mem": "^3.0.5",
     "supertest": "^7.1.4",
+    "vitest": "^2.1.1",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"
   }
