@@ -46,5 +46,6 @@ export const API_ROUTE_METADATA: RouteMeta[] = [
   { method: 'POST', path: '/api/integrations/google/connect', description: 'Store Google OAuth tokens and trigger initial sync' },
   { method: 'DELETE', path: '/api/integrations/google/connect', description: 'Disconnect Google Calendar integration' },
   { method: 'POST', path: '/api/integrations/google/sync', description: 'Manually trigger Google Calendar sync' },
+  { method: 'POST', path: '/api/integrations/google/webhook', description: 'Google Calendar change notifications webhook' },
   { method: 'GET', path: '/api/integrations/google/callback', description: 'OAuth callback endpoint for Google Calendar integration' },
 ];

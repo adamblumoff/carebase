@@ -8,7 +8,7 @@ const googleSyncModule = await import('./googleSync.js');
 const queries = await import('../db/queries.js');
 const dbClientModule = await import('../db/client.js');
 
-const { syncUserWithGoogle, __resetGoogleSyncStateForTests } = googleSyncModule;
+const { syncUserWithGoogle, __resetGoogleSyncStateForTests, __setGoogleSyncSchedulerForTests } = googleSyncModule;
 const dbClient = dbClientModule.default as {
   query: (text: string, params?: any[]) => Promise<any>;
 };
@@ -781,6 +781,11 @@ test('remote edits with newer timestamp override pending local push', async (t) 
   };
 
   const fetchCalls: Array<{ url: string; method: string }> = [];
+  const schedulerCalls: Array<{ userId: number; debounce: number }> = [];
+
+  __setGoogleSyncSchedulerForTests((userId: number, debounceMs: number = 0) => {
+    schedulerCalls.push({ userId, debounce: debounceMs });
+  });
 
   global.fetch = async (input: any, init?: any) => {
     const url =
@@ -816,6 +821,7 @@ test('remote edits with newer timestamp override pending local push', async (t) 
   };
 
   t.after(() => {
+    __setGoogleSyncSchedulerForTests(null);
     dbClient.query = originalQuery;
     global.fetch = originalFetch;
     __resetGoogleSyncStateForTests();

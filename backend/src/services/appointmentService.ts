@@ -127,6 +127,12 @@ export async function deleteAppointmentAsOwner(user: User, appointmentId: number
     throw new ForbiddenError('Only the owner can delete appointments');
   }
 
+  const existing = await getAppointmentById(appointmentId, user.id);
+  if (!existing) {
+    throw new NotFoundError('Appointment not found');
+  }
+
+  await markGoogleSyncPending(existing.itemId);
   await deleteAppointment(appointmentId, user.id);
 }
 

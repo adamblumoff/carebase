@@ -16,13 +16,27 @@ import {
   markGoogleSyncPending,
   listGoogleConnectedUserIds,
   findGoogleSyncLinkByEvent,
-  type GoogleCredential
+  upsertGoogleWatchChannel,
+  deleteGoogleWatchChannel,
+  findGoogleWatchChannelByUser,
+  findGoogleWatchChannelById,
+  findGoogleWatchChannelByResource,
+  findGoogleWatchChannelByToken,
+  listExpiringGoogleWatchChannels,
+  listGoogleWatchChannelsByUser,
+  type GoogleCredential,
+  type GoogleWatchChannel
 } from '../db/queries.js';
 import { getGoogleSyncConfig, isTestEnv } from './googleSync/config.js';
 import { logError, logInfo, logWarn } from './googleSync/logger.js';
 
 const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
+const GOOGLE_CHANNELS_API = 'https://www.googleapis.com/calendar/v3/channels/stop';
+const GOOGLE_WEBHOOK_PATH = '/api/integrations/google/webhook';
+const WATCH_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
+const WATCH_RENEWAL_THRESHOLD_MS = 60 * 60 * 1000; // 1 hour
+const WATCH_RENEWAL_LOOKAHEAD_MS = 12 * 60 * 60 * 1000; // 12 hours
 
 const {
   lookbackDays: DEFAULT_LOOKBACK_DAYS,
@@ -30,7 +44,8 @@ const {
   retryBaseMs: DEFAULT_RETRY_BASE_MS,
   retryMaxMs: MAX_RETRY_MS,
   pollIntervalMs: DEFAULT_POLL_INTERVAL_MS,
-  enableInTest: ENABLE_SYNC_IN_TEST
+  enableInTest: ENABLE_SYNC_IN_TEST,
+  enablePollingFallback: ENABLE_POLLING_FALLBACK
 } = getGoogleSyncConfig();
 
 const IS_TEST_ENV = isTestEnv();
@@ -45,6 +60,7 @@ const retryTimers = new Map<number, RetryState>();
 const runningSyncs = new Set<number>();
 const followUpRequested = new Set<number>();
 let pollingTimer: NodeJS.Timeout | null = null;
+let testSchedulerOverride: ((userId: number, debounceMs: number) => void) | null = null;
 
 type SyncRunner = (userId: number, options?: GoogleSyncOptions) => Promise<GoogleSyncSummary>;
 let syncRunner: SyncRunner;
@@ -108,6 +124,16 @@ class GoogleSyncException extends Error {
     this.code = code;
     this.context = context;
   }
+}
+
+function getGoogleWebhookAddress(): string {
+  const base =
+    process.env.GOOGLE_SYNC_WEBHOOK_BASE_URL ??
+    process.env.GOOGLE_SYNC_WEBHOOK_URL ??
+    process.env.BASE_URL ??
+    'http://localhost:3000';
+  const url = new URL(GOOGLE_WEBHOOK_PATH, base);
+  return url.toString();
 }
 
 function assertClientCredentials(): { clientId: string; clientSecret: string } {
@@ -437,6 +463,18 @@ async function googleJsonRequest(
   url: string,
   init: RequestInit & { retry?: boolean } = {}
 ): Promise<any> {
+  const method = (init.method ?? 'GET').toUpperCase();
+  let safeUrl = url;
+  try {
+    const parsed = new URL(url);
+    parsed.searchParams.delete('access_token');
+    parsed.searchParams.delete('token');
+    parsed.searchParams.delete('syncToken');
+    safeUrl = `${parsed.origin}${parsed.pathname}${parsed.search ? `?${parsed.search}` : ''}`;
+  } catch {
+    // leave safeUrl as original when URL parsing fails
+  }
+
   const response = await fetch(url, {
     ...init,
     headers: {
@@ -447,6 +485,7 @@ async function googleJsonRequest(
   });
 
   if (response.status === 204) {
+    logInfo(`Google API request succeeded with no content`, { method, url: safeUrl, status: response.status });
     return null;
   }
 
@@ -455,13 +494,246 @@ async function googleJsonRequest(
     throw new GoogleSyncException(
       `Google API request failed: ${payload.error?.message || response.statusText}`,
       response.status,
-      payload.error?.status
+      payload.error?.status,
+      {
+        method,
+        url: safeUrl,
+        status: response.status,
+        payload
+      }
     );
   }
+
+  logInfo(`Google API request succeeded`, {
+    method,
+    url: safeUrl,
+    status: response.status,
+    payloadSummary: Array.isArray(payload?.items)
+      ? { items: payload.items.length, nextSyncToken: payload.nextSyncToken ?? null }
+      : Object.keys(payload || {}).slice(0, 5)
+  });
 
   return payload;
 }
 
+function normalizeCalendarId(calendarId?: string | null): string {
+  return calendarId && calendarId.trim().length > 0 ? calendarId : 'primary';
+}
+
+async function stopGoogleWatch(accessToken: string, channelId: string, resourceId: string): Promise<void> {
+  try {
+    await googleJsonRequest(accessToken, GOOGLE_CHANNELS_API, {
+      method: 'POST',
+      body: JSON.stringify({ id: channelId, resourceId })
+    });
+  } catch (error) {
+    logWarn(
+      `Failed to stop Google watch channel ${channelId}`,
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+}
+
+async function ensureCalendarWatchForUser(
+  userId: number,
+  accessToken: string,
+  calendarId: string
+): Promise<GoogleWatchChannel> {
+  const normalizedCalendarId = normalizeCalendarId(calendarId);
+  if (IS_TEST_ENV && testSchedulerOverride) {
+    const existingTestChannel = await findGoogleWatchChannelByUser(userId, normalizedCalendarId);
+    if (existingTestChannel) {
+      return existingTestChannel;
+    }
+    return upsertGoogleWatchChannel({
+      channelId: `test-${userId}-${normalizedCalendarId}`,
+      userId,
+      calendarId: normalizedCalendarId,
+      resourceId: `test-resource-${userId}-${normalizedCalendarId}`,
+      resourceUri: null,
+      expiration: new Date(Date.now() + WATCH_RENEWAL_LOOKAHEAD_MS * 2),
+      channelToken: null
+    });
+  }
+  const existing = await findGoogleWatchChannelByUser(userId, normalizedCalendarId);
+  const now = Date.now();
+  if (existing) {
+    const expiresAtMs = existing.expiration instanceof Date ? existing.expiration.getTime() : Number.POSITIVE_INFINITY;
+    if (expiresAtMs - now > WATCH_RENEWAL_THRESHOLD_MS) {
+      return existing;
+    }
+    if (existing.resourceId) {
+      await stopGoogleWatch(accessToken, existing.channelId, existing.resourceId);
+    }
+    await deleteGoogleWatchChannel(existing.channelId);
+  }
+
+  const channelId = crypto.randomUUID();
+  const channelToken = crypto.randomBytes(16).toString('hex');
+  const webhookAddress = getGoogleWebhookAddress();
+  const encodedCalendarId = encodeURIComponent(normalizedCalendarId);
+
+  const response = await googleJsonRequest(
+    accessToken,
+    `${GOOGLE_CALENDAR_API}/calendars/${encodedCalendarId}/events/watch`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        id: channelId,
+        type: 'webhook',
+        address: webhookAddress,
+        token: channelToken,
+        params: {
+          ttl: String(WATCH_TTL_SECONDS)
+        }
+      })
+    }
+  );
+
+  const responseResourceId = response.resourceId ?? response.resource_id;
+  if (!responseResourceId) {
+    throw new GoogleSyncException('Google watch response missing resourceId', 500, 'missing_resource');
+  }
+
+  const expiration =
+    typeof response.expiration === 'string' || typeof response.expiration === 'number'
+      ? new Date(Number(response.expiration))
+      : null;
+
+  return upsertGoogleWatchChannel({
+    channelId,
+    userId,
+    calendarId: normalizedCalendarId,
+    resourceId: String(responseResourceId),
+    resourceUri: response.resourceUri ?? response.resource_uri ?? null,
+    expiration,
+    channelToken
+  });
+}
+
+async function refreshExpiringGoogleWatches(): Promise<void> {
+  try {
+    const threshold = new Date(Date.now() + WATCH_RENEWAL_LOOKAHEAD_MS);
+    const expiring = await listExpiringGoogleWatchChannels(threshold);
+    if (expiring.length === 0) {
+      return;
+    }
+    const processed = new Set<number>();
+    for (const channel of expiring) {
+      if (processed.has(channel.userId)) {
+        continue;
+      }
+      processed.add(channel.userId);
+      try {
+        const { credential, accessToken } = await ensureValidAccessToken(channel.userId);
+        const calendarId = normalizeCalendarId(credential.calendarId);
+        await ensureCalendarWatchForUser(channel.userId, accessToken, calendarId);
+      } catch (error) {
+        logWarn(
+          `Failed to renew Google watch for user ${channel.userId}`,
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+    }
+  } catch (error) {
+    logError(
+      'Failed to refresh Google watch channels',
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+}
+
+function headerValue(
+  headers: Record<string, string | string[] | undefined>,
+  key: string
+): string | undefined {
+  const value = headers[key.toLowerCase()];
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+  return value;
+}
+
+export async function handleGoogleWatchNotification(
+  headers: Record<string, string | string[] | undefined>
+): Promise<void> {
+  const channelId = headerValue(headers, 'x-goog-channel-id');
+  const resourceId = headerValue(headers, 'x-goog-resource-id');
+  const messageType = headerValue(headers, 'x-goog-message-type')?.toUpperCase() ?? '';
+  const resourceState = headerValue(headers, 'x-goog-resource-state') ?? '';
+  const channelToken = headerValue(headers, 'x-goog-channel-token');
+  const resourceUri = headerValue(headers, 'x-goog-resource-uri');
+  const expirationHeader = headerValue(headers, 'x-goog-channel-expiration');
+
+  if (!channelId || !resourceId) {
+    logWarn('Received Google webhook with missing identifiers');
+    return;
+  }
+
+  let channel: GoogleWatchChannel | null = null;
+  if (channelToken) {
+    channel = await findGoogleWatchChannelByToken(channelToken);
+  }
+  if (!channel) {
+    channel = await findGoogleWatchChannelById(channelId);
+  }
+  if (!channel && resourceId) {
+    channel = await findGoogleWatchChannelByResource(resourceId);
+  }
+
+  if (!channel) {
+    logWarn(`No matching Google watch channel for ${channelId}`);
+    return;
+  }
+
+  if (messageType === 'STOP') {
+    await deleteGoogleWatchChannel(channel.channelId);
+    return;
+  }
+
+  const expiration = expirationHeader ? new Date(expirationHeader) : channel.expiration;
+
+  await upsertGoogleWatchChannel({
+    channelId: channel.channelId,
+    userId: channel.userId,
+    calendarId: channel.calendarId,
+    resourceId: channel.resourceId,
+    resourceUri: resourceUri ?? channel.resourceUri ?? undefined,
+    expiration: expiration ?? undefined,
+    channelToken: channel.channelToken ?? undefined
+  });
+
+  if (resourceState === 'sync') {
+    // Initial sync notification; nothing to merge yet.
+  }
+
+  scheduleGoogleSyncForUser(channel.userId, 0);
+}
+
+export async function stopCalendarWatchForUser(userId: number): Promise<void> {
+  const channels = await listGoogleWatchChannelsByUser(userId);
+  if (channels.length === 0) {
+    return;
+  }
+
+  let accessToken: string | null = null;
+  try {
+    const authenticated = await ensureValidAccessToken(userId);
+    accessToken = authenticated.accessToken;
+  } catch (error) {
+    logWarn(
+      `Unable to fetch Google credentials when stopping watch for user ${userId}`,
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+
+  for (const channel of channels) {
+    if (accessToken && channel.resourceId) {
+      await stopGoogleWatch(accessToken, channel.channelId, channel.resourceId);
+    }
+    await deleteGoogleWatchChannel(channel.channelId);
+  }
+}
 async function pushAppointment(
   accessToken: string,
   calendarId: string,
@@ -791,28 +1063,32 @@ async function pullGoogleChanges(
   accessToken: string,
   credential: GoogleCredential,
   calendarId: string,
-  summary: GoogleSyncSummary
+  summary: GoogleSyncSummary,
+  retrying: boolean = false
 ): Promise<void> {
   let syncToken = credential.syncToken ?? undefined;
+  if (syncToken === 'local-seed') {
+    syncToken = undefined;
+  }
   let pageToken: string | undefined;
   let latestSyncToken: string | null = null;
   const encodedCalendarId = encodeURIComponent(calendarId);
 
   try {
     do {
-      const params = new URLSearchParams({
-        showDeleted: 'true',
-        singleEvents: 'true',
-        maxResults: '2500'
-      });
+  const params = new URLSearchParams({
+    showDeleted: 'true',
+    singleEvents: 'true',
+    maxResults: '2500'
+  });
 
-      if (syncToken) {
-        params.set('syncToken', syncToken);
-      } else {
-        const minDate = new Date();
-        minDate.setDate(minDate.getDate() - DEFAULT_LOOKBACK_DAYS);
-        params.set('updatedMin', minDate.toISOString());
-      }
+  if (syncToken) {
+    params.set('syncToken', syncToken);
+  } else {
+    logInfo(`No sync token found for user ${credential.userId}; performing full pull without updatedMin`, {
+      calendarId
+    });
+  }
 
       if (pageToken) {
         params.set('pageToken', pageToken);
@@ -874,6 +1150,21 @@ async function pullGoogleChanges(
     } while (pageToken);
   } catch (error) {
     if (error instanceof GoogleSyncException && error.status === 410) {
+      const errorContext = error.context as Record<string, unknown> | undefined;
+      const errorPayload =
+        errorContext && typeof errorContext === 'object'
+          ? (errorContext as any).payload?.error ?? (errorContext as any).payload ?? null
+          : null;
+      logWarn(
+        `Google sync token invalid for user ${credential.userId}, resetting for full reload`,
+        {
+          calendarId,
+          hadSyncToken: Boolean(credential.syncToken),
+          retrying,
+          context: error.context ?? null,
+          errorPayload
+        }
+      );
       await upsertGoogleCredential(credential.userId, {
         accessToken,
         refreshToken: credential.refreshToken,
@@ -885,7 +1176,18 @@ async function pullGoogleChanges(
         syncToken: null,
         lastPulledAt: null
       });
-      await queueGoogleSyncForUser(credential.userId, calendarId);
+
+      if (!retrying) {
+        await pullGoogleChanges(
+          accessToken,
+          { ...credential, calendarId, syncToken: null, lastPulledAt: null },
+          calendarId,
+          summary,
+          true
+        );
+        return;
+      }
+
       return;
     }
     throw error;
@@ -903,12 +1205,24 @@ async function pullGoogleChanges(
       syncToken: latestSyncToken,
       lastPulledAt: new Date()
     });
+    logInfo(`Updated sync token for user ${credential.userId}`, {
+      calendarId,
+      nextSyncToken: latestSyncToken,
+      pulled: summary.pulled,
+      pushed: summary.pushed
+    });
+  } else {
+    logWarn(`No nextSyncToken returned for user ${credential.userId}`, {
+      calendarId,
+      pulled: summary.pulled,
+      pushed: summary.pushed
+    });
   }
 }
 
 export async function syncUserWithGoogle(userId: number, options: GoogleSyncOptions = {}): Promise<GoogleSyncSummary> {
   const { credential, accessToken } = await ensureValidAccessToken(userId);
-  const calendarId = options.calendarId ?? credential.calendarId ?? 'primary';
+  const calendarId = normalizeCalendarId(options.calendarId ?? credential.calendarId ?? 'primary');
   const summary: GoogleSyncSummary = {
     pushed: 0,
     pulled: 0,
@@ -919,14 +1233,12 @@ export async function syncUserWithGoogle(userId: number, options: GoogleSyncOpti
 
   if (options.pullRemote !== false) {
     try {
-      await pullGoogleChanges(accessToken, { ...credential, calendarId }, calendarId, summary);
+      await ensureCalendarWatchForUser(userId, accessToken, calendarId);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to pull Google Calendar changes';
-      summary.errors.push({ message });
-    }
-
-    if (summary.errors.some((entry) => entry.message?.includes('remote appointment updated after local edit') || entry.message?.includes('Remote appointment updated after local edit'))) {
-      return summary;
+      logWarn(
+        `Failed to ensure Google watch for user ${userId}`,
+        error instanceof Error ? error.message : String(error)
+      );
     }
   }
 
@@ -944,18 +1256,50 @@ export async function syncUserWithGoogle(userId: number, options: GoogleSyncOpti
     });
   }
 
-  if (options.forceFull || !credential.syncToken) {
-    await queueGoogleSyncForUser(userId, calendarId);
+  if (options.forceFull) {
+    await queueGoogleSyncForUser(userId, calendarId, { schedule: false });
   }
 
-if (options.pullRemote !== false) {
-  try {
-    await pullGoogleChanges(accessToken, { ...credential, calendarId }, calendarId, summary);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to pull Google Calendar changes';
-    summary.errors.push({ message });
+  const hasQueuedSeed = credential.syncToken === 'local-seed';
+  const hasRealSyncToken = Boolean(credential.syncToken && credential.syncToken !== 'local-seed');
+  const needsInitialSeed = !hasRealSyncToken && !hasQueuedSeed;
+
+  if (needsInitialSeed) {
+    await queueGoogleSyncForUser(userId, calendarId, { schedule: false });
+    await upsertGoogleCredential(userId, {
+      accessToken,
+      refreshToken: credential.refreshToken,
+      scope: credential.scope,
+      expiresAt: credential.expiresAt,
+      tokenType: credential.tokenType ?? undefined,
+      idToken: credential.idToken ?? undefined,
+      calendarId,
+      syncToken: 'local-seed',
+      lastPulledAt: credential.lastPulledAt ?? null
+    });
+    credential.syncToken = 'local-seed';
   }
-}
+
+  const shouldPullRemote = options.pullRemote !== false;
+  if (shouldPullRemote) {
+    const effectiveSyncToken = hasRealSyncToken ? credential.syncToken : null;
+    try {
+      const pullCredential = { ...credential, calendarId, syncToken: effectiveSyncToken ?? undefined };
+      await pullGoogleChanges(accessToken, pullCredential, calendarId, summary);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to pull Google Calendar changes';
+      summary.errors.push({ message });
+    }
+  }
+
+  if (
+    summary.errors.some((entry) =>
+      entry.message?.includes('remote appointment updated after local edit') ||
+      entry.message?.includes('Remote appointment updated after local edit')
+    )
+  ) {
+    return summary;
+  }
 
   const pending = await listPendingGoogleSyncItems(userId);
   for (const item of pending) {
@@ -1104,6 +1448,10 @@ async function performSync(userId: number): Promise<void> {
 }
 
 export function scheduleGoogleSyncForUser(userId: number, debounceMs: number = DEFAULT_DEBOUNCE_MS): void {
+  if (testSchedulerOverride) {
+    testSchedulerOverride(userId, debounceMs);
+    return;
+  }
   if (IS_TEST_ENV && !ENABLE_SYNC_IN_TEST) {
     return;
   }
@@ -1141,6 +1489,7 @@ export function __setGoogleSyncRunnerForTests(runner?: SyncRunner): void {
 }
 
 export function __resetGoogleSyncStateForTests(): void {
+  testSchedulerOverride = null;
   debounceTimers.forEach((timer) => clearTimeout(timer));
   debounceTimers.clear();
   retryTimers.forEach(({ timer }) => timer && clearTimeout(timer));
@@ -1150,8 +1499,18 @@ export function __resetGoogleSyncStateForTests(): void {
   syncRunner = syncUserWithGoogle;
 }
 
+export function __setGoogleSyncSchedulerForTests(
+  scheduler: ((userId: number, debounceMs: number) => void) | null
+): void {
+  testSchedulerOverride = scheduler;
+}
+
 async function runGoogleSyncPolling(): Promise<void> {
   try {
+    await refreshExpiringGoogleWatches();
+    if (!ENABLE_POLLING_FALLBACK) {
+      return;
+    }
     const userIds = await listGoogleConnectedUserIds();
     for (const userId of userIds) {
       scheduleGoogleSyncForUser(userId);

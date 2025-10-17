@@ -14,7 +14,8 @@ import {
   syncUserWithGoogle,
   exchangeGoogleAuthorizationCode,
   exchangeGoogleAuthorizationCodeServer,
-  type GoogleSyncSummary
+  type GoogleSyncSummary,
+  stopCalendarWatchForUser
 } from './googleSync.js';
 import { UnauthorizedError, ValidationError } from '../utils/errors.js';
 
@@ -203,6 +204,12 @@ export async function connectGoogleIntegration(
 }
 
 export async function disconnectGoogleIntegration(user: User): Promise<{ disconnected: true }> {
+  await stopCalendarWatchForUser(user.id).catch((error) => {
+    console.warn(
+      'Failed to stop Google watch channel during disconnect',
+      error instanceof Error ? error.message : error
+    );
+  });
   await deleteGoogleCredential(user.id);
   await clearGoogleSyncForUser(user.id);
   return { disconnected: true };

@@ -12,6 +12,7 @@ import {
   startGoogleIntegration,
   verifyUser
 } from '../../../services/googleIntegrationService.js';
+import { handleGoogleWatchNotification } from '../../../services/googleSync.js';
 import { UnauthorizedError } from '../../../utils/errors.js';
 
 export const startGoogleIntegrationHandler = route(async (req: Request, res: Response) => {
@@ -57,3 +58,16 @@ export const manualGoogleSyncHandler = route(async (req: Request, res: Response)
   });
   res.json(summary);
 });
+
+export async function googleIntegrationWebhookHandler(req: Request, res: Response): Promise<void> {
+  try {
+    await handleGoogleWatchNotification(req.headers);
+    res.status(204).end();
+  } catch (error) {
+    console.error(
+      'Google webhook processing failed',
+      error instanceof Error ? error.message : error
+    );
+    res.status(500).end();
+  }
+}

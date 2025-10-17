@@ -13,6 +13,7 @@ export interface GoogleSyncConfig {
   retryMaxMs: number;
   pollIntervalMs: number;
   enableInTest: boolean;
+  enablePollingFallback: boolean;
 }
 
 export function getGoogleSyncConfig(): GoogleSyncConfig {
@@ -21,7 +22,8 @@ export function getGoogleSyncConfig(): GoogleSyncConfig {
   const defaultDebounce = parseDuration(process.env.GOOGLE_SYNC_DEBOUNCE_MS, 15_000);
   const defaultRetryBase = parseDuration(process.env.GOOGLE_SYNC_RETRY_BASE_MS, 60_000);
   const defaultRetryMax = parseDuration(process.env.GOOGLE_SYNC_RETRY_MAX_MS, 300_000);
-  const pollIntervalMs = parseDuration(process.env.GOOGLE_SYNC_POLL_INTERVAL_MS, 5 * 60 * 1000);
+  const pollIntervalMs = parseDuration(process.env.GOOGLE_SYNC_POLL_INTERVAL_MS, 30 * 60 * 1000);
+  const enablePollingFallback = process.env.GOOGLE_SYNC_ENABLE_POLLING_FALLBACK === 'true';
 
   const testAdjustments = IS_TEST_ENV && !enableInTest
     ? {
@@ -37,7 +39,8 @@ export function getGoogleSyncConfig(): GoogleSyncConfig {
     retryBaseMs: testAdjustments?.retryBaseMs ?? defaultRetryBase,
     retryMaxMs: testAdjustments?.retryMaxMs ?? defaultRetryMax,
     pollIntervalMs,
-    enableInTest
+    enableInTest,
+    enablePollingFallback
   };
 }
 

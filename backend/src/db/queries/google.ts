@@ -11,6 +11,19 @@ import { db } from './shared.js';
 
 let googleIntegrationSchemaEnsured = false;
 let googleIntegrationEnsurePromise: Promise<void> | null = null;
+let scheduleGoogleSyncForUserFn: ((userId: number, debounceMs?: number) => void) | null = null;
+
+async function scheduleGoogleSync(userId: number): Promise<void> {
+  try {
+    if (!scheduleGoogleSyncForUserFn) {
+      const mod = await import('../../services/googleSync.js');
+      scheduleGoogleSyncForUserFn = mod.scheduleGoogleSyncForUser;
+    }
+    scheduleGoogleSyncForUserFn?.(userId, 0);
+  } catch (error) {
+    console.error('Failed to schedule Google sync for user', userId, error);
+  }
+}
 
 async function ensureGoogleIntegrationSchema(): Promise<void> {
   if (googleIntegrationSchemaEnsured) {
@@ -95,6 +108,28 @@ async function ensureGoogleIntegrationSchema(): Promise<void> {
           `ALTER TABLE google_credentials
              ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
         );
+        await db.query(`
+          CREATE TABLE IF NOT EXISTS google_watch_channels (
+            channel_id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            calendar_id TEXT,
+            resource_id TEXT NOT NULL,
+            resource_uri TEXT,
+            expiration TIMESTAMP,
+            channel_token TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+        await db.query(
+          `CREATE INDEX IF NOT EXISTS idx_google_watch_channels_user ON google_watch_channels(user_id)`
+        );
+        await db.query(
+          `CREATE INDEX IF NOT EXISTS idx_google_watch_channels_resource ON google_watch_channels(resource_id)`
+        );
+        await db.query(
+          `CREATE INDEX IF NOT EXISTS idx_google_watch_channels_expiration ON google_watch_channels(expiration)`
+        );
       } catch (error) {
         console.error('Failed to ensure Google integration schema:', error);
       } finally {
@@ -111,6 +146,12 @@ export function __setGoogleIntegrationSchemaEnsuredForTests(ensured: boolean): v
   googleIntegrationEnsurePromise = ensured ? Promise.resolve() : null;
 }
 
+export function __setGoogleSyncSchedulerForTests(
+  scheduler: ((userId: number, debounceMs?: number) => void) | null
+): void {
+  scheduleGoogleSyncForUserFn = scheduler;
+}
+
 export const GOOGLE_SYNC_PROJECTION = `
   gsl.id AS google_sync_id,
   gsl.calendar_id AS google_calendar_id,
@@ -123,6 +164,56 @@ export const GOOGLE_SYNC_PROJECTION = `
   gsl.sync_status AS google_sync_status,
   gsl.last_error AS google_last_error
 `;
+
+interface GoogleWatchChannelRow {
+  channel_id: string;
+  user_id: number;
+  calendar_id: string | null;
+  resource_id: string;
+  resource_uri: string | null;
+  expiration: Date | null;
+  channel_token: string | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface GoogleWatchChannel {
+  channelId: string;
+  userId: number;
+  calendarId: string | null;
+  resourceId: string;
+  resourceUri: string | null;
+  expiration: Date | null;
+  channelToken: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+function watchRowToChannel(row: GoogleWatchChannelRow): GoogleWatchChannel {
+  const rawExpiration = row.expiration ?? null;
+  let expiration: Date | null = null;
+  if (rawExpiration instanceof Date) {
+    expiration = rawExpiration;
+  } else if (typeof rawExpiration === 'string') {
+    const normalized = rawExpiration.includes('T')
+      ? rawExpiration
+      : `${rawExpiration.replace(' ', 'T')}Z`;
+    const parsed = new Date(normalized);
+    expiration = Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  return {
+    channelId: row.channel_id,
+    userId: row.user_id,
+    calendarId: row.calendar_id ?? null,
+    resourceId: row.resource_id,
+    resourceUri: row.resource_uri ?? null,
+    expiration,
+    channelToken: row.channel_token ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
 
 interface GoogleSyncLinkRow {
   id: number;
@@ -490,17 +581,21 @@ export async function markGoogleSyncPending(itemId: number, localHash?: string |
     return null;
   }
 
-  const credential = await getGoogleCredential(ownerRow.user_id as number);
+  const ownerUserId = ownerRow.user_id as number;
+  const credential = await getGoogleCredential(ownerUserId);
   if (!credential) {
     await deleteGoogleSyncLink(itemId);
     return null;
   }
 
-  return upsertGoogleSyncLink(itemId, {
+  const metadata = await upsertGoogleSyncLink(itemId, {
     syncStatus: 'pending',
     lastError: null,
     localHash: localHash ?? undefined
   });
+
+  await scheduleGoogleSync(ownerUserId);
+  return metadata;
 }
 
 export async function markGoogleSyncSuccess(
@@ -540,6 +635,96 @@ export async function deleteGoogleSyncLink(itemId: number): Promise<void> {
   await db.query('DELETE FROM google_sync_links WHERE item_id = $1', [itemId]);
 }
 
+export async function upsertGoogleWatchChannel(channel: {
+  channelId: string;
+  userId: number;
+  calendarId: string | null;
+  resourceId: string;
+  resourceUri?: string | null;
+  expiration?: Date | null;
+  channelToken?: string | null;
+}): Promise<GoogleWatchChannel> {
+  await ensureGoogleIntegrationSchema();
+  const result = await db.query(
+    `INSERT INTO google_watch_channels (channel_id, user_id, calendar_id, resource_id, resource_uri, expiration, channel_token, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+     ON CONFLICT (channel_id)
+     DO UPDATE SET
+       user_id = EXCLUDED.user_id,
+       calendar_id = EXCLUDED.calendar_id,
+       resource_id = EXCLUDED.resource_id,
+       resource_uri = EXCLUDED.resource_uri,
+       expiration = EXCLUDED.expiration,
+       channel_token = EXCLUDED.channel_token,
+       updated_at = NOW()
+     RETURNING *`,
+    [
+      channel.channelId,
+      channel.userId,
+      channel.calendarId,
+      channel.resourceId,
+      channel.resourceUri ?? null,
+      channel.expiration ?? null,
+      channel.channelToken ?? null
+    ]
+  );
+
+  return watchRowToChannel(result.rows[0] as GoogleWatchChannelRow);
+}
+
+export async function deleteGoogleWatchChannel(channelId: string): Promise<void> {
+  await ensureGoogleIntegrationSchema();
+  await db.query('DELETE FROM google_watch_channels WHERE channel_id = $1', [channelId]);
+}
+
+export async function findGoogleWatchChannelByResource(resourceId: string): Promise<GoogleWatchChannel | null> {
+  await ensureGoogleIntegrationSchema();
+  const result = await db.query('SELECT * FROM google_watch_channels WHERE resource_id = $1 LIMIT 1', [resourceId]);
+  return result.rows[0] ? watchRowToChannel(result.rows[0] as GoogleWatchChannelRow) : null;
+}
+
+export async function findGoogleWatchChannelByUser(
+  userId: number,
+  calendarId: string | null
+): Promise<GoogleWatchChannel | null> {
+  await ensureGoogleIntegrationSchema();
+  const result = await db.query(
+    `SELECT * FROM google_watch_channels
+     WHERE user_id = $1 AND ((calendar_id IS NULL AND $2::text IS NULL) OR calendar_id = $2)
+     ORDER BY updated_at DESC
+     LIMIT 1`,
+    [userId, calendarId ?? null]
+  );
+  return result.rows[0] ? watchRowToChannel(result.rows[0] as GoogleWatchChannelRow) : null;
+}
+
+export async function findGoogleWatchChannelById(channelId: string): Promise<GoogleWatchChannel | null> {
+  await ensureGoogleIntegrationSchema();
+  const result = await db.query('SELECT * FROM google_watch_channels WHERE channel_id = $1 LIMIT 1', [channelId]);
+  return result.rows[0] ? watchRowToChannel(result.rows[0] as GoogleWatchChannelRow) : null;
+}
+
+export async function findGoogleWatchChannelByToken(token: string): Promise<GoogleWatchChannel | null> {
+  await ensureGoogleIntegrationSchema();
+  const result = await db.query('SELECT * FROM google_watch_channels WHERE channel_token = $1 LIMIT 1', [token]);
+  return result.rows[0] ? watchRowToChannel(result.rows[0] as GoogleWatchChannelRow) : null;
+}
+
+export async function listExpiringGoogleWatchChannels(threshold: Date): Promise<GoogleWatchChannel[]> {
+  await ensureGoogleIntegrationSchema();
+  const result = await db.query(
+    'SELECT * FROM google_watch_channels WHERE expiration IS NOT NULL AND expiration <= $1',
+    [threshold]
+  );
+  return result.rows.map((row) => watchRowToChannel(row as GoogleWatchChannelRow));
+}
+
+export async function listGoogleWatchChannelsByUser(userId: number): Promise<GoogleWatchChannel[]> {
+  await ensureGoogleIntegrationSchema();
+  const result = await db.query('SELECT * FROM google_watch_channels WHERE user_id = $1', [userId]);
+  return result.rows.map((row) => watchRowToChannel(row as GoogleWatchChannelRow));
+}
+
 export async function clearGoogleSyncForUser(userId: number): Promise<void> {
   await ensureGoogleIntegrationSchema();
   await db.query(
@@ -550,6 +735,7 @@ export async function clearGoogleSyncForUser(userId: number): Promise<void> {
        AND r.user_id = $1`,
     [userId]
   );
+  await db.query('DELETE FROM google_watch_channels WHERE user_id = $1', [userId]);
 }
 
 export async function getItemOwnerUserId(itemId: number): Promise<number | null> {
@@ -629,7 +815,11 @@ export async function getGoogleIntegrationStatus(userId: number): Promise<Google
   };
 }
 
-export async function queueGoogleSyncForUser(userId: number, calendarId?: string | null): Promise<void> {
+export async function queueGoogleSyncForUser(
+  userId: number,
+  calendarId?: string | null,
+  options?: { schedule?: boolean }
+): Promise<void> {
   await ensureGoogleIntegrationSchema();
   await db.query(
     `INSERT INTO google_sync_links (item_id, calendar_id, sync_status, created_at, updated_at)
@@ -640,7 +830,13 @@ export async function queueGoogleSyncForUser(userId: number, calendarId?: string
             NOW()
      FROM items i
      JOIN recipients r ON i.recipient_id = r.id
+     LEFT JOIN appointments a ON a.item_id = i.id
+     LEFT JOIN bills b ON b.item_id = i.id
      WHERE r.user_id = $1
+       AND (
+         (i.detected_type = 'appointment' AND a.id IS NOT NULL) OR
+         (i.detected_type = 'bill' AND b.id IS NOT NULL)
+       )
      ON CONFLICT (item_id)
      DO UPDATE SET
        calendar_id = COALESCE(EXCLUDED.calendar_id, google_sync_links.calendar_id),
@@ -649,6 +845,10 @@ export async function queueGoogleSyncForUser(userId: number, calendarId?: string
        updated_at = NOW()`,
     [userId, calendarId ?? null]
   );
+
+  if (options?.schedule ?? true) {
+    await scheduleGoogleSync(userId);
+  }
 }
 
 export async function listGoogleConnectedUserIds(): Promise<number[]> {

@@ -161,6 +161,12 @@ export async function deleteBillAsOwner(user: User, billId: number): Promise<voi
   if (context.role !== 'owner') {
     throw new ForbiddenError('Only the owner can delete bills');
   }
+  const bill = await getBillById(billId, user.id);
+  if (!bill) {
+    throw new NotFoundError('Bill not found');
+  }
+
+  await markGoogleSyncPending(bill.itemId);
   await deleteBill(billId, user.id);
 }
 

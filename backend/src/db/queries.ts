@@ -19,6 +19,14 @@ export {
   getItemOwnerUserId,
   hydrateAppointmentWithGoogleSync,
   hydrateBillWithGoogleSync,
+  upsertGoogleWatchChannel,
+  deleteGoogleWatchChannel,
+  findGoogleWatchChannelByResource,
+  findGoogleWatchChannelByUser,
+  findGoogleWatchChannelById,
+  findGoogleWatchChannelByToken,
+  listExpiringGoogleWatchChannels,
+  listGoogleWatchChannelsByUser,
   listGoogleConnectedUserIds,
   listPendingGoogleSyncItems,
   markGoogleSyncError,
@@ -28,7 +36,7 @@ export {
   upsertGoogleCredential,
   upsertGoogleSyncLink
 } from './queries/google.js';
-export type { GoogleCredential, GoogleSyncLinkUpsertData } from './queries/google.js';
+export type { GoogleCredential, GoogleSyncLinkUpsertData, GoogleWatchChannel } from './queries/google.js';
 
 export {
   acceptCollaboratorInvite,
