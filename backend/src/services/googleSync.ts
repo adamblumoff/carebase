@@ -664,6 +664,7 @@ export async function handleGoogleWatchNotification(
   const channelToken = headerValue(headers, 'x-goog-channel-token');
   const resourceUri = headerValue(headers, 'x-goog-resource-uri');
   const expirationHeader = headerValue(headers, 'x-goog-channel-expiration');
+  const messageNumber = headerValue(headers, 'x-goog-message-number');
 
   if (!channelId || !resourceId) {
     logWarn('Received Google webhook with missing identifiers');
@@ -686,6 +687,16 @@ export async function handleGoogleWatchNotification(
     return;
   }
 
+  logInfo('Received Google webhook', {
+    channelId,
+    userId: channel.userId,
+    resourceId,
+    resourceState,
+    messageType,
+    messageNumber,
+    resourceUri
+  });
+
   if (messageType === 'STOP') {
     await deleteGoogleWatchChannel(channel.channelId);
     return;
@@ -705,6 +716,12 @@ export async function handleGoogleWatchNotification(
 
   if (resourceState === 'sync') {
     // Initial sync notification; nothing to merge yet.
+    logInfo('Google webhook initial sync acknowledgement', {
+      userId: channel.userId,
+      channelId
+    });
+    scheduleGoogleSyncForUser(channel.userId, 0);
+    return;
   }
 
   scheduleGoogleSyncForUser(channel.userId, 0);
@@ -1076,19 +1093,19 @@ async function pullGoogleChanges(
 
   try {
     do {
-  const params = new URLSearchParams({
-    showDeleted: 'true',
-    singleEvents: 'true',
-    maxResults: '2500'
-  });
+      const params = new URLSearchParams({
+        showDeleted: 'true',
+        singleEvents: 'true',
+        maxResults: '2500'
+      });
 
-  if (syncToken) {
-    params.set('syncToken', syncToken);
-  } else {
-    logInfo(`No sync token found for user ${credential.userId}; performing full pull without updatedMin`, {
-      calendarId
-    });
-  }
+      if (syncToken) {
+        params.set('syncToken', syncToken);
+      } else {
+        logInfo(`No sync token found for user ${credential.userId}; performing full pull without updatedMin`, {
+          calendarId
+        });
+      }
 
       if (pageToken) {
         params.set('pageToken', pageToken);
@@ -1216,6 +1233,18 @@ async function pullGoogleChanges(
       calendarId,
       pulled: summary.pulled,
       pushed: summary.pushed
+    });
+
+    await upsertGoogleCredential(credential.userId, {
+      accessToken,
+      refreshToken: credential.refreshToken,
+      scope: credential.scope,
+      expiresAt: credential.expiresAt,
+      tokenType: credential.tokenType ?? undefined,
+      idToken: credential.idToken ?? undefined,
+      calendarId,
+      syncToken: credential.syncToken,
+      lastPulledAt: new Date()
     });
   }
 }
@@ -1448,6 +1477,7 @@ async function performSync(userId: number): Promise<void> {
 }
 
 export function scheduleGoogleSyncForUser(userId: number, debounceMs: number = DEFAULT_DEBOUNCE_MS): void {
+  logInfo('Scheduling Google sync', { userId, debounceMs });
   if (testSchedulerOverride) {
     testSchedulerOverride(userId, debounceMs);
     return;
