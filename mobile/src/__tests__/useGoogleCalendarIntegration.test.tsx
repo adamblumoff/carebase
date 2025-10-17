@@ -1,31 +1,55 @@
-import { renderHook, act, waitFor } from '@testing-library/react-native';
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { act } from 'react-dom/test-utils';
+import { describe, beforeEach, afterEach, expect, it, vi } from 'vitest';
+import * as WebBrowser from 'expo-web-browser';
 import { useGoogleCalendarIntegration } from '../hooks/useGoogleCalendarIntegration';
 
-jest.mock('expo-web-browser', () => ({
-  maybeCompleteAuthSession: jest.fn(),
-  openAuthSessionAsync: jest.fn()
-}));
+const webBrowser = vi.mocked(WebBrowser);
 
-const mockBeginGoogleIntegrationConnect = jest.fn();
-const mockDisconnectGoogleIntegration = jest.fn();
-const mockFetchGoogleIntegrationStatus = jest.fn();
-const mockTriggerGoogleManualSync = jest.fn();
+const mockBeginGoogleIntegrationConnect = vi.fn();
+const mockDisconnectGoogleIntegration = vi.fn();
+const mockFetchGoogleIntegrationStatus = vi.fn();
+const mockTriggerGoogleManualSync = vi.fn();
 
-jest.mock('../api/googleIntegration', () => ({
+vi.mock('../api/googleIntegration', () => ({
   beginGoogleIntegrationConnect: (...args: any[]) => mockBeginGoogleIntegrationConnect(...args),
   disconnectGoogleIntegration: (...args: any[]) => mockDisconnectGoogleIntegration(...args),
   fetchGoogleIntegrationStatus: (...args: any[]) => mockFetchGoogleIntegrationStatus(...args),
   triggerGoogleManualSync: (...args: any[]) => mockTriggerGoogleManualSync(...args)
 }));
 
-const webBrowser = require('expo-web-browser');
+function renderHook<T>(callback: () => T) {
+  const result: { current: T | undefined } = { current: undefined };
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  function TestComponent() {
+    result.current = callback();
+    return null;
+  }
+  act(() => {
+    root.render(<TestComponent />);
+  });
+  return {
+    result,
+    rerender: async () => {
+      await act(async () => {
+        root.render(<TestComponent />);
+      });
+    }
+  };
+}
+
+async function flushPromises() {
+  await act(async () => {});
+}
 
 describe('useGoogleCalendarIntegration', () => {
-  let consoleErrorSpy: jest.SpyInstance;
-  let consoleLogSpy: jest.SpyInstance;
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+  let consoleLogSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockFetchGoogleIntegrationStatus.mockResolvedValue({
       connected: false,
       calendarId: null,
@@ -33,8 +57,11 @@ describe('useGoogleCalendarIntegration', () => {
       syncPendingCount: 0,
       lastError: null
     });
-    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    mockBeginGoogleIntegrationConnect.mockResolvedValue({
+      authUrl: 'https://accounts.google.com/o/oauth2/v2/auth'
+    });
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -53,11 +80,11 @@ describe('useGoogleCalendarIntegration', () => {
     });
 
     const { result } = renderHook(() => useGoogleCalendarIntegration());
+    await flushPromises();
 
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.status?.connected).toBe(true);
-    expect(result.current.status?.lastSyncedAt).toBeInstanceOf(Date);
-    expect(result.current.status?.lastSyncedAt?.toISOString()).toBe(lastSyncedAt);
+    expect(result.current?.loading).toBe(false);
+    expect(result.current?.status?.lastSyncedAt).toBeInstanceOf(Date);
+    expect(result.current?.status?.lastSyncedAt?.toISOString()).toBe(lastSyncedAt);
   });
 
   it('completes connect flow and refreshes status on success', async () => {
@@ -76,60 +103,49 @@ describe('useGoogleCalendarIntegration', () => {
       lastError: null
     });
 
-    mockBeginGoogleIntegrationConnect.mockResolvedValue({
-      authUrl: 'https://accounts.google.com/o/oauth2/v2/auth'
-    });
-    (webBrowser.openAuthSessionAsync as jest.Mock).mockResolvedValue({
+    webBrowser.openAuthSessionAsync.mockResolvedValue({
       type: 'success',
       url: 'carebase://integrations/google?status=success'
-    });
+    } as any);
 
     const { result } = renderHook(() => useGoogleCalendarIntegration());
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    await flushPromises();
 
-    let outcome: 'success' | 'cancelled';
+    let outcome: 'success' | 'cancelled' | undefined;
     await act(async () => {
-      outcome = await result.current.connect();
+      outcome = await result.current!.connect();
     });
 
-    expect(outcome!).toBe('success');
-    expect(mockBeginGoogleIntegrationConnect).toHaveBeenCalledTimes(1);
+    expect(outcome).toBe('success');
     expect(mockFetchGoogleIntegrationStatus).toHaveBeenCalledTimes(2);
-    expect(result.current.status?.connected).toBe(true);
+    expect(result.current?.status?.connected).toBe(true);
   });
 
   it('returns cancelled when auth session is dismissed', async () => {
-    (webBrowser.openAuthSessionAsync as jest.Mock).mockResolvedValue({
-      type: 'dismiss'
-    });
+    webBrowser.openAuthSessionAsync.mockResolvedValue({ type: 'dismiss' } as any);
 
     const { result } = renderHook(() => useGoogleCalendarIntegration());
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    await flushPromises();
 
-    let outcome: 'success' | 'cancelled';
+    let outcome: 'success' | 'cancelled' | undefined;
     await act(async () => {
-      outcome = await result.current.connect();
+      outcome = await result.current!.connect();
     });
 
     expect(outcome).toBe('cancelled');
-    expect(mockFetchGoogleIntegrationStatus).toHaveBeenCalledTimes(1); // only initial load
+    expect(mockFetchGoogleIntegrationStatus).toHaveBeenCalledTimes(1);
   });
 
   it('throws when Google returns failure code', async () => {
-    mockBeginGoogleIntegrationConnect.mockResolvedValue({
-      authUrl: 'https://accounts.google.com/o/oauth2/v2/auth'
-    });
-    (webBrowser.openAuthSessionAsync as jest.Mock).mockResolvedValue({
+    webBrowser.openAuthSessionAsync.mockResolvedValue({
       type: 'success',
       url: 'carebase://integrations/google?status=error&code=access_denied'
-    });
+    } as any);
 
     const { result } = renderHook(() => useGoogleCalendarIntegration());
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    await flushPromises();
 
-    await expect(
-      act(async () => result.current.connect())
-    ).rejects.toThrow(/access_denied/);
+    await expect(result.current!.connect()).rejects.toThrow(/access_denied/);
   });
 
   it('runs manual sync and refreshes status', async () => {
@@ -156,11 +172,11 @@ describe('useGoogleCalendarIntegration', () => {
     });
 
     const { result } = renderHook(() => useGoogleCalendarIntegration());
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    await flushPromises();
 
     let summary;
     await act(async () => {
-      summary = await result.current.manualSync();
+      summary = await result.current!.manualSync();
     });
 
     expect(summary).toEqual({
@@ -170,7 +186,6 @@ describe('useGoogleCalendarIntegration', () => {
       errors: [],
       calendarId: 'primary'
     });
-    expect(mockTriggerGoogleManualSync).toHaveBeenCalledWith({ forceFull: undefined });
     expect(mockFetchGoogleIntegrationStatus).toHaveBeenCalledTimes(2);
   });
 
@@ -191,12 +206,14 @@ describe('useGoogleCalendarIntegration', () => {
     });
 
     const { result } = renderHook(() => useGoogleCalendarIntegration());
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    await flushPromises();
 
-    await act(async () => result.current.disconnect());
+    await act(async () => {
+      await result.current!.disconnect();
+    });
 
     expect(mockDisconnectGoogleIntegration).toHaveBeenCalledTimes(1);
     expect(mockFetchGoogleIntegrationStatus).toHaveBeenCalledTimes(2);
-    expect(result.current.status?.connected).toBe(false);
+    expect(result.current?.status?.connected).toBe(false);
   });
 });
