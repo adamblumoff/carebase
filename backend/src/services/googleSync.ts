@@ -318,9 +318,6 @@ function buildAppointmentEventPayload(appointment: Appointment): Record<string, 
         carebaseType: 'appointment'
       }
     },
-    reminders: {
-      useDefault: true
-    },
     source: {
       title: 'Carebase',
       url: process.env.CAREBASE_APP_BASE_URL || 'https://carebase.app'
@@ -363,9 +360,6 @@ function buildBillEventPayload(bill: Bill): Record<string, unknown> {
         carebaseItemId: String(bill.itemId),
         carebaseType: 'bill'
       }
-    },
-    reminders: {
-      useDefault: true
     },
     source: {
       title: 'Carebase',
@@ -691,14 +685,19 @@ async function applyGoogleAppointmentUpdate(
     return;
   }
 
-  const updated = await updateAppointment(appointment.id, ownerUserId, {
-    summary: event.summary ?? appointment.summary,
-    startLocal: startLocalStr,
-    endLocal: endLocalStr,
-    location: event.location ?? appointment.location ?? undefined,
-    prepNote: event.description ?? appointment.prepNote ?? undefined,
-    assignedCollaboratorId: appointment.assignedCollaboratorId ?? null
-  });
+  const updated = await updateAppointment(
+    appointment.id,
+    ownerUserId,
+    {
+      summary: event.summary ?? appointment.summary,
+      startLocal: startLocalStr,
+      endLocal: endLocalStr,
+      location: event.location ?? appointment.location ?? undefined,
+      prepNote: event.description ?? appointment.prepNote ?? undefined,
+      assignedCollaboratorId: appointment.assignedCollaboratorId ?? null
+    },
+    { queueGoogleSync: false }
+  );
 
   const localHash = calculateAppointmentHash(updated);
   await markGoogleSyncSuccess(updated.itemId, {
@@ -760,14 +759,19 @@ async function applyGoogleBillUpdate(
 
   const nextDueDate = start ? formatDateOnly(start) : undefined;
 
-  const updated = await updateBill(bill.id, ownerUserId, {
-    statementDate: bill.statementDate ? formatDateOnly(bill.statementDate) : undefined,
-    amount: bill.amount ?? undefined,
-    dueDate: nextDueDate ?? (bill.dueDate ? formatDateOnly(bill.dueDate) : undefined),
-    payUrl: bill.payUrl ?? undefined,
-    status: bill.status,
-    assignedCollaboratorId: bill.assignedCollaboratorId ?? null
-  });
+  const updated = await updateBill(
+    bill.id,
+    ownerUserId,
+    {
+      statementDate: bill.statementDate ? formatDateOnly(bill.statementDate) : undefined,
+      amount: bill.amount ?? undefined,
+      dueDate: nextDueDate ?? (bill.dueDate ? formatDateOnly(bill.dueDate) : undefined),
+      payUrl: bill.payUrl ?? undefined,
+      status: bill.status,
+      assignedCollaboratorId: bill.assignedCollaboratorId ?? null
+    },
+    { queueGoogleSync: false }
+  );
 
   const localHash = calculateBillHash(updated);
   await markGoogleSyncSuccess(updated.itemId, {
@@ -913,6 +917,19 @@ export async function syncUserWithGoogle(userId: number, options: GoogleSyncOpti
     calendarId
   };
 
+  if (options.pullRemote !== false) {
+    try {
+      await pullGoogleChanges(accessToken, { ...credential, calendarId }, calendarId, summary);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to pull Google Calendar changes';
+      summary.errors.push({ message });
+    }
+
+    if (summary.errors.some((entry) => entry.message?.includes('remote appointment updated after local edit') || entry.message?.includes('Remote appointment updated after local edit'))) {
+      return summary;
+    }
+  }
+
   if (calendarId !== credential.calendarId) {
     await upsertGoogleCredential(userId, {
       accessToken,
@@ -931,6 +948,15 @@ export async function syncUserWithGoogle(userId: number, options: GoogleSyncOpti
     await queueGoogleSyncForUser(userId, calendarId);
   }
 
+if (options.pullRemote !== false) {
+  try {
+    await pullGoogleChanges(accessToken, { ...credential, calendarId }, calendarId, summary);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to pull Google Calendar changes';
+    summary.errors.push({ message });
+  }
+}
+
   const pending = await listPendingGoogleSyncItems(userId);
   for (const item of pending) {
     try {
@@ -946,7 +972,17 @@ export async function syncUserWithGoogle(userId: number, options: GoogleSyncOpti
           summary.pushed += 1;
         } catch (error) {
           if (error instanceof GoogleSyncException && error.code === 'remote_newer') {
-            const remoteEvent = error.context?.remoteEvent as GoogleEventResource | undefined;
+            let remoteEvent = error.context?.remoteEvent as GoogleEventResource | undefined;
+            if (!remoteEvent && appointment.googleSync?.eventId) {
+              try {
+                const encodedCalendarId = encodeURIComponent(calendarId);
+                remoteEvent = await googleJsonRequest(
+                  accessToken,
+                  `${GOOGLE_CALENDAR_API}/calendars/${encodedCalendarId}/events/${encodeURIComponent(appointment.googleSync.eventId)}`,
+                  { method: 'GET' }
+                );
+              } catch {}
+            }
             if (remoteEvent) {
               try {
                 await applyGoogleAppointmentUpdate(calendarId, remoteEvent, summary, appointment);
@@ -979,7 +1015,17 @@ export async function syncUserWithGoogle(userId: number, options: GoogleSyncOpti
           summary.pushed += 1;
         } catch (error) {
           if (error instanceof GoogleSyncException && error.code === 'remote_newer') {
-            const remoteEvent = error.context?.remoteEvent as GoogleEventResource | undefined;
+            let remoteEvent = error.context?.remoteEvent as GoogleEventResource | undefined;
+            if (!remoteEvent && bill.googleSync?.eventId) {
+              try {
+                const encodedCalendarId = encodeURIComponent(calendarId);
+                remoteEvent = await googleJsonRequest(
+                  accessToken,
+                  `${GOOGLE_CALENDAR_API}/calendars/${encodedCalendarId}/events/${encodeURIComponent(bill.googleSync.eventId)}`,
+                  { method: 'GET' }
+                );
+              } catch {}
+            }
             if (remoteEvent) {
               try {
                 await applyGoogleBillUpdate(calendarId, remoteEvent, summary, bill);
@@ -1005,15 +1051,6 @@ export async function syncUserWithGoogle(userId: number, options: GoogleSyncOpti
       const message = error instanceof Error ? error.message : 'Unknown Google sync error';
       summary.errors.push({ itemId: item.itemId, message });
       await markGoogleSyncError(item.itemId, message);
-    }
-  }
-
-  if (options.pullRemote !== false) {
-    try {
-      await pullGoogleChanges(accessToken, { ...credential, calendarId }, calendarId, summary);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to pull Google Calendar changes';
-      summary.errors.push({ message });
     }
   }
 

@@ -146,7 +146,12 @@ export async function getUpcomingBills(recipientId: number, startDate: Date, end
   return result.rows.map((row) => billRowToBill(row as BillRow));
 }
 
-export async function updateBill(id: number, userId: number, data: BillUpdateRequest): Promise<Bill> {
+export async function updateBill(
+  id: number,
+  userId: number,
+  data: BillUpdateRequest,
+  options?: { queueGoogleSync?: boolean }
+): Promise<Bill> {
   await ensureCollaboratorSchema();
   const { statementDate, amount, dueDate, payUrl, status, assignedCollaboratorId } = data;
   const sanitizedPayUrl = sanitizePayUrl(payUrl);
@@ -166,14 +171,15 @@ export async function updateBill(id: number, userId: number, data: BillUpdateReq
     throw new Error('Bill not found');
   }
   const bill = billRowToBill(result.rows[0] as BillRow);
-  await touchPlanForItem(bill.itemId);
+  await touchPlanForItem(bill.itemId, { queueGoogleSync: options?.queueGoogleSync !== false });
   return hydrateBillWithGoogleSync(bill);
 }
 
 export async function updateBillForRecipient(
   id: number,
   recipientId: number,
-  data: BillUpdateRequest
+  data: BillUpdateRequest,
+  options?: { queueGoogleSync?: boolean }
 ): Promise<Bill> {
   await ensureCollaboratorSchema();
   const { statementDate, amount, dueDate, payUrl, status, assignedCollaboratorId } = data;
@@ -193,7 +199,7 @@ export async function updateBillForRecipient(
     throw new Error('Bill not found');
   }
   const bill = billRowToBill(result.rows[0] as BillRow);
-  await touchPlanForItem(bill.itemId);
+  await touchPlanForItem(bill.itemId, { queueGoogleSync: options?.queueGoogleSync !== false });
   return hydrateBillWithGoogleSync(bill);
 }
 

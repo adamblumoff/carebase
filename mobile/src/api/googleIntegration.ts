@@ -37,5 +37,9 @@ export async function triggerGoogleManualSync(options: {
   pullRemote?: boolean;
 } = {}): Promise<GoogleSyncSummary> {
   const response = await apiClient.post('/api/integrations/google/sync', options);
-  return response.data as GoogleSyncSummary;
+  const data = response.data as GoogleSyncSummary;
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[GoogleSync] summary', JSON.stringify(data));
+  }
+  return data;
 }

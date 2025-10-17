@@ -47,7 +47,7 @@ async function ensurePlanVersionColumns(): Promise<void> {
   await planVersionEnsurePromise;
 }
 
-async function touchPlanForItem(itemId: number): Promise<void> {
+async function touchPlanForItem(itemId: number, options?: { queueGoogleSync?: boolean }): Promise<void> {
   await ensurePlanVersionColumns();
   const result = await db.query(
     `UPDATE users u
@@ -62,16 +62,19 @@ async function touchPlanForItem(itemId: number): Promise<void> {
   );
   const userRow = result.rows[0];
   if (userRow?.id) {
+    const ownerId = userRow.id as number;
     const realtime = getRealtimeEmitter();
-    realtime?.emitPlanUpdate(userRow.id as number);
-    await scheduleGoogleSync(userRow.id as number);
+    realtime?.emitPlanUpdate(ownerId);
+    if (options?.queueGoogleSync !== false) {
+      await scheduleGoogleSync(ownerId);
+    }
   }
 }
 
 export const __testTouchPlanForItem = touchPlanForItem;
 export { touchPlanForItem };
 
-export async function touchPlanForUser(userId: number): Promise<void> {
+export async function touchPlanForUser(userId: number, options?: { queueGoogleSync?: boolean }): Promise<void> {
   await ensurePlanVersionColumns();
   const result = await db.query(
     `UPDATE users
@@ -85,7 +88,9 @@ export async function touchPlanForUser(userId: number): Promise<void> {
   }
   const realtime = getRealtimeEmitter();
   realtime?.emitPlanUpdate(userId);
-  await scheduleGoogleSync(userId);
+  if (options?.queueGoogleSync !== false) {
+    await scheduleGoogleSync(userId);
+  }
 }
 
 export async function getPlanVersion(userId: number): Promise<{ planVersion: number; planUpdatedAt: Date | null }> {

@@ -62,6 +62,7 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
   const cacheLoadedRef = useRef(false);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetchPromiseRef = useRef<Promise<void> | null>(null);
+  const hasPlanRef = useRef(false);
 
   const setPlanData = useCallback((nextPlan: PlanPayload) => {
     const normalized = normalizePlanPayload(nextPlan);
@@ -73,6 +74,10 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  useEffect(() => {
+    hasPlanRef.current = plan !== null;
+  }, [plan]);
+
   const refresh = useCallback(
     async (options: RefreshOptions = {}) => {
       const { source = 'manual', silent = false } = options;
@@ -81,7 +86,7 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
         return { success: true };
       }
 
-      if (!silent && plan === null) {
+      if (!silent && !hasPlanRef.current) {
         setLoading(true);
       }
       if (source === 'manual') {
@@ -108,7 +113,7 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
             setError('We couldn’t refresh your plan. Pull to try again.');
           }
         } finally {
-          if (!silent && plan === null) {
+          if (!silent && !hasPlanRef.current) {
             setLoading(false);
           }
           if (source === 'manual') {
@@ -123,7 +128,23 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
       fetchPromiseRef.current = fetchPromise;
       return fetchPromise;
     },
-    [plan, setPlanData]
+    [setPlanData]
+  );
+
+  const refreshIfVersionChanged = useCallback(
+    async (source: RefreshSource) => {
+      try {
+        const nextVersion = await fetchPlanVersion();
+        if (nextVersion > latestVersionRef.current) {
+          await refresh({ source, silent: true });
+        }
+      } catch (err) {
+        if (process.env.NODE_ENV !== 'test') {
+          console.warn('Failed to check plan version', err);
+        }
+      }
+    },
+    [refresh]
   );
 
   useEffect(() => {
@@ -168,8 +189,8 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const unsubscribePlan = addPlanChangeListener(() => {
-      refresh({ silent: true, source: 'realtime' }).catch(() => {
-        // errors handled in refresh
+      refreshIfVersionChanged('realtime').catch(() => {
+        // handled in helper
       });
     });
 
@@ -182,31 +203,28 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
     return () => {
       unsubscribePlan();
     };
-  }, [refresh]);
+  }, [refreshIfVersionChanged]);
 
-  const schedulePoll = useCallback(() => {
-    if (pollTimerRef.current) {
-      clearTimeout(pollTimerRef.current);
-    }
+const schedulePoll = useCallback(() => {
+  if (pollTimerRef.current) {
+    clearTimeout(pollTimerRef.current);
+  }
 
-    pollTimerRef.current = setTimeout(async () => {
-      try {
-        if (isRealtimeConnected()) {
-          return;
-        }
-        const nextVersion = await fetchPlanVersion();
-        if (nextVersion > latestVersionRef.current) {
-          await refresh({ silent: true, source: 'poll' });
-        }
-      } catch (err) {
-        if (process.env.NODE_ENV !== 'test') {
-          console.warn('Plan version poll failed', err);
-        }
-      } finally {
-        schedulePoll();
+  pollTimerRef.current = setTimeout(async () => {
+    try {
+      if (isRealtimeConnected()) {
+        return;
       }
-    }, VERSION_POLL_INTERVAL_MS);
-  }, [refresh]);
+      await refreshIfVersionChanged('poll');
+    } catch (err) {
+      if (process.env.NODE_ENV !== 'test') {
+        console.warn('Plan version poll failed', err);
+      }
+    } finally {
+      schedulePoll();
+    }
+  }, VERSION_POLL_INTERVAL_MS);
+}, [refreshIfVersionChanged]);
 
   useEffect(() => {
     if (process.env.NODE_ENV === 'test') {

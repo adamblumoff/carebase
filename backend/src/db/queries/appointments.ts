@@ -95,7 +95,12 @@ export async function getUpcomingAppointments(recipientId: number, startDate: Da
   return result.rows.map((row) => appointmentRowToAppointment(row as AppointmentRow));
 }
 
-export async function updateAppointment(id: number, userId: number, data: AppointmentUpdateRequest): Promise<Appointment> {
+export async function updateAppointment(
+  id: number,
+  userId: number,
+  data: AppointmentUpdateRequest,
+  options?: { queueGoogleSync?: boolean }
+): Promise<Appointment> {
   await ensureCollaboratorSchema();
   const { startLocal, endLocal, location, prepNote, summary, assignedCollaboratorId } = data;
   const result = await db.query(
@@ -114,14 +119,15 @@ export async function updateAppointment(id: number, userId: number, data: Appoin
     throw new Error('Appointment not found');
   }
   const appointment = appointmentRowToAppointment(result.rows[0] as AppointmentRow);
-  await touchPlanForItem(appointment.itemId);
+  await touchPlanForItem(appointment.itemId, { queueGoogleSync: options?.queueGoogleSync !== false });
   return hydrateAppointmentWithGoogleSync(appointment);
 }
 
 export async function updateAppointmentForRecipient(
   id: number,
   recipientId: number,
-  data: AppointmentUpdateRequest
+  data: AppointmentUpdateRequest,
+  options?: { queueGoogleSync?: boolean }
 ): Promise<Appointment> {
   await ensureCollaboratorSchema();
   const { startLocal, endLocal, location, prepNote, summary, assignedCollaboratorId } = data;
@@ -140,7 +146,7 @@ export async function updateAppointmentForRecipient(
     throw new Error('Appointment not found');
   }
   const appointment = appointmentRowToAppointment(result.rows[0] as AppointmentRow);
-  await touchPlanForItem(appointment.itemId);
+  await touchPlanForItem(appointment.itemId, { queueGoogleSync: options?.queueGoogleSync !== false });
   return hydrateAppointmentWithGoogleSync(appointment);
 }
 

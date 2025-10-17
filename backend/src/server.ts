@@ -73,7 +73,10 @@ io.use((socket, next) => sessionMiddleware(socket.request as any, {} as any, nex
 io.use((socket, next) => initializePassport(socket.request as any, {} as any, next as any));
 io.use((socket, next) => passportSession(socket.request as any, {} as any, next as any));
 initRealtime(io);
-startGoogleSyncPolling();
+// Start Google sync polling only when explicitly enabled.
+if (process.env.GOOGLE_SYNC_POLLING_ENABLED === 'true') {
+  startGoogleSyncPolling();
+}
 
 // Start server
 server.listen(PORT, '0.0.0.0', () => {

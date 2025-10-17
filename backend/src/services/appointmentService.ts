@@ -25,6 +25,7 @@ async function resolveContext(user: User): Promise<AppointmentContext> {
 
   if (!context.collaborator) {
     return { recipientId: context.recipient.id, role: 'owner' };
+  }
   return { recipientId: context.recipient.id, role: 'collaborator' };
 }
 
