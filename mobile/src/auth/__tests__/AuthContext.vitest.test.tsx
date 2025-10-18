@@ -1,9 +1,18 @@
 import React from 'react';
 import { render, waitFor, act } from '@testing-library/react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AuthProvider, useAuth } from '../AuthContext';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authEvents } from '../authEvents';
+import { ACCESS_TOKEN_STORAGE_KEY } from '../tokenStorage';
+
+vi.mock('expo-secure-store', () => ({
+  __esModule: true,
+  isAvailableAsync: vi.fn().mockResolvedValue(false),
+  getItemAsync: vi.fn(),
+  setItemAsync: vi.fn(),
+  deleteItemAsync: vi.fn(),
+  WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'WHEN_UNLOCKED_THIS_DEVICE_ONLY'
+}));
 
 const checkSessionMock = vi.fn();
 const logoutMock = vi.fn();
@@ -47,7 +56,7 @@ beforeEach(async () => {
 
   it('hydrates user when token and session valid', async () => {
     const user = { email: 'user@test.com' };
-    await AsyncStorage.setItem('accessToken', 'token');
+    await AsyncStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, 'token');
     checkSessionMock.mockResolvedValue({ authenticated: true, user });
 
     const latest = renderAuthProvider();
@@ -59,13 +68,13 @@ beforeEach(async () => {
   });
 
   it('clears token and signs out when session check fails', async () => {
-    await AsyncStorage.setItem('accessToken', 'token');
+    await AsyncStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, 'token');
     checkSessionMock.mockRejectedValue(new Error('bad'));
 
     const latest = renderAuthProvider();
 
     await waitFor(() => {
-      expect(AsyncStorage.removeItem).toHaveBeenCalledWith('accessToken');
+      expect(AsyncStorage.removeItem).toHaveBeenCalledWith(ACCESS_TOKEN_STORAGE_KEY);
       expect(latest.current?.status).toBe('signedOut');
       expect(latest.current?.user).toBeNull();
     });
@@ -92,7 +101,7 @@ beforeEach(async () => {
   });
 
   it('signOut removes token, invokes logout, and flips status once', async () => {
-    await AsyncStorage.setItem('accessToken', 'token');
+    await AsyncStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, 'token');
     checkSessionMock.mockResolvedValue({ authenticated: true, user: { email: 'ok@test.com' } });
     logoutMock.mockResolvedValue(undefined);
 
@@ -114,14 +123,14 @@ beforeEach(async () => {
 
     await waitFor(() => {
       expect(logoutMock).toHaveBeenCalledTimes(1);
-      expect(AsyncStorage.removeItem).toHaveBeenCalledWith('accessToken');
+      expect(AsyncStorage.removeItem).toHaveBeenCalledWith(ACCESS_TOKEN_STORAGE_KEY);
       expect(latest.current?.status).toBe('signedOut');
       expect(latest.current?.user).toBeNull();
     });
   });
 
   it('reacts to unauthorized events by signing out', async () => {
-    await AsyncStorage.setItem('accessToken', 'token');
+    await AsyncStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, 'token');
     checkSessionMock.mockResolvedValue({ authenticated: true, user: { email: 'ok@test.com' } });
     logoutMock.mockResolvedValue(undefined);
 
@@ -145,4 +154,12 @@ beforeEach(async () => {
       expect(latest.current?.user).toBeNull();
     });
   });
+});
+let AuthProvider: typeof import('../AuthContext').AuthProvider;
+let useAuth: typeof import('../AuthContext').useAuth;
+
+beforeAll(async () => {
+  const mod = await import('../AuthContext');
+  AuthProvider = mod.AuthProvider;
+  useAuth = mod.useAuth;
 });

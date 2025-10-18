@@ -1,4 +1,5 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
 import {
   createSource,
   createItem,
@@ -14,13 +15,124 @@ import type { Source } from '@carebase/shared';
 
 const router = express.Router();
 
+const rateLimitWindowMs = 60_000;
+const defaultRateLimit = Number.parseInt(process.env.INBOUND_WEBHOOK_RATE_LIMIT ?? '30', 10);
+const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
+
+function rateLimitInbound(req: Request, res: Response, next: NextFunction): void {
+  if (!Number.isFinite(defaultRateLimit) || defaultRateLimit <= 0) {
+    next();
+    return;
+  }
+
+  const now = Date.now();
+  const key =
+    (req.ip && req.ip !== '::ffff:127.0.0.1' ? req.ip : req.headers['x-forwarded-for'])?.toString() ??
+    'unknown';
+  const bucket = rateLimitBuckets.get(key);
+
+  if (!bucket || now > bucket.resetAt) {
+    rateLimitBuckets.set(key, { count: 1, resetAt: now + rateLimitWindowMs });
+    next();
+    return;
+  }
+
+  bucket.count += 1;
+  if (bucket.count > defaultRateLimit) {
+    res.status(429).json({ error: 'Too many inbound webhook requests' });
+    return;
+  }
+
+  next();
+}
+
+function timingSafeCompare(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) {
+    return false;
+  }
+  return crypto.timingSafeEqual(aBuf, bBuf);
+}
+
+function getRawBody(req: Request): string | null {
+  return typeof (req as any).rawBody === 'string' ? ((req as any).rawBody as string) : null;
+}
+
+function validatePostmarkSignature(req: Request, rawBody: string): boolean {
+  const signature = req.header('x-postmark-signature');
+  const secret = process.env.POSTMARK_INBOUND_SECRET;
+  if (!signature) {
+    return false;
+  }
+  if (!secret) {
+    console.error('POSTMARK_INBOUND_SECRET is not set; refusing to accept Postmark webhook');
+    return false;
+  }
+  const expected = crypto.createHmac('sha256', secret).update(rawBody, 'utf8').digest('base64');
+  return timingSafeCompare(signature, expected);
+}
+
+function validateResendSignature(req: Request, rawBody: string): boolean {
+  const signature = req.header('x-resend-signature');
+  const timestamp = req.header('x-resend-timestamp');
+  const secret = process.env.RESEND_INBOUND_SECRET;
+  if (!signature) {
+    return false;
+  }
+  if (!secret || !timestamp) {
+    console.error('Resend webhook received without configured RESEND_INBOUND_SECRET or timestamp header');
+    return false;
+  }
+  const toleranceMs = Number.parseInt(process.env.RESEND_WEBHOOK_TOLERANCE_MS ?? `${5 * 60_000}`, 10);
+  const tsNumber = Number.parseInt(timestamp, 10);
+  if (Number.isFinite(tsNumber) && toleranceMs > 0) {
+    const age = Math.abs(Date.now() - tsNumber * 1000);
+    if (age > toleranceMs) {
+      console.warn('Resend webhook signature expired', { ageMs: age });
+      return false;
+    }
+  }
+  const payload = `${timestamp}.${rawBody}`;
+  const expected = crypto.createHmac('sha256', secret).update(payload, 'utf8').digest('hex');
+  return timingSafeCompare(signature, expected);
+}
+
+function verifyInboundSignature(req: Request): boolean {
+  const rawBody = getRawBody(req);
+  if (!rawBody) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('Inbound webhook missing raw body for signature verification');
+      return false;
+    }
+    return true;
+  }
+
+  if (req.header('x-postmark-signature')) {
+    return validatePostmarkSignature(req, rawBody);
+  }
+  if (req.header('x-resend-signature')) {
+    return validateResendSignature(req, rawBody);
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    console.warn('Inbound webhook missing signature headers');
+    return false;
+  }
+  return true;
+}
+
 /**
  * Postmark inbound email webhook
  * Expects: { From, To, Subject, TextBody, MessageID }
  * Also supports Resend format for backward compatibility
  */
-router.post('/inbound-email', async (req: Request, res: Response) => {
+router.post('/inbound-email', rateLimitInbound, async (req: Request, res: Response) => {
   try {
+    if (!verifyInboundSignature(req)) {
+      res.status(401).json({ error: 'Invalid webhook signature' });
+      return;
+    }
     // Handle both Postmark (capitalized) and Resend (lowercase) formats
     const from = req.body.From || req.body.from;
     const to = req.body.To || req.body.to;

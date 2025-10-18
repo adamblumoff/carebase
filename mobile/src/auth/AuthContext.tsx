@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useMemo, useState, useCallback, useEffect, useRef } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { checkSession, logout as apiLogout } from '../api/auth';
 import { authEvents } from './authEvents';
+import { getAccessToken, removeAccessToken } from './tokenStorage';
 
 interface AuthContextValue {
   status: 'loading' | 'signedOut' | 'signedIn';
@@ -34,7 +34,7 @@ const signIn = useCallback((nextUser?: any) => {
     } catch (error) {
       console.warn('Logout request error', error);
     } finally {
-      await AsyncStorage.removeItem('accessToken').catch(() => {});
+      await removeAccessToken().catch(() => {});
       setUser(null);
       setStatus('signedOut');
       signOutInProgress.current = false;
@@ -56,7 +56,7 @@ const signIn = useCallback((nextUser?: any) => {
 
     const bootstrap = async () => {
       try {
-        const token = await AsyncStorage.getItem('accessToken');
+        const token = await getAccessToken();
         if (!token) {
           if (mounted) {
             setStatus('signedOut');
@@ -75,7 +75,7 @@ const signIn = useCallback((nextUser?: any) => {
           console.warn('Session check failed, clearing token', error);
         }
 
-        await AsyncStorage.removeItem('accessToken');
+        await removeAccessToken().catch(() => {});
         if (mounted) {
           setUser(null);
           setStatus('signedOut');

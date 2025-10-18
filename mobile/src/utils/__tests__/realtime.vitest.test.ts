@@ -1,6 +1,10 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { ensureRealtimeConnected, isRealtimeConnected, addRealtimeStatusListener } from '../realtime';
+import { getAccessToken } from '../../auth/tokenStorage';
+
+vi.mock('../../auth/tokenStorage', () => ({
+  getAccessToken: vi.fn()
+}));
 
 const mockEmitPlanChanged = vi.fn();
 
@@ -23,16 +27,14 @@ vi.mock('socket.io-client', () => ({
   }
 }));
 
-const mockedAsyncStorage = AsyncStorage as unknown as {
-  getItem: ReturnType<typeof vi.fn>;
-};
+const mockedTokenStorage = getAccessToken as unknown as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.clearAllMocks();
   for (const key of Object.keys(socketHandlers)) {
     delete socketHandlers[key];
   }
-  mockedAsyncStorage.getItem.mockResolvedValue('token-123');
+  mockedTokenStorage.mockResolvedValue('token-123');
 });
 
 describe('realtime', () => {

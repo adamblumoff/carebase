@@ -1,11 +1,17 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import apiClient from '../client';
 import { authEvents } from '../../auth/authEvents';
+import { getAccessToken, removeAccessToken } from '../../auth/tokenStorage';
 
-const mockedAsyncStorage = AsyncStorage as unknown as {
-  getItem: ReturnType<typeof vi.fn>;
-  removeItem: ReturnType<typeof vi.fn>;
+vi.mock('../../auth/tokenStorage', () => ({
+  getAccessToken: vi.fn(),
+  removeAccessToken: vi.fn(),
+  setAccessToken: vi.fn()
+}));
+
+const mockedTokenStorage = {
+  getAccessToken: getAccessToken as unknown as ReturnType<typeof vi.fn>,
+  removeAccessToken: removeAccessToken as unknown as ReturnType<typeof vi.fn>
 };
 
 const requestHandler = apiClient.interceptors.request.handlers[0].fulfilled!;
@@ -14,12 +20,12 @@ const responseErrorHandler = apiClient.interceptors.response.handlers[0].rejecte
 describe('api client interceptors', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockedAsyncStorage.getItem.mockResolvedValue(null);
-    mockedAsyncStorage.removeItem.mockResolvedValue(undefined as any);
+    mockedTokenStorage.getAccessToken.mockResolvedValue(null);
+    mockedTokenStorage.removeAccessToken.mockResolvedValue(undefined);
   });
 
   it('adds bearer token when stored', async () => {
-    mockedAsyncStorage.getItem.mockResolvedValue('token-123');
+    mockedTokenStorage.getAccessToken.mockResolvedValue('token-123');
 
     const config = await requestHandler({ headers: {} } as any);
 
@@ -27,7 +33,7 @@ describe('api client interceptors', () => {
   });
 
   it('skips authorization header when no token', async () => {
-    mockedAsyncStorage.getItem.mockResolvedValue(null);
+    mockedTokenStorage.getAccessToken.mockResolvedValue(null);
 
     const config = await requestHandler({ headers: {} } as any);
 
@@ -35,7 +41,7 @@ describe('api client interceptors', () => {
   });
 
   it('logs when token lookup fails', async () => {
-    mockedAsyncStorage.getItem.mockRejectedValue(new Error('storage failed'));
+    mockedTokenStorage.getAccessToken.mockRejectedValue(new Error('storage failed'));
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     await requestHandler({ headers: {} } as any);
@@ -56,7 +62,7 @@ describe('api client interceptors', () => {
       })
     ).rejects.toMatchObject({ response: { status: 401 } });
 
-    expect(mockedAsyncStorage.removeItem).toHaveBeenCalledWith('accessToken');
+    expect(mockedTokenStorage.removeAccessToken).toHaveBeenCalled();
     expect(emitSpy).toHaveBeenCalled();
   });
 

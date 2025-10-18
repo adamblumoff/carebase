@@ -41,3 +41,8 @@ npm run test:contracts      # cross-workspace contract tests
 - Backend reads `.env.<env>` + `.env.<env>.local`; switch via `npm run dev:backend[:prod]`.
 - Expo uses `.env.local`; swap via `npm run env:mobile:<dev|prod>` and restart with `npx expo start --clear`.
 - Railway deployment uses `npm run start --workspace=backend`; ensure production secrets (`BASE_URL=https://carebase.dev`, Google Postmark creds) are set.
+- The backend now refuses to boot unless `SESSION_SECRET`, `MOBILE_AUTH_SECRET`, `GOOGLE_AUTH_STATE_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `DATABASE_URL` are present. Each value must be unique—do not reuse one secret for multiple roles. In CI/local test runs the loader supplies deterministic placeholders automatically.
+- Express sessions persist in Postgres (`user_sessions` table). Provision the table via automatic creation or run migrations before scaling to multiple instances.
+- Database TLS uses `DATABASE_SSL` (defaults to `require` in production) and `DATABASE_SSL_CA` for the PEM bundle. Provide the Railway CA and keep `DATABASE_SSL_REJECT_UNAUTHORIZED` at its default `true`. Set `DEBUG_SQL=true` locally if you need verbose query logging; logs stay silent by default.
+- Google OAuth credentials are encrypted at rest. Configure `GOOGLE_CREDENTIALS_ENCRYPTION_KEY` (32-byte base64 or hex) alongside `POSTMARK_INBOUND_SECRET`/`RESEND_INBOUND_SECRET` for webhook verification and `INBOUND_WEBHOOK_RATE_LIMIT` if you need to loosen the default 30 req/min window.
+- Mobile access tokens now live in SecureStore when available. Ensure Expo envs include the Google client IDs and keep `expo-secure-store` installed; AsyncStorage is used automatically when SecureStore isn't supported.

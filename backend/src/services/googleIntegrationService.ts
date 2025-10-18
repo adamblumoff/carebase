@@ -41,12 +41,13 @@ function getOAuthClientId(): string {
 }
 
 function getOAuthStateSecret(): string {
-  return (
+  const secret =
     process.env.GOOGLE_AUTH_STATE_SECRET ??
-    process.env.MOBILE_AUTH_SECRET ??
-    process.env.SESSION_SECRET ??
-    'carebase-google-state'
-  );
+    (process.env.NODE_ENV === 'test' ? 'test-google-state-secret' : undefined);
+  if (!secret) {
+    throw new Error('GOOGLE_AUTH_STATE_SECRET must be configured');
+  }
+  return secret;
 }
 
 function getServerRedirectUri(): string {

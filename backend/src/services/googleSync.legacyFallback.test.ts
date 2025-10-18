@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Appointment } from '@carebase/shared';
+import { encryptSecret } from '../utils/secretCipher.js';
 
 process.env.GOOGLE_SYNC_ENABLE_TEST = 'true';
 
@@ -104,8 +105,8 @@ test('legacy Google events without carebaseType still update local plan', async 
       ownerUserId,
       {
         user_id: ownerUserId,
-        access_token: 'ya29.test-access-token',
-        refresh_token: '1//test-refresh-token',
+        access_token: encryptSecret('ya29.test-access-token')!,
+        refresh_token: encryptSecret('1//test-refresh-token')!,
         scope: ['https://www.googleapis.com/auth/calendar'],
         expires_at: new Date(Date.now() + 60 * 60 * 1000),
         token_type: 'Bearer',
@@ -572,8 +573,8 @@ test('remote edits with newer timestamp override pending local push', async (t) 
       ownerUserId,
       {
         user_id: ownerUserId,
-        access_token: 'ya29.test-access-token',
-        refresh_token: '1//test-refresh-token',
+        access_token: encryptSecret('ya29.test-access-token')!,
+        refresh_token: encryptSecret('1//test-refresh-token')!,
         scope: ['https://www.googleapis.com/auth/calendar'],
         expires_at: new Date(Date.now() + 60 * 60 * 1000),
         token_type: 'Bearer',

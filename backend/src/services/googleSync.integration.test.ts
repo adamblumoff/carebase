@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { createGoogleSyncTestContext } from './googleSync.testUtils.js';
 import { FakeGoogleCalendarApi } from './googleSync.testDoubles.js';
+import { upsertGoogleCredential } from '../db/queries.js';
 
 let sequence = 1;
 
@@ -81,48 +82,21 @@ async function seedAppointmentFixture(pool: any, overrides?: { summary?: string 
 }
 
 async function seedGoogleCredential(
-  pool: any,
+  _pool: any,
   userId: number,
   overrides?: { syncToken?: string | null; calendarId?: string | null }
 ): Promise<void> {
-  await pool.query(
-    `INSERT INTO google_credentials (
-       user_id,
-       access_token,
-       refresh_token,
-       scope,
-       expires_at,
-       token_type,
-       id_token,
-       calendar_id,
-       sync_token,
-       last_pulled_at
-     )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-     ON CONFLICT (user_id)
-     DO UPDATE SET
-       access_token = EXCLUDED.access_token,
-       refresh_token = EXCLUDED.refresh_token,
-       scope = EXCLUDED.scope,
-       expires_at = EXCLUDED.expires_at,
-       token_type = EXCLUDED.token_type,
-       id_token = EXCLUDED.id_token,
-       calendar_id = EXCLUDED.calendar_id,
-       sync_token = EXCLUDED.sync_token,
-       last_pulled_at = EXCLUDED.last_pulled_at`,
-    [
-      userId,
-      'ya29.test-access-token',
-      '1//test-refresh-token',
-      ['https://www.googleapis.com/auth/calendar'],
-      new Date(Date.now() + 60 * 60 * 1000),
-      'Bearer',
-      null,
-      overrides?.calendarId ?? 'primary',
-      overrides?.syncToken ?? null,
-      overrides?.syncToken ? new Date() : null
-    ]
-  );
+  await upsertGoogleCredential(userId, {
+    accessToken: 'ya29.test-access-token',
+    refreshToken: '1//test-refresh-token',
+    scope: ['https://www.googleapis.com/auth/calendar'],
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    tokenType: 'Bearer',
+    idToken: null,
+    calendarId: overrides?.calendarId ?? 'primary',
+    syncToken: overrides?.syncToken ?? null,
+    lastPulledAt: overrides?.syncToken ? new Date() : null
+  });
 }
 
 test('initial sync pushes pending appointments and stores next sync token', async (t) => {

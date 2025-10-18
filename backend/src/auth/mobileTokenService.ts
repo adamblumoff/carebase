@@ -5,9 +5,12 @@ const LOGIN_TOKEN_TTL = '5m';
 const ACCESS_TOKEN_TTL = '7d';
 
 const MOBILE_AUTH_SECRET =
-  process.env.MOBILE_AUTH_SECRET ||
-  process.env.SESSION_SECRET ||
-  'fallback-mobile-secret-change-in-production';
+  process.env.MOBILE_AUTH_SECRET ??
+  (process.env.NODE_ENV === 'test' ? 'test-mobile-secret' : undefined);
+
+if (!MOBILE_AUTH_SECRET) {
+  throw new Error('MOBILE_AUTH_SECRET must be configured');
+}
 
 export interface MobileTokenPayload {
   sub: number;

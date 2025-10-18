@@ -21,6 +21,7 @@ import { API_BASE_URL } from '../config';
 import { useTheme, spacing, radius, type Palette, type Shadow } from '../theme';
 import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../ui/ToastProvider';
+import { removeAccessToken, setAccessToken } from '../auth/tokenStorage';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -61,31 +62,31 @@ export default function LoginScreen({ navigation }: Props) {
         throw new Error('Access token missing from response');
       }
 
-      await AsyncStorage.setItem('accessToken', accessToken);
-      await AsyncStorage.removeItem('sessionCookie');
+      await setAccessToken(accessToken);
+      await AsyncStorage.removeItem('sessionCookie'); // session cookie still stored in async storage?
 
       const session = await checkSession();
       if (session.authenticated) {
         auth.signIn(session.user);
-        toast.showToast('Signed in');
-      } else {
-        throw new Error('Session not established');
-      }
-    } catch (error: any) {
-      console.error('Sign in error:', error);
-      Alert.alert('Error', error.message || 'Failed to sign in');
-      toast.showToast('Failed to sign in');
-      await AsyncStorage.removeItem('accessToken');
-    } finally {
-      setLoading(false);
+      toast.showToast('Signed in');
+    } else {
+      throw new Error('Session not established');
     }
-  };
+  } catch (error: any) {
+    console.error('Sign in error:', error);
+    Alert.alert('Error', error.message || 'Failed to sign in');
+    toast.showToast('Failed to sign in');
+    await removeAccessToken();
+  } finally {
+    setLoading(false);
+  }
+};
 
-  const handleContinueWithoutAuth = () => {
-    AsyncStorage.removeItem('accessToken').catch(() => {});
-    auth.signIn();
-    toast.showToast('Signed in (dev bypass)');
-  };
+const handleContinueWithoutAuth = () => {
+  removeAccessToken().catch(() => {});
+  auth.signIn();
+  toast.showToast('Signed in (dev bypass)');
+};
 
   return (
     <SafeAreaView style={styles.safe} edges={['left', 'right']}>

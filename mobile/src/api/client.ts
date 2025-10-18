@@ -2,9 +2,9 @@
  * API client for making requests to the backend
  */
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config';
 import { authEvents } from '../auth/authEvents';
+import { getAccessToken, removeAccessToken } from '../auth/tokenStorage';
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -17,13 +17,17 @@ export const apiClient = axios.create({
 
 apiClient.interceptors.request.use(
   async (config) => {
-    console.log(`[API] ${config.method?.toUpperCase()} ${config.url}`);
+    if (__DEV__) {
+      console.log(`[API] ${config.method?.toUpperCase()} ${config.url}`);
+    }
 
     try {
-      const accessToken = await AsyncStorage.getItem('accessToken');
+      const accessToken = await getAccessToken();
       if (accessToken) {
         config.headers.Authorization = `Bearer ${accessToken}`;
-        console.log('[API] Added bearer token to request');
+        if (__DEV__) {
+          console.log('[API] Added bearer token to request');
+        }
       }
     } catch (error) {
       console.error('[API] Failed to load access token:', error);
@@ -37,7 +41,9 @@ apiClient.interceptors.request.use(
 // Response interceptor
 apiClient.interceptors.response.use(
   (response) => {
-    console.log(`[API] Response: ${response.status}`);
+    if (__DEV__) {
+      console.log(`[API] Response: ${response.status}`);
+    }
     return response;
   },
   (error) => {
@@ -45,7 +51,7 @@ apiClient.interceptors.response.use(
       console.error(`[API] Error: ${error.response.status}`, error.response.data);
 
       if (error.response.status === 401) {
-        AsyncStorage.removeItem('accessToken').catch(() => {
+        removeAccessToken().catch(() => {
           // ignore cleanup errors
         });
         authEvents.emitUnauthorized();

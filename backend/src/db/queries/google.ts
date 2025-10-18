@@ -8,6 +8,7 @@ import type {
   ItemType
 } from '@carebase/shared';
 import { db } from './shared.js';
+import { encryptSecret, decryptSecret } from '../../utils/secretCipher.js';
 
 let googleIntegrationSchemaEnsured = false;
 let googleIntegrationEnsurePromise: Promise<void> | null = null;
@@ -330,15 +331,56 @@ export interface GoogleSyncLinkUpsertData {
   lastError?: string | null;
 }
 
-function googleCredentialRowToCredential(row: GoogleCredentialRow): GoogleCredential {
+async function googleCredentialRowToCredential(row: GoogleCredentialRow): Promise<GoogleCredential> {
+  const updates: Array<{ column: keyof GoogleCredentialRow; value: string | null }> = [];
+
+  const resolveToken = (value: string | null, column: keyof GoogleCredentialRow): string | null => {
+    if (!value) {
+      return null;
+    }
+    try {
+      const decrypted = decryptSecret(value);
+      if (!decrypted) {
+        throw new Error(`Unable to decrypt ${String(column)}`);
+      }
+      return decrypted;
+    } catch {
+      const encrypted = encryptSecret(value);
+      if (!encrypted) {
+        throw new Error(`Unable to encrypt ${String(column)}`);
+      }
+      updates.push({ column, value: encrypted });
+      return value;
+    }
+  };
+
+  const accessToken = resolveToken(row.access_token, 'access_token');
+  const refreshToken = resolveToken(row.refresh_token, 'refresh_token');
+  const idToken = resolveToken(row.id_token, 'id_token');
+
+  if (!accessToken || !refreshToken) {
+    throw new Error('Missing Google OAuth credentials for user');
+  }
+
+  if (updates.length > 0) {
+    const setFragments = updates.map((entry, index) => `${entry.column} = $${index + 1}`);
+    const values = updates.map((entry) => entry.value);
+    await db.query(
+      `UPDATE google_credentials
+       SET ${setFragments.join(', ')}, updated_at = NOW()
+       WHERE user_id = $${updates.length + 1}`,
+      [...values, row.user_id]
+    );
+  }
+
   return {
     userId: row.user_id,
-    accessToken: row.access_token,
-    refreshToken: row.refresh_token,
+    accessToken,
+    refreshToken,
     scope: row.scope ?? [],
     expiresAt: row.expires_at,
     tokenType: row.token_type,
-    idToken: row.id_token,
+    idToken,
     calendarId: row.calendar_id,
     syncToken: row.sync_token,
     lastPulledAt: row.last_pulled_at,
@@ -374,6 +416,14 @@ export async function upsertGoogleCredential(
   }
 ): Promise<GoogleCredential> {
   await ensureGoogleIntegrationSchema();
+  const encryptedAccessToken = encryptSecret(data.accessToken);
+  const encryptedRefreshToken = encryptSecret(data.refreshToken);
+  const encryptedIdToken = encryptSecret(data.idToken ?? null);
+
+  if (!encryptedAccessToken || !encryptedRefreshToken) {
+    throw new Error('Failed to encrypt Google OAuth credentials');
+  }
+
   const result = await db.query(
     `INSERT INTO google_credentials (
         user_id,
@@ -402,15 +452,15 @@ export async function upsertGoogleCredential(
        sync_token = EXCLUDED.sync_token,
        last_pulled_at = EXCLUDED.last_pulled_at,
        updated_at = NOW()
-     RETURNING *`,
+    RETURNING *`,
     [
       userId,
-      data.accessToken,
-      data.refreshToken,
+      encryptedAccessToken,
+      encryptedRefreshToken,
       data.scope,
       data.expiresAt,
       data.tokenType ?? null,
-      data.idToken ?? null,
+      encryptedIdToken,
       data.calendarId ?? null,
       data.syncToken ?? null,
       data.lastPulledAt ?? null

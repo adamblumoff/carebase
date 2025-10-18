@@ -1,8 +1,8 @@
 import type { Socket } from 'socket.io-client';
 import { io as createSocket } from 'socket.io-client';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config';
 import { emitPlanChanged } from './planEvents';
+import { getAccessToken } from '../auth/tokenStorage';
 
 let socket: Socket | null = null;
 let connecting = false;
@@ -21,7 +21,7 @@ function notifyStatus(status: 'connected' | 'disconnected') {
 
 async function getAuthToken(): Promise<string | null> {
   try {
-    return await AsyncStorage.getItem('accessToken');
+    return await getAccessToken();
   } catch (error) {
     console.warn('[Realtime] Failed to load access token', error);
     return null;
