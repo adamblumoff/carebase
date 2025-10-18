@@ -38,6 +38,7 @@ This document tracks the security controls currently in place across the Carebas
 
 - **Documentation & Tooling**
   - `AGENTS.md` and env examples detail required secrets, TLS setup, and webhook keys.
+  - `GOOGLE_SYNC_VERBOSE=false` by default to keep Google Calendar logging manageable; enable only when diagnosing sync issues.
   - Tests updated to cover new security paths (token encryption, secure storage).
 
 ## High-Impact Next Steps

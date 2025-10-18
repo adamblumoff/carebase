@@ -51,6 +51,7 @@ const {
 } = getGoogleSyncConfig();
 
 const IS_TEST_ENV = isTestEnv();
+const VERBOSE_SYNC_LOGS = process.env.GOOGLE_SYNC_VERBOSE === 'true';
 
 interface RetryState {
   attempt: number;
@@ -508,7 +509,9 @@ async function googleJsonRequest(
   });
 
   if (response.status === 204) {
-    logInfo(`Google API request succeeded with no content`, { method, url: safeUrl, status: response.status });
+    if (VERBOSE_SYNC_LOGS) {
+      logInfo(`Google API request succeeded with no content`, { method, url: safeUrl, status: response.status });
+    }
     return null;
   }
 
@@ -527,14 +530,16 @@ async function googleJsonRequest(
     );
   }
 
-  logInfo(`Google API request succeeded`, {
-    method,
-    url: safeUrl,
-    status: response.status,
-    payloadSummary: Array.isArray(payload?.items)
-      ? { items: payload.items.length, nextSyncToken: payload.nextSyncToken ?? null }
-      : Object.keys(payload || {}).slice(0, 5)
-  });
+  if (VERBOSE_SYNC_LOGS) {
+    logInfo(`Google API request succeeded`, {
+      method,
+      url: safeUrl,
+      status: response.status,
+      payloadSummary: Array.isArray(payload?.items)
+        ? { items: payload.items.length, nextSyncToken: payload.nextSyncToken ?? null }
+        : Object.keys(payload || {}).slice(0, 5)
+    });
+  }
 
   return payload;
 }
@@ -1518,7 +1523,9 @@ async function performSync(userId: number): Promise<void> {
 }
 
 export function scheduleGoogleSyncForUser(userId: number, debounceMs: number = DEFAULT_DEBOUNCE_MS): void {
-  logInfo('Scheduling Google sync', { userId, debounceMs });
+  if (VERBOSE_SYNC_LOGS) {
+    logInfo('Scheduling Google sync', { userId, debounceMs });
+  }
   if (testSchedulerOverride) {
     testSchedulerOverride(userId, debounceMs);
     return;

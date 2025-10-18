@@ -324,3 +324,63 @@ test('invalid sync token triggers reset and retry without duplicate pushes', asy
   );
   assert.equal(linkRows[0].sync_status, 'idle');
 });
+
+test('manual sync pulls remote changes after reconnect', async (t) => {
+  const ctx = await createGoogleSyncTestContext(t);
+  const fakeCalendar = new FakeGoogleCalendarApi();
+  fakeCalendar.install();
+  t.after(() => fakeCalendar.restore());
+
+  const googleSyncModule = await import('./googleSync.js');
+  const { syncUserWithGoogle, __resetGoogleSyncStateForTests } = googleSyncModule;
+  const { manualGoogleSync } = await import('./googleIntegrationService.js');
+  t.after(() => __resetGoogleSyncStateForTests());
+
+  const { userId, itemId, appointmentId } = await seedAppointmentFixture(ctx.pool, {
+    summary: 'Local summary'
+  });
+  await seedGoogleCredential(ctx.pool, userId);
+
+  await syncUserWithGoogle(userId, { pullRemote: true });
+
+  const { rows: linkRows } = await ctx.exec(
+    'SELECT event_id FROM google_sync_links WHERE item_id = $1',
+    [itemId]
+  );
+  assert.equal(linkRows.length, 1);
+  const eventId = linkRows[0].event_id as string;
+
+  const remote = fakeCalendar.updateRemoteEvent('primary', eventId, {
+    summary: 'Remote authored summary',
+    extendedProperties: {
+      private: {
+        carebaseItemId: String(itemId),
+        carebaseType: 'appointment'
+      }
+    }
+  });
+  assert.ok(remote);
+
+  const userRow = (await ctx.exec('SELECT * FROM users WHERE id = $1', [userId])).rows[0];
+  const user = {
+    id: userRow.id as number,
+    email: userRow.email as string,
+    googleId: userRow.google_id as string,
+    forwardingAddress: userRow.forwarding_address as string,
+    planSecret: userRow.plan_secret as string,
+    planVersion: (userRow.plan_version as number) ?? 0,
+    planUpdatedAt: userRow.plan_updated_at as Date | null,
+    createdAt: userRow.created_at as Date
+  } as any;
+
+  const summary = await manualGoogleSync(user, { pullRemote: true });
+
+  assert.equal(summary.pulled >= 1, true);
+  assert.deepEqual(summary.errors, []);
+
+  const { rows: appointmentRows } = await ctx.exec(
+    'SELECT summary FROM appointments WHERE id = $1',
+    [appointmentId]
+  );
+  assert.equal(appointmentRows[0].summary, 'Remote authored summary');
+});
