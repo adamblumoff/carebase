@@ -16,7 +16,7 @@ npm run env:mobile:dev      # copy Expo env for ngrok
 npm run env:mobile:prod     # copy Expo env for production
 (cd mobile && npx expo start --clear)  # launch Expo bundler
 npm run test:backend        # backend unit/integration tests
-npm run test --workspace=mobile  # mobile Jest suite
+npm run test --workspace=mobile  # mobile Vitest suite
 npm run test:contracts      # cross-workspace contract tests
 ```
 
@@ -28,9 +28,9 @@ npm run test:contracts      # cross-workspace contract tests
 
 ## Testing Guidelines
 - Backend: `tsx --test` (Node test runner) + pg-mem for integration (`*.test.ts`).
-- Mobile: Jest + `@testing-library/react-native` (`*.test.tsx`).
+- Mobile: Vitest + `@testing-library/react-native` (`*.vitest.test.tsx`). Presenters/helpers are isolated for testing; RN screens remain excluded from coverage thresholds.
 - Contract tests ensure API payloads align with shared types (`tests/src/plan.contract.test.ts`).
-- Run `npm run coverage` to combine backend + mobile coverage reports.
+- `npm run coverage` runs backend + mobile coverage. Mobile coverage thresholds enforce ≥65% statements/lines (branches 55%, functions 65%) for logic modules.
 
 ## Commit & Pull Request Guidelines
 - Commit messages: short, imperative (“Add backend env toggle helpers” style). Commit after each logical change.
