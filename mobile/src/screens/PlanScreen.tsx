@@ -21,6 +21,7 @@ import { useToast } from '../ui/ToastProvider';
 import { formatDisplayDate, formatDisplayTime, parseServerDate } from '../utils/date';
 import { usePlan } from '../plan/PlanProvider';
 import { formatCurrency } from '../utils/format';
+import { decideRefreshToast, findCollaboratorEmail, summarizePlan } from './plan/presenter';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Plan'>;
 
@@ -30,6 +31,7 @@ export default function PlanScreen({ navigation }: Props) {
   const toast = useToast();
   const { plan, loading, error, refreshing, refresh, lastUpdate } = usePlan();
   const lastToastRef = useRef<number>(0);
+  const summary = useMemo(() => summarizePlan(plan ?? null), [plan]);
 
   const AnimatedStatusBadge: React.FC<{ status: string }> = ({ status }) => {
     const scale = useRef(new Animated.Value(1)).current;
@@ -90,42 +92,16 @@ export default function PlanScreen({ navigation }: Props) {
   );
 
   const getCollaboratorName = useCallback(
-    (collaboratorId: number | null) => {
-      if (!collaboratorId || !plan?.collaborators) {
-        return null;
-      }
-      const match = plan.collaborators.find((collaborator) => collaborator.id === collaboratorId);
-      return match?.email ?? null;
-    },
-    [plan?.collaborators]
+    (collaboratorId: number | null) => findCollaboratorEmail(plan ?? null, collaboratorId),
+    [plan]
   );
 
-  const appointmentCount = plan?.appointments.length ?? 0;
-  const billsDue = plan?.bills.filter((bill) => bill.status !== 'paid').length ?? 0;
-
   useEffect(() => {
-    if (!lastUpdate) {
-      return;
+    const decision = decideRefreshToast(lastUpdate ?? null, Boolean(plan), lastToastRef.current);
+    if (decision.message && decision.timestamp) {
+      toast.showToast(decision.message);
+      lastToastRef.current = decision.timestamp;
     }
-    if (lastUpdate.timestamp === lastToastRef.current) {
-      return;
-    }
-
-    if (lastUpdate.source === 'manual') {
-      if (lastUpdate.success) {
-        toast.showToast('Plan updated');
-      } else if (plan) {
-        toast.showToast('Unable to refresh plan. Showing saved data');
-      } else {
-        toast.showToast('Unable to refresh plan');
-      }
-    }
-
-    if (lastUpdate.source === 'realtime' && lastUpdate.success) {
-      toast.showToast('Plan refreshed');
-    }
-
-    lastToastRef.current = lastUpdate.timestamp;
   }, [lastUpdate, plan, toast]);
 
   if (loading) {
@@ -175,15 +151,15 @@ export default function PlanScreen({ navigation }: Props) {
             <View style={styles.heroRow}>
               <Text style={styles.heroIcon}>📅</Text>
               <Text style={styles.heroSubtitle}>
-                {plan?.dateRange
-                  ? `${formatDate(plan.dateRange.start)} – ${formatDate(plan.dateRange.end)}`
+                {summary.dateRange
+                  ? `${formatDate(summary.dateRange.start)} – ${formatDate(summary.dateRange.end)}`
                   : 'Connect your inbox to build a plan.'}
-              </Text>
-            </View>
-            <Text style={styles.heroMeta}>
-              {appointmentCount} appointments • {billsDue} bills due
             </Text>
           </View>
+          <Text style={styles.heroMeta}>
+              {summary.appointmentCount} appointments • {summary.billsDueCount} bills due
+          </Text>
+        </View>
         </View>
 
         {error && (
@@ -198,9 +174,9 @@ export default function PlanScreen({ navigation }: Props) {
               <Text style={styles.sectionIcon}>🗓️</Text>
               <Text style={styles.sectionTitle}>Upcoming visits</Text>
             </View>
-            {appointmentCount > 0 && <Text style={styles.sectionCount}>{appointmentCount}</Text>}
+            {summary.appointmentCount > 0 && <Text style={styles.sectionCount}>{summary.appointmentCount}</Text>}
           </View>
-          {appointmentCount === 0 ? (
+          {summary.appointmentCount === 0 ? (
             <View style={styles.emptyCard}>
               <Text style={styles.emptyTitle}>No appointments</Text>
               <Text style={styles.emptyText}>
@@ -243,9 +219,9 @@ export default function PlanScreen({ navigation }: Props) {
               <Text style={styles.sectionIcon}>💳</Text>
               <Text style={styles.sectionTitle}>Bills to handle</Text>
             </View>
-            {plan && plan.bills.length > 0 && <Text style={styles.sectionCount}>{plan.bills.length}</Text>}
+            {plan && summary.totalBills > 0 && <Text style={styles.sectionCount}>{summary.totalBills}</Text>}
           </View>
-          {plan?.bills.length === 0 ? (
+          {summary.totalBills === 0 ? (
             <View style={styles.emptyCard}>
               <Text style={styles.emptyTitle}>No bills due</Text>
               <Text style={styles.emptyText}>

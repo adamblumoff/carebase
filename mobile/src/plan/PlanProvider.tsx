@@ -20,11 +20,11 @@ interface RefreshOptions {
   silent?: boolean;
 }
 
-interface PlanUpdateMeta {
+export type PlanUpdateMeta = {
   source: RefreshSource;
   success: boolean;
   timestamp: number;
-}
+};
 
 interface PlanContextValue {
   plan: PlanPayload | null;

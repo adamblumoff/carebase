@@ -23,10 +23,10 @@ export default defineConfig({
       reporter: ['text'],
       exclude: ['App.tsx', 'index.ts', 'src/screens/**/*', 'src/ui/**/*'],
       thresholds: {
-        statements: 60,
-        branches: 50,
-        functions: 60,
-        lines: 60
+        statements: 65,
+        branches: 55,
+        functions: 65,
+        lines: 65
       }
     }
   },
