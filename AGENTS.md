@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `backend/`: Express + TypeScript API (`src/auth`, `src/controllers`, `src/db`, `src/routes`, `src/services`)
+- `backend/`: Express + TypeScript API (`src/auth`, `src/controllers`, `src/db`, `src/routes`, `src/services`). Google Sync logic now lives in submodules under `src/services/googleSync/` (auth, credentials, http helpers) with `googleSync.ts` acting as the orchestrator.
 - `mobile/`: Expo React Native app (`src/screens`, `src/api`, `src/hooks`, `src/ui`).
 - `shared/`: Cross-runtime TypeScript types.
 - `tests/`: API contract tests using pg-mem + supertest.
@@ -27,7 +27,7 @@ npm run test:contracts      # cross-workspace contract tests
 - Keep code self-contained; route files should delegate to controllers/services.
 
 ## Testing Guidelines
-- Backend: `tsx --test` (Node test runner) + pg-mem for integration (`*.test.ts`).
+- Backend: `tsx --test` (Node test runner) + pg-mem for integration (`*.test.ts`). Vitest coverage now includes targeted Google sync queueing (`src/db/__tests__/googleQueue.vitest.test.ts`) alongside latest-write-wins flows.
 - Mobile: Vitest + `@testing-library/react-native` (`*.vitest.test.tsx`). Presenters/helpers are isolated for testing; RN screens remain excluded from coverage thresholds.
 - Contract tests ensure API payloads align with shared types (`tests/src/plan.contract.test.ts`).
 - `npm run coverage` runs backend + mobile coverage. Mobile coverage thresholds enforce ≥65% statements/lines (branches 55%, functions 65%) for logic modules.

@@ -30,14 +30,32 @@ import {
 import { getGoogleSyncConfig, isTestEnv } from './googleSync/config.js';
 import { logError, logInfo, logWarn } from './googleSync/logger.js';
 import { formatDateTimeWithTimeZone } from '../utils/timezone.js';
+import {
+  GOOGLE_CALENDAR_API,
+  GOOGLE_CHANNELS_API,
+  GOOGLE_WEBHOOK_PATH,
+  WATCH_TTL_SECONDS,
+  WATCH_RENEWAL_LOOKAHEAD_MS,
+  WATCH_RENEWAL_THRESHOLD_MS
+} from './googleSync/constants.js';
+import { googleJsonRequest as googleJsonRequestInternal } from './googleSync/http.js';
+import { ensureValidAccessToken } from './googleSync/credentials.js';
+import {
+  exchangeGoogleAuthorizationCode as exchangeGoogleAuthorizationCodeInternal,
+  exchangeGoogleAuthorizationCodeServer as exchangeGoogleAuthorizationCodeServerInternal
+} from './googleSync/auth.js';
+import {
+  GoogleSyncException,
+  type AuthenticatedCredential,
+  type GoogleEventResource,
+  type GoogleSyncOptions,
+  type GoogleSyncSummary,
+  type SyncError,
+  type SyncRunner
+} from './googleSync/types.js';
 
-const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
-const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
-const GOOGLE_CHANNELS_API = 'https://www.googleapis.com/calendar/v3/channels/stop';
-const GOOGLE_WEBHOOK_PATH = '/api/integrations/google/webhook';
-const WATCH_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
-const WATCH_RENEWAL_THRESHOLD_MS = 60 * 60 * 1000; // 1 hour
-const WATCH_RENEWAL_LOOKAHEAD_MS = 12 * 60 * 60 * 1000; // 12 hours
+export { GoogleSyncException } from './googleSync/types.js';
+export type { GoogleSyncSummary, GoogleSyncOptions, SyncError } from './googleSync/types.js';
 
 const {
   lookbackDays: DEFAULT_LOOKBACK_DAYS,
@@ -65,69 +83,7 @@ const followUpRequested = new Set<number>();
 let pollingTimer: NodeJS.Timeout | null = null;
 let testSchedulerOverride: ((userId: number, debounceMs: number) => void) | null = null;
 
-type SyncRunner = (userId: number, options?: GoogleSyncOptions) => Promise<GoogleSyncSummary>;
 let syncRunner: SyncRunner;
-
-interface GoogleSyncOptions {
-  forceFull?: boolean;
-  calendarId?: string | null;
-  pullRemote?: boolean;
-}
-
-interface SyncError {
-  itemId?: number;
-  message: string;
-}
-
-export interface GoogleSyncSummary {
-  pushed: number;
-  pulled: number;
-  deleted: number;
-  errors: SyncError[];
-  calendarId: string;
-}
-
-interface AuthenticatedCredential {
-  credential: GoogleCredential;
-  accessToken: string;
-}
-
-interface GoogleEventResource {
-  id: string;
-  status?: string;
-  updated?: string;
-  etag?: string;
-  summary?: string;
-  description?: string;
-  location?: string;
-  start?: {
-    date?: string;
-    dateTime?: string;
-    timeZone?: string;
-  };
-  end?: {
-    date?: string;
-    dateTime?: string;
-    timeZone?: string;
-  };
-  extendedProperties?: {
-    private?: Record<string, string>;
-  };
-}
-
-class GoogleSyncException extends Error {
-  status?: number;
-  code?: string;
-  context?: Record<string, unknown>;
-
-  constructor(message: string, status?: number, code?: string, context?: Record<string, unknown>) {
-    super(message);
-    this.name = 'GoogleSyncException';
-    this.status = status;
-    this.code = code;
-    this.context = context;
-  }
-}
 
 function getGoogleWebhookAddress(): string {
   const base =
@@ -139,16 +95,7 @@ function getGoogleWebhookAddress(): string {
   return url.toString();
 }
 
-function assertClientCredentials(): { clientId: string; clientSecret: string } {
-  const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID ?? process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? process.env.GOOGLE_CLIENT_SECRET;
-  if (!clientId || !clientSecret) {
-    throw new GoogleSyncException('Missing Google OAuth client credentials', 500, 'missing_credentials');
-  }
-  return { clientId, clientSecret };
-}
-
-export async function exchangeGoogleAuthorizationCode(
+export function exchangeGoogleAuthorizationCode(
   authorizationCode: string,
   codeVerifier: string,
   redirectUri: string
@@ -160,52 +107,10 @@ export async function exchangeGoogleAuthorizationCode(
   tokenType?: string;
   idToken?: string;
 }> {
-  const { clientId, clientSecret } = assertClientCredentials();
-
-  const params = new URLSearchParams({
-    client_id: clientId,
-    client_secret: clientSecret,
-    code: authorizationCode,
-    code_verifier: codeVerifier,
-    redirect_uri: redirectUri,
-    grant_type: 'authorization_code'
-  });
-
-  const response = await fetch(GOOGLE_TOKEN_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded'
-    },
-    body: params.toString()
-  });
-
-  const payload = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new GoogleSyncException(
-      `Failed to exchange authorization code: ${payload.error_description || response.statusText}`,
-      response.status,
-      payload.error
-    );
-  }
-
-  if (!payload.refresh_token) {
-    throw new GoogleSyncException('Google did not return a refresh token. Ensure access_type=offline and prompt=consent.', 400, 'missing_refresh_token');
-  }
-
-  const scope = typeof payload.scope === 'string' ? payload.scope.split(' ') : [];
-
-  return {
-    accessToken: payload.access_token as string,
-    refreshToken: payload.refresh_token as string,
-    scope,
-    expiresIn: typeof payload.expires_in === 'number' ? payload.expires_in : undefined,
-    tokenType: typeof payload.token_type === 'string' ? payload.token_type : undefined,
-    idToken: typeof payload.id_token === 'string' ? payload.id_token : undefined
-  };
+  return exchangeGoogleAuthorizationCodeInternal(authorizationCode, codeVerifier, redirectUri);
 }
 
-export async function exchangeGoogleAuthorizationCodeServer(
+export function exchangeGoogleAuthorizationCodeServer(
   authorizationCode: string,
   redirectUri: string
 ): Promise<{
@@ -216,48 +121,7 @@ export async function exchangeGoogleAuthorizationCodeServer(
   tokenType?: string;
   idToken?: string;
 }> {
-  const { clientId, clientSecret } = assertClientCredentials();
-
-  const params = new URLSearchParams({
-    client_id: clientId,
-    client_secret: clientSecret,
-    code: authorizationCode,
-    redirect_uri: redirectUri,
-    grant_type: 'authorization_code',
-    access_type: 'offline',
-  });
-
-  const response = await fetch(GOOGLE_TOKEN_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: params.toString(),
-  });
-
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new GoogleSyncException(
-      `Failed to exchange authorization code: ${payload.error_description || response.statusText}`,
-      response.status,
-      payload.error
-    );
-  }
-
-  if (!payload.refresh_token) {
-    throw new GoogleSyncException('Google did not return a refresh token. Ensure access_type=offline and prompt=consent.', 400, 'missing_refresh_token');
-  }
-
-  const scope = typeof payload.scope === 'string' ? payload.scope.split(' ') : [];
-
-  return {
-    accessToken: payload.access_token as string,
-    refreshToken: payload.refresh_token as string,
-    scope,
-    expiresIn: typeof payload.expires_in === 'number' ? payload.expires_in : undefined,
-    tokenType: typeof payload.token_type === 'string' ? payload.token_type : undefined,
-    idToken: typeof payload.id_token === 'string' ? payload.id_token : undefined,
-  };
+  return exchangeGoogleAuthorizationCodeServerInternal(authorizationCode, redirectUri);
 }
 
 function hashContent(parts: Array<string | number | null | undefined | Date>): string {
@@ -418,131 +282,14 @@ function buildBillEventPayload(bill: Bill): Record<string, unknown> {
   };
 }
 
-async function ensureValidAccessToken(userId: number): Promise<AuthenticatedCredential> {
-  const credential = await getGoogleCredential(userId);
-  if (!credential) {
-    throw new GoogleSyncException('Google Calendar is not connected for this user', 400, 'not_connected');
-  }
-
-  const expiresAt = credential.expiresAt ? new Date(credential.expiresAt) : null;
-  const needsRefresh = !expiresAt || expiresAt.getTime() - Date.now() < 60_000;
-
-  if (!needsRefresh) {
-    return { credential, accessToken: credential.accessToken };
-  }
-
-  const { clientId, clientSecret } = assertClientCredentials();
-  const params = new URLSearchParams({
-    client_id: clientId,
-    client_secret: clientSecret,
-    grant_type: 'refresh_token',
-    refresh_token: credential.refreshToken
-  });
-
-  const response = await fetch(GOOGLE_TOKEN_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded'
-    },
-    body: params.toString()
-  });
-
-  if (!response.ok) {
-    const errorPayload = await response.json().catch(() => ({}));
-    throw new GoogleSyncException(
-      `Failed to refresh Google access token: ${errorPayload.error_description || response.statusText}`,
-      response.status,
-      errorPayload.error
-    );
-  }
-
-  const refreshed = (await response.json()) as {
-    access_token: string;
-    expires_in?: number;
-    scope?: string;
-    token_type?: string;
-    id_token?: string;
-  };
-
-  const nextExpiresAt = refreshed.expires_in ? new Date(Date.now() + refreshed.expires_in * 1000) : credential.expiresAt;
-  const scope = refreshed.scope ? refreshed.scope.split(' ') : credential.scope;
-
-  const updated = await upsertGoogleCredential(credential.userId, {
-    accessToken: refreshed.access_token,
-    refreshToken: credential.refreshToken,
-    scope,
-    expiresAt: nextExpiresAt ?? null,
-    tokenType: refreshed.token_type ?? credential.tokenType ?? undefined,
-    idToken: refreshed.id_token ?? credential.idToken ?? undefined,
-    calendarId: credential.calendarId,
-    syncToken: credential.syncToken,
-    lastPulledAt: credential.lastPulledAt ?? null
-  });
-
-  return { credential: updated, accessToken: updated.accessToken };
-}
-
-async function googleJsonRequest(
+function googleJsonRequest(
   accessToken: string,
   url: string,
   init: RequestInit & { retry?: boolean } = {}
 ): Promise<any> {
-  const method = (init.method ?? 'GET').toUpperCase();
-  let safeUrl = url;
-  try {
-    const parsed = new URL(url);
-    parsed.searchParams.delete('access_token');
-    parsed.searchParams.delete('token');
-    parsed.searchParams.delete('syncToken');
-    safeUrl = `${parsed.origin}${parsed.pathname}${parsed.search ? `?${parsed.search}` : ''}`;
-  } catch {
-    // leave safeUrl as original when URL parsing fails
-  }
-
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-      ...(init.headers ?? {})
-    }
-  });
-
-  if (response.status === 204) {
-    if (VERBOSE_SYNC_LOGS) {
-      logInfo(`Google API request succeeded with no content`, { method, url: safeUrl, status: response.status });
-    }
-    return null;
-  }
-
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new GoogleSyncException(
-      `Google API request failed: ${payload.error?.message || response.statusText}`,
-      response.status,
-      payload.error?.status,
-      {
-        method,
-        url: safeUrl,
-        status: response.status,
-        payload
-      }
-    );
-  }
-
-  if (VERBOSE_SYNC_LOGS) {
-    logInfo(`Google API request succeeded`, {
-      method,
-      url: safeUrl,
-      status: response.status,
-      payloadSummary: Array.isArray(payload?.items)
-        ? { items: payload.items.length, nextSyncToken: payload.nextSyncToken ?? null }
-        : Object.keys(payload || {}).slice(0, 5)
-    });
-  }
-
-  return payload;
+  return googleJsonRequestInternal(accessToken, url, init, { verbose: VERBOSE_SYNC_LOGS });
 }
+
 
 function normalizeCalendarId(calendarId?: string | null): string {
   return calendarId && calendarId.trim().length > 0 ? calendarId : 'primary';
@@ -1330,7 +1077,7 @@ export async function syncUserWithGoogle(userId: number, options: GoogleSyncOpti
   }
 
   if (options.forceFull) {
-    await queueGoogleSyncForUser(userId, calendarId, { schedule: false });
+    await queueGoogleSyncForUser({ userId, calendarId, schedule: false, forceFull: true });
   }
 
   const hasQueuedSeed = credential.syncToken === 'local-seed';
@@ -1338,7 +1085,7 @@ export async function syncUserWithGoogle(userId: number, options: GoogleSyncOpti
   const needsInitialSeed = !hasRealSyncToken && !hasQueuedSeed;
 
   if (needsInitialSeed) {
-    await queueGoogleSyncForUser(userId, calendarId, { schedule: false });
+    await queueGoogleSyncForUser({ userId, calendarId, schedule: false, forceFull: true });
     await upsertGoogleCredential(userId, {
       accessToken,
       refreshToken: credential.refreshToken,

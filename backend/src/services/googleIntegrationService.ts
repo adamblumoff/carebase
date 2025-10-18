@@ -125,7 +125,11 @@ export async function handleGoogleCallback(params: {
     lastPulledAt: null
   });
 
-  await queueGoogleSyncForUser(user.id, credential.calendarId ?? null);
+  await queueGoogleSyncForUser({
+    userId: user.id,
+    calendarId: credential.calendarId ?? null,
+    forceFull: true
+  });
 
   return { redirect: 'carebase://integrations/google?status=success' };
 }
@@ -193,7 +197,11 @@ export async function connectGoogleIntegration(
     lastPulledAt: null
   });
 
-  await queueGoogleSyncForUser(user.id, calendarId);
+  await queueGoogleSyncForUser({
+    userId: user.id,
+    calendarId,
+    forceFull: true
+  });
  
   const summary = await syncUserWithGoogle(user.id, {
     forceFull: true,

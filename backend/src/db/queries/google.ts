@@ -865,39 +865,83 @@ export async function getGoogleIntegrationStatus(userId: number): Promise<Google
   };
 }
 
-export async function queueGoogleSyncForUser(
-  userId: number,
-  calendarId?: string | null,
-  options?: { schedule?: boolean }
-): Promise<void> {
+export interface QueueGoogleSyncRequest {
+  userId: number;
+  calendarId?: string | null;
+  itemIds?: number[];
+  schedule?: boolean;
+  forceFull?: boolean;
+}
+
+export async function queueGoogleSyncForUser(params: QueueGoogleSyncRequest): Promise<void> {
   await ensureGoogleIntegrationSchema();
-  await db.query(
-    `INSERT INTO google_sync_links (item_id, calendar_id, sync_status, created_at, updated_at)
-     SELECT i.id,
-            CASE WHEN $2::text IS NULL THEN NULL ELSE $2::text END,
-            'pending',
-            NOW(),
-            NOW()
-     FROM items i
-     JOIN recipients r ON i.recipient_id = r.id
-     LEFT JOIN appointments a ON a.item_id = i.id
-     LEFT JOIN bills b ON b.item_id = i.id
-     WHERE r.user_id = $1
-       AND (
-         (i.detected_type = 'appointment' AND a.id IS NOT NULL) OR
-         (i.detected_type = 'bill' AND b.id IS NOT NULL)
-       )
-     ON CONFLICT (item_id)
-     DO UPDATE SET
-       calendar_id = COALESCE(EXCLUDED.calendar_id, google_sync_links.calendar_id),
-       sync_status = 'pending',
-       last_error = NULL,
-       updated_at = NOW()`,
-    [userId, calendarId ?? null]
+  const calendarId = params.calendarId ?? null;
+  const shouldSchedule = params.schedule ?? true;
+  const rawItemIds = params.itemIds ?? [];
+  const uniqueItemIds = Array.from(
+    new Set(
+      rawItemIds
+        .map((value) => Number(value))
+        .filter((value) => Number.isFinite(value) && value > 0)
+    )
   );
 
-  if (options?.schedule ?? true) {
-    await scheduleGoogleSync(userId);
+  if (uniqueItemIds.length === 0 || params.forceFull) {
+    await db.query(
+      `INSERT INTO google_sync_links (item_id, calendar_id, sync_status, created_at, updated_at)
+       SELECT i.id,
+              CASE WHEN $2::text IS NULL THEN NULL ELSE $2::text END,
+              'pending',
+              NOW(),
+              NOW()
+       FROM items i
+       JOIN recipients r ON i.recipient_id = r.id
+       LEFT JOIN appointments a ON a.item_id = i.id
+       LEFT JOIN bills b ON b.item_id = i.id
+       WHERE r.user_id = $1
+         AND (
+           (i.detected_type = 'appointment' AND a.id IS NOT NULL) OR
+           (i.detected_type = 'bill' AND b.id IS NOT NULL)
+         )
+       ON CONFLICT (item_id)
+       DO UPDATE SET
+         calendar_id = COALESCE(EXCLUDED.calendar_id, google_sync_links.calendar_id),
+         sync_status = 'pending',
+         last_error = NULL,
+         updated_at = NOW()`,
+      [params.userId, calendarId]
+    );
+  } else {
+    const itemPlaceholders = uniqueItemIds.map((_, index) => `$${index + 3}`).join(', ');
+    await db.query(
+      `INSERT INTO google_sync_links (item_id, calendar_id, sync_status, created_at, updated_at)
+       SELECT i.id,
+              CASE WHEN $2::text IS NULL THEN NULL ELSE $2::text END,
+              'pending',
+              NOW(),
+              NOW()
+       FROM items i
+       JOIN recipients r ON i.recipient_id = r.id
+       LEFT JOIN appointments a ON a.item_id = i.id
+       LEFT JOIN bills b ON b.item_id = i.id
+       WHERE r.user_id = $1
+         AND i.id IN (${itemPlaceholders})
+         AND (
+           (i.detected_type = 'appointment' AND a.id IS NOT NULL) OR
+           (i.detected_type = 'bill' AND b.id IS NOT NULL)
+         )
+       ON CONFLICT (item_id)
+       DO UPDATE SET
+         calendar_id = COALESCE(EXCLUDED.calendar_id, google_sync_links.calendar_id),
+         sync_status = 'pending',
+         last_error = NULL,
+         updated_at = NOW()`,
+      [params.userId, calendarId, ...uniqueItemIds]
+    );
+  }
+
+  if (shouldSchedule) {
+    await scheduleGoogleSync(params.userId);
   }
 }
 

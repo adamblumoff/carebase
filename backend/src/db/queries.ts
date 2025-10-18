@@ -36,7 +36,12 @@ export {
   upsertGoogleCredential,
   upsertGoogleSyncLink
 } from './queries/google.js';
-export type { GoogleCredential, GoogleSyncLinkUpsertData, GoogleWatchChannel } from './queries/google.js';
+export type {
+  GoogleCredential,
+  GoogleSyncLinkUpsertData,
+  GoogleWatchChannel,
+  QueueGoogleSyncRequest
+} from './queries/google.js';
 
 export {
   acceptCollaboratorInvite,
