@@ -18,6 +18,7 @@ import {
   listCollaborators
 } from '../db/queries.js';
 import { NotFoundError } from '../utils/errors.js';
+import { formatDateTimeWithTimeZone, getDefaultTimeZone } from '../utils/timezone.js';
 
 function toCollaboratorPayload(collaborator: Collaborator): CollaboratorPayload {
   return {
@@ -35,16 +36,17 @@ function toCollaboratorPayload(collaborator: Collaborator): CollaboratorPayload 
 }
 
 function toAppointmentPayload(appointment: Appointment): AppointmentPayload {
+  const defaultTimeZone = getDefaultTimeZone();
+  const startDate =
+    appointment.startLocal instanceof Date ? appointment.startLocal : new Date(appointment.startLocal);
+  const endDate = appointment.endLocal instanceof Date ? appointment.endLocal : new Date(appointment.endLocal);
+  const startZoned = formatDateTimeWithTimeZone(startDate, defaultTimeZone);
+  const endZoned = formatDateTimeWithTimeZone(endDate, defaultTimeZone);
+
   return {
     ...appointment,
-    startLocal:
-      appointment.startLocal instanceof Date
-        ? appointment.startLocal.toISOString()
-        : new Date(appointment.startLocal).toISOString(),
-    endLocal:
-      appointment.endLocal instanceof Date
-        ? appointment.endLocal.toISOString()
-        : new Date(appointment.endLocal).toISOString(),
+    startLocal: `${startZoned.local}${startZoned.offset}`,
+    endLocal: `${endZoned.local}${endZoned.offset}`,
     createdAt:
       appointment.createdAt instanceof Date
         ? appointment.createdAt.toISOString()
