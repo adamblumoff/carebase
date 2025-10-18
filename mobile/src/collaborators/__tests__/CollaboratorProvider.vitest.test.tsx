@@ -164,4 +164,20 @@ beforeEach(() => {
       expect(after.collaborators).toHaveLength(2);
     });
   });
+
+  it('sets generic error message for unexpected failures', async () => {
+    const spy = vi.fn();
+    fetchCollaboratorsMock.mockRejectedValue({ response: { status: 500 } });
+
+    render(
+      <CollaboratorProvider>
+        <Consumer onValue={spy} />
+      </CollaboratorProvider>
+    );
+
+    await waitFor(() => {
+      const latest = spy.mock.calls[spy.mock.calls.length - 1][0];
+      expect(latest.error).toBe('Unable to load collaborators.');
+    });
+  });
 });

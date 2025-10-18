@@ -34,6 +34,16 @@ describe('api client interceptors', () => {
     expect(config.headers.Authorization).toBeUndefined();
   });
 
+  it('logs when token lookup fails', async () => {
+    mockedAsyncStorage.getItem.mockRejectedValue(new Error('storage failed'));
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await requestHandler({ headers: {} } as any);
+
+    expect(errorSpy).toHaveBeenCalledWith('[API] Failed to load access token:', expect.any(Error));
+    errorSpy.mockRestore();
+  });
+
   it('emits unauthorized event on 401 responses', async () => {
     const emitSpy = vi.spyOn(authEvents, 'emitUnauthorized');
 
@@ -48,5 +58,18 @@ describe('api client interceptors', () => {
 
     expect(mockedAsyncStorage.removeItem).toHaveBeenCalledWith('accessToken');
     expect(emitSpy).toHaveBeenCalled();
+  });
+
+  it('logs network errors without response payload', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(
+      responseErrorHandler({
+        message: 'Network down'
+      })
+    ).rejects.toMatchObject({ message: 'Network down' });
+
+    expect(errorSpy).toHaveBeenCalledWith('[API] Network error:', 'Network down');
+    errorSpy.mockRestore();
   });
 });
