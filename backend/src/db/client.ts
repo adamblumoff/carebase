@@ -1,48 +1,11 @@
 import pg from 'pg';
-import type { ConnectionOptions as TlsConnectionOptions } from 'tls';
+import { databaseSslConfig } from './sslConfig.js';
 
 const { Pool } = pg;
-
-type PgSslConfig = pg.ConnectionConfig['ssl'];
 
 function normalizeFlag(value: string | undefined): string {
   return value ? value.toLowerCase().trim() : '';
 }
-
-function resolveSslConfig(): PgSslConfig {
-  const mode = normalizeFlag(process.env.DATABASE_SSL);
-  const disable = ['disable', 'disabled', 'off', 'false', '0'].includes(mode);
-  if (disable) {
-    return false;
-  }
-
-  const enable =
-    ['require', 'required', 'verify-full', 'verify_ca', 'true', '1', 'on'].includes(mode) ||
-    (!mode && process.env.NODE_ENV === 'production');
-
-  if (!enable) {
-    return false;
-  }
-
-  const rejectUnauthorized = normalizeFlag(process.env.DATABASE_SSL_REJECT_UNAUTHORIZED) !== 'false';
-  const caRaw = process.env.DATABASE_SSL_CA ? process.env.DATABASE_SSL_CA.replace(/\\n/g, '\n') : undefined;
-
-  if (rejectUnauthorized && process.env.NODE_ENV === 'production' && !caRaw) {
-    throw new Error('DATABASE_SSL_CA must be provided when TLS verification is enabled in production');
-  }
-
-  const sslConfig: TlsConnectionOptions = {
-    rejectUnauthorized
-  };
-
-  if (caRaw) {
-    sslConfig.ca = caRaw;
-  }
-
-  return sslConfig;
-}
-
-export const databaseSslConfig = resolveSslConfig();
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,

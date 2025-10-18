@@ -14,7 +14,7 @@ This document tracks the security controls currently in place across the Carebas
   - Cookies are `httpOnly`, `sameSite=strict`, and marked `secure` in production.
 
 - **Database Transport Security**
-  - TLS enforced by default; `DATABASE_SSL_CA` provides Railway’s CA so we keep `rejectUnauthorized: true`.
+  - TLS enforced by default; provide the Railway CA via `DATABASE_SSL_CA` or `DATABASE_SSL_CA_BASE64` so we keep `rejectUnauthorized: true`.
   - SQL logging now opt-in (`DEBUG_SQL=true`) to reduce PII leakage in shared logs.
 
 - **Google OAuth Credential Protection**

@@ -19,7 +19,7 @@ import { registerRoutes } from './routes/registry.js';
 import { attachBearerUser } from './middleware/attachBearerUser.js';
 import { initRealtime } from './services/realtime.js';
 import { startGoogleSyncPolling } from './services/googleSync.js';
-import { databaseSslConfig } from './db/client.js';
+import { databaseSslConfig } from './db/sslConfig.js';
 
 const app = express();
 const server = createServer(app);
