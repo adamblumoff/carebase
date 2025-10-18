@@ -1,10 +1,11 @@
+import { createVisionClient } from '../config/googleVisionClient.js';
 import vision from '@google-cloud/vision';
 
 let visionClient: vision.ImageAnnotatorClient | null = null;
 
 try {
   // Only instantiate if credentials are present; this allows local dev without GCP config.
-  visionClient = new vision.ImageAnnotatorClient();
+  visionClient = createVisionClient();
 } catch (error) {
   visionClient = null;
   console.warn('[OCR] Google Vision client not initialized:', (error as Error).message);

@@ -6,6 +6,7 @@ This document tracks the security controls currently in place across the Carebas
 
 - **Mandatory Secrets & Config Guardrails**
   - Backend boot fails fast if any critical secret is missing (`SESSION_SECRET`, `MOBILE_AUTH_SECRET`, `GOOGLE_AUTH_STATE_SECRET`, `GOOGLE_CREDENTIALS_ENCRYPTION_KEY`, Google OAuth creds, `DATABASE_URL`).
+  - OCR service account keys now load from the `OCR_SERVICE_ACCOUNT_JSON` env secret (base64 or raw JSON), eliminating the need to ship credential files.
   - Deterministic test-only secrets prevent suites from polluting real values.
 
 - **Session Hardening**
