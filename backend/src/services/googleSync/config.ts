@@ -14,6 +14,7 @@ export interface GoogleSyncConfig {
   pollIntervalMs: number;
   enableInTest: boolean;
   enablePollingFallback: boolean;
+  defaultTimeZone: string;
 }
 
 export function getGoogleSyncConfig(): GoogleSyncConfig {
@@ -24,6 +25,10 @@ export function getGoogleSyncConfig(): GoogleSyncConfig {
   const defaultRetryMax = parseDuration(process.env.GOOGLE_SYNC_RETRY_MAX_MS, 300_000);
   const pollIntervalMs = parseDuration(process.env.GOOGLE_SYNC_POLL_INTERVAL_MS, 30 * 60 * 1000);
   const enablePollingFallback = process.env.GOOGLE_SYNC_ENABLE_POLLING_FALLBACK === 'true';
+  const defaultTimeZone =
+    process.env.GOOGLE_SYNC_DEFAULT_TIME_ZONE ??
+    process.env.DEFAULT_TIME_ZONE ??
+    'UTC';
 
   const testAdjustments = IS_TEST_ENV && !enableInTest
     ? {
@@ -40,7 +45,8 @@ export function getGoogleSyncConfig(): GoogleSyncConfig {
     retryMaxMs: testAdjustments?.retryMaxMs ?? defaultRetryMax,
     pollIntervalMs,
     enableInTest,
-    enablePollingFallback
+    enablePollingFallback,
+    defaultTimeZone
   };
 }
 

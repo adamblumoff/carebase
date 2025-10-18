@@ -45,7 +45,8 @@ const {
   retryMaxMs: MAX_RETRY_MS,
   pollIntervalMs: DEFAULT_POLL_INTERVAL_MS,
   enableInTest: ENABLE_SYNC_IN_TEST,
-  enablePollingFallback: ENABLE_POLLING_FALLBACK
+  enablePollingFallback: ENABLE_POLLING_FALLBACK,
+  defaultTimeZone: DEFAULT_TIME_ZONE
 } = getGoogleSyncConfig();
 
 const IS_TEST_ENV = isTestEnv();
@@ -288,8 +289,44 @@ export function calculateBillHash(bill: Bill): string {
   ]);
 }
 
-function ensureIsoDateTime(date: Date): string {
-  return new Date(date).toISOString();
+function formatDateTimeWithTimeZone(date: Date, timeZone: string): string {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+  const parts = formatter.formatToParts(date);
+  const getValue = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? '00';
+  const year = getValue('year');
+  const month = getValue('month');
+  const day = getValue('day');
+  const hour = getValue('hour');
+  const minute = getValue('minute');
+  const second = getValue('second');
+  return `${year}-${month}-${day}T${hour}:${minute}:${second}`;
+}
+
+function buildDateTimeForGoogle(date: Date, preferredTimeZone: string): { dateTime: string; timeZone: string } {
+  try {
+    return {
+      dateTime: formatDateTimeWithTimeZone(date, preferredTimeZone),
+      timeZone: preferredTimeZone
+    };
+  } catch (error) {
+    logWarn(
+      'Failed to format appointment time with preferred timezone; falling back to UTC',
+      error instanceof Error ? error.message : String(error)
+    );
+    return {
+      dateTime: formatDateTimeWithTimeZone(date, 'UTC'),
+      timeZone: 'UTC'
+    };
+  }
 }
 
 function formatDateOnly(date: Date): string {
@@ -328,15 +365,20 @@ function buildAppointmentEventPayload(appointment: Appointment): Record<string, 
     descriptionParts.push(appointment.prepNote);
   }
 
+  const startDateTime = buildDateTimeForGoogle(appointment.startLocal, DEFAULT_TIME_ZONE);
+  const endDateTime = buildDateTimeForGoogle(appointment.endLocal, DEFAULT_TIME_ZONE);
+
   return {
     summary: appointment.summary,
     description: descriptionParts.length > 0 ? descriptionParts.join('\n\n') : undefined,
     location: appointment.location ?? undefined,
     start: {
-      dateTime: ensureIsoDateTime(appointment.startLocal)
+      dateTime: startDateTime.dateTime,
+      timeZone: startDateTime.timeZone
     },
     end: {
-      dateTime: ensureIsoDateTime(appointment.endLocal)
+      dateTime: endDateTime.dateTime,
+      timeZone: endDateTime.timeZone
     },
     extendedProperties: {
       private: {
