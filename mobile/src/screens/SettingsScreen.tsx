@@ -2,7 +2,7 @@
  * Settings Screen
  * Streamlined account and app preferences UI
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ScrollView,
   View,
@@ -21,6 +21,7 @@ import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../ui/ToastProvider';
 import { useCollaborators } from '../collaborators/CollaboratorProvider';
 import { useGoogleCalendarIntegration } from '../hooks/useGoogleCalendarIntegration';
+import { formatLastSynced } from './settings/formatters';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
@@ -44,15 +45,6 @@ export default function SettingsScreen({ navigation }: Props) {
 
   const email = auth.user?.email;
   const forwardingAddress = auth.user?.forwardingAddress ?? 'Add your forwarding address';
-
-  const formatLastSynced = useCallback((date: Date | null) => {
-    if (!date) return 'Never synced';
-    try {
-      return date.toLocaleString();
-    } catch {
-      return 'Unknown';
-    }
-  }, []);
 
   const handleConnectGoogle = async () => {
     try {

@@ -18,6 +18,16 @@ export default defineConfig({
       deps: {
         inline: ['react-native', '@testing-library/react-native']
       }
+    },
+    coverage: {
+      reporter: ['text'],
+      exclude: ['App.tsx', 'index.ts', 'src/screens/**/*', 'src/ui/**/*'],
+      thresholds: {
+        statements: 60,
+        branches: 50,
+        functions: 60,
+        lines: 60
+      }
     }
   },
   define: {

@@ -13,7 +13,7 @@ npm run env:mobile:prod     # carebase.dev backend
 ## Tests
 ```bash
 npm test
-npm run test:coverage
+npm run test:coverage      # enforces 60%+ coverage on logic modules (React Native screens/UI excluded)
 ```
 
 ## Structure

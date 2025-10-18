@@ -9,7 +9,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
+    "test:coverage": "vitest run --coverage --coverage.reports=text && node -e \"const fs=require('fs');const p='coverage';if(fs.existsSync(p))fs.rmSync(p,{recursive:true,force:true});\"",
     "env:mobile:prod": "node ../scripts/swap-mobile-env.js prod",
     "env:mobile:dev": "node ../scripts/swap-mobile-env.js dev"
   },
