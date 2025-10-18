@@ -150,7 +150,7 @@ test('initial sync pushes pending appointments and stores next sync token', asyn
   assert.ok(remoteEvent, 'expected remote event to exist after push');
   const remoteStart = remoteEvent?.start as Record<string, unknown> | undefined;
   assert.equal(remoteStart?.timeZone, 'UTC');
-  assert.equal(remoteStart?.dateTime, '2025-10-20T16:00:00');
+  assert.equal(remoteStart?.dateTime, '2025-10-20T16:00:00+00:00');
 
   assert.equal(ctx.scheduleCalls.length, 0);
 });

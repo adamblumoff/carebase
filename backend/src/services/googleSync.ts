@@ -289,7 +289,7 @@ export function calculateBillHash(bill: Bill): string {
   ]);
 }
 
-function formatDateTimeWithTimeZone(date: Date, timeZone: string): string {
+function formatDateTimeWithTimeZone(date: Date, timeZone: string): { local: string; offset: string } {
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone,
     hour12: false,
@@ -298,7 +298,8 @@ function formatDateTimeWithTimeZone(date: Date, timeZone: string): string {
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-    second: '2-digit'
+    second: '2-digit',
+    timeZoneName: 'shortOffset'
   });
   const parts = formatter.formatToParts(date);
   const getValue = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? '00';
@@ -308,13 +309,19 @@ function formatDateTimeWithTimeZone(date: Date, timeZone: string): string {
   const hour = getValue('hour');
   const minute = getValue('minute');
   const second = getValue('second');
-  return `${year}-${month}-${day}T${hour}:${minute}:${second}`;
+  const offsetRaw = parts.find((part) => part.type === 'timeZoneName')?.value ?? 'GMT+00:00';
+  let offset = offsetRaw.replace(/^GMT/, '').replace(/^UTC/, '');
+  if (!offset || offset === 'Z') {
+    offset = '+00:00';
+  }
+  return { local: `${year}-${month}-${day}T${hour}:${minute}:${second}`, offset };
 }
 
 function buildDateTimeForGoogle(date: Date, preferredTimeZone: string): { dateTime: string; timeZone: string } {
   try {
+    const formatted = formatDateTimeWithTimeZone(date, preferredTimeZone);
     return {
-      dateTime: formatDateTimeWithTimeZone(date, preferredTimeZone),
+      dateTime: `${formatted.local}${formatted.offset}`,
       timeZone: preferredTimeZone
     };
   } catch (error) {
@@ -322,8 +329,9 @@ function buildDateTimeForGoogle(date: Date, preferredTimeZone: string): { dateTi
       'Failed to format appointment time with preferred timezone; falling back to UTC',
       error instanceof Error ? error.message : String(error)
     );
+    const fallback = formatDateTimeWithTimeZone(date, 'UTC');
     return {
-      dateTime: formatDateTimeWithTimeZone(date, 'UTC'),
+      dateTime: `${fallback.local}${fallback.offset}`,
       timeZone: 'UTC'
     };
   }
