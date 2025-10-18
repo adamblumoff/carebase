@@ -8,8 +8,13 @@ Monorepo for the Carebase healthcare coordination platform.
 - **Shared**: Cross-runtime types (`shared/`)
 - **Contracts**: API contract tests (`tests/`)
 
+## Prerequisites
+- Node.js **>= 20.19.4** (Expo 54 / React Native 0.81 enforce this engine; Node 18 will continue to emit warnings and can break bundler/Metro tooling)
+- npm 9+
+
 ## Quick Start
 ```bash
+nvm use   # respects .nvmrc (installs 20.19.4 if needed)
 npm install
 npm run dev:backend          # start API against local env
 npm run env:mobile:dev       # point Expo at ngrok backend

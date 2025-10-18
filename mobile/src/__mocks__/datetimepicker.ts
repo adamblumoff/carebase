@@ -1,5 +1,7 @@
+import { vi } from 'vitest';
+
 export const DateTimePickerAndroid = {
-  open: jest.fn(),
+  open: vi.fn(),
 };
 
 const DateTimePicker = () => null;

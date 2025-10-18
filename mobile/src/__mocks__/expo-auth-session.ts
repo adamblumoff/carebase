@@ -1,17 +1,17 @@
-import { jest } from '@jest/globals';
+import { vi } from 'vitest';
 
 export const ResponseType = {
   Code: 'code',
 } as const;
 
-export const useAutoDiscovery = jest.fn(() => ({
+export const useAutoDiscovery = vi.fn(() => ({
   authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
   tokenEndpoint: 'https://oauth2.googleapis.com/token',
 }));
 
-const promptAsyncMock = jest.fn(async () => ({ type: 'dismiss', params: {} }));
+const promptAsyncMock = vi.fn(async () => ({ type: 'dismiss', params: {} }));
 
-export const useAuthRequest = jest.fn(() => [
+export const useAuthRequest = vi.fn(() => [
   {
     codeVerifier: 'test-code-verifier',
     redirectUri: 'carebase://redirect',
@@ -20,6 +20,6 @@ export const useAuthRequest = jest.fn(() => [
   promptAsyncMock,
 ]);
 
-export const makeRedirectUri = jest.fn(() => 'carebase://redirect');
+export const makeRedirectUri = vi.fn(() => 'carebase://redirect');
 
 export { promptAsyncMock };
