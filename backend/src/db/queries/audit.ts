@@ -36,7 +36,11 @@ export async function getLowConfidenceItems(limit: number = 50): Promise<LowConf
 
 export async function reclassifyItem(itemId: number, newType: ItemType): Promise<boolean> {
   await db.query(
-    'UPDATE items SET detected_type = $1, confidence = 1.0 WHERE id = $2',
+    `UPDATE items
+       SET detected_type = $1,
+           confidence = 1.0,
+           review_status = 'auto'
+     WHERE id = $2`,
     [newType, itemId]
   );
   await db.query('DELETE FROM appointments WHERE item_id = $1', [itemId]);

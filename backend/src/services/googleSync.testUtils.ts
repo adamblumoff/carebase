@@ -244,6 +244,7 @@ const GOOGLE_SYNC_TEST_SCHEMA = `
     source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
     detected_type TEXT NOT NULL,
     confidence NUMERIC,
+    review_status TEXT NOT NULL DEFAULT 'auto',
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
   );
 

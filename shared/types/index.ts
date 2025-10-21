@@ -44,6 +44,7 @@ export interface Source {
 // ========== ITEMS ==========
 
 export type ItemType = 'appointment' | 'bill' | 'noise';
+export type ItemReviewStatus = 'auto' | 'pending_review';
 
 export interface Item {
   id: number;
@@ -51,6 +52,7 @@ export interface Item {
   sourceId: number;
   detectedType: ItemType;
   confidence: number; // 0.0 to 1.0
+  reviewStatus: ItemReviewStatus;
   createdAt: Date;
 }
 

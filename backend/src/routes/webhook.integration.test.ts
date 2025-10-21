@@ -53,6 +53,7 @@ test('inbound email webhook creates bill, bumps plan version, and emits realtime
       source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
       detected_type TEXT NOT NULL,
       confidence NUMERIC NOT NULL,
+      review_status TEXT NOT NULL DEFAULT 'auto',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 

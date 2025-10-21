@@ -53,6 +53,37 @@ test('Parser: classifies noise correctly', () => {
   assert.strictEqual(result.type, 'noise');
 });
 
+test('Parser: does not misclassify parking fine OCR as bill', () => {
+  const parkingFineText = `
+    PARKING NOTICE
+    TO $300 FINE
+    VEHICLE: 7-6887LE
+    LOCATION: WEBER ST
+    YEARS OF ENFORCEMENT
+    THIS IS NOT A BILL
+  `;
+
+  const result = classifyText(parkingFineText);
+
+  assert.strictEqual(result.type, 'noise');
+  assert.ok(result.confidence < 0.4);
+});
+
+test('Parser: still classifies concise bills when structural signals present', () => {
+  const conciseBill = `
+    STATEMENT
+    Amount Due $75.00
+    Pay by 11/05/2025
+    Account Number 12345
+    Pay online at https://example.org/pay
+  `;
+
+  const result = classifyText(conciseBill);
+
+  assert.strictEqual(result.type, 'bill');
+  assert.ok(result.confidence >= 0.5);
+});
+
 // Test appointment extraction
 test('Parser: extracts appointment data correctly', () => {
   const text = `

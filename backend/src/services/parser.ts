@@ -13,10 +13,23 @@ const APPOINTMENT_KEYWORDS = [
 ];
 
 const BILL_KEYWORDS = [
-  'bill', 'invoice', 'payment', 'amount due', 'balance',
-  'statement', 'charge', 'fee', 'pay by', 'due date',
-  'account summary', 'billing'
+  'bill',
+  'invoice',
+  'payment',
+  'amount due',
+  'balance',
+  'statement',
+  'charge',
+  'fee',
+  'pay by',
+  'due date',
+  'account summary',
+  'billing',
+  'past due',
+  'account number'
 ];
+
+const MIN_BILL_TOKEN_COUNT = 10;
 
 const TIME_PATTERNS = [
   /\b\d{1,2}:\d{2}\s*(?:am|pm|AM|PM)\b/g,
@@ -262,15 +275,38 @@ interface ClassificationResult {
  */
 export function classifyText(text: string): ClassificationResult {
   const lowerText = text.toLowerCase();
+  const tokens = lowerText.match(/[a-z0-9]+/g) ?? [];
+  const tokenCount = tokens.length;
 
   // Count keyword matches
-  const appointmentMatches = APPOINTMENT_KEYWORDS.filter(kw => lowerText.includes(kw)).length;
-  const billMatches = BILL_KEYWORDS.filter(kw => lowerText.includes(kw)).length;
+  const appointmentMatches = new Set(APPOINTMENT_KEYWORDS.filter((kw) => lowerText.includes(kw))).size;
+  const billKeywordHits = BILL_KEYWORDS.filter((kw) => lowerText.includes(kw));
+  const billMatches = new Set(billKeywordHits).size;
 
   // Check for patterns
-  const hasTime = TIME_PATTERNS.some(pattern => pattern.test(text));
-  const hasDate = DATE_PATTERNS.some(pattern => pattern.test(text));
-  const hasMoney = MONEY_PATTERNS.some(pattern => pattern.test(text));
+  const hasTime = TIME_PATTERNS.some((pattern) => {
+    if (pattern.global) pattern.lastIndex = 0;
+    const result = pattern.test(text);
+    if (pattern.global) pattern.lastIndex = 0;
+    return result;
+  });
+  const hasDate = DATE_PATTERNS.some((pattern) => {
+    if (pattern.global) pattern.lastIndex = 0;
+    const result = pattern.test(text);
+    if (pattern.global) pattern.lastIndex = 0;
+    return result;
+  });
+  const hasMoney = MONEY_PATTERNS.some((pattern) => {
+    if (pattern.global) pattern.lastIndex = 0;
+    const result = pattern.test(text);
+    if (pattern.global) pattern.lastIndex = 0;
+    return result;
+  });
+  const hasPayUrl = /https:\/\/[^\s"'<>]+/i.test(text);
+  const hasDueIndicator = /\b(past due|due date|pay by|payment due|due on)\b/i.test(text);
+  const hasStatementIndicator = /\b(statement|account number|account summary|invoice|billing)\b/i.test(lowerText);
+  const billKeywordRich = billMatches >= 2;
+  const billStructuralSignal = hasDueIndicator || hasPayUrl || hasStatementIndicator;
 
   // Scoring logic
   let appointmentScore = appointmentMatches * 0.3;
@@ -281,6 +317,15 @@ export function classifyText(text: string): ClassificationResult {
 
   if (hasMoney && hasDate) billScore += 0.4;
   else if (hasMoney) billScore += 0.2;
+
+  const meetsBillThreshold =
+    tokenCount >= MIN_BILL_TOKEN_COUNT &&
+    hasMoney &&
+    (billKeywordRich || (billMatches >= 1 && billStructuralSignal));
+
+  if (!meetsBillThreshold) {
+    billScore = 0;
+  }
 
   // Determine type and confidence
   if (appointmentScore > billScore && appointmentScore > 0.4) {

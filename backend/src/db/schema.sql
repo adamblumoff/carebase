@@ -44,8 +44,13 @@ CREATE TABLE IF NOT EXISTS items (
   source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
   detected_type VARCHAR(20) NOT NULL CHECK (detected_type IN ('appointment', 'bill', 'noise')),
   confidence DECIMAL(3, 2) NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+  review_status VARCHAR(20) NOT NULL DEFAULT 'auto' CHECK (review_status IN ('auto', 'pending_review')),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE items
+  ADD COLUMN IF NOT EXISTS review_status VARCHAR(20) NOT NULL DEFAULT 'auto'
+    CHECK (review_status IN ('auto', 'pending_review'));
 
 -- Care collaborators table
 CREATE TABLE IF NOT EXISTS care_collaborators (

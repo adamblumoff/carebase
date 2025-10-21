@@ -9,7 +9,7 @@ import {
 import { extractTextFromImage, getShortExcerpt } from '../../services/ocr.js';
 import { storeFile, storeText } from '../../services/storage.js';
 import { parseSource } from '../../services/parser.js';
-import type { User, UploadPhotoResponse } from '@carebase/shared';
+import type { User, UploadPhotoResponse, ItemReviewStatus } from '@carebase/shared';
 
 export async function uploadPhoto(req: Request, res: Response): Promise<void> {
   try {
@@ -73,11 +73,30 @@ export async function uploadPhoto(req: Request, res: Response): Promise<void> {
     });
     console.log('[upload] OCR stored key:', ocrTextStorageKey, 'length:', ocrText.length);
 
-    const item = await createItem(recipient.id, source.id, classification.type, classification.confidence);
+    const billHasAmount = typeof billData?.amount === 'number';
+    const billHasSupportField = Boolean(billData?.dueDate || billData?.statementDate || billData?.payUrl);
+    const canAutoCreateBill = classification.type === 'bill' && billData && billHasAmount && billHasSupportField;
+    const reviewStatus: ItemReviewStatus =
+      classification.type === 'bill' && !canAutoCreateBill ? 'pending_review' : 'auto';
+
+    const item = await createItem(
+      recipient.id,
+      source.id,
+      classification.type,
+      classification.confidence,
+      reviewStatus
+    );
 
     let createdBill = null;
-    if (classification.type === 'bill' && billData) {
+    if (canAutoCreateBill && billData) {
       createdBill = await createBill(item.id, billData);
+    } else if (classification.type === 'bill') {
+      console.log('[upload] Skipping bill creation due to missing supporting fields', {
+        billHasAmount,
+        hasDueDate: Boolean(billData?.dueDate),
+        hasStatementDate: Boolean(billData?.statementDate),
+        hasPayUrl: Boolean(billData?.payUrl)
+      });
     }
 
     await createAuditLog(item.id, 'auto_classified', {
@@ -90,6 +109,8 @@ export async function uploadPhoto(req: Request, res: Response): Promise<void> {
       ocrSnippet: ocrText.substring(0, 2000),
       ocrStorageKey: ocrTextStorageKey,
       ocrLength: ocrText.length,
+      billAutoCreated: canAutoCreateBill,
+      reviewStatus
     });
 
     console.log(

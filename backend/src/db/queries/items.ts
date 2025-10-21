@@ -1,4 +1,4 @@
-import type { Item, ItemType } from '@carebase/shared';
+import type { Item, ItemType, ItemReviewStatus } from '@carebase/shared';
 import { db } from './shared.js';
 
 interface ItemRow {
@@ -7,6 +7,7 @@ interface ItemRow {
   source_id: number;
   detected_type: ItemType;
   confidence: number;
+  review_status: ItemReviewStatus;
   created_at: Date;
 }
 
@@ -17,15 +18,22 @@ export function itemRowToItem(row: ItemRow): Item {
     sourceId: row.source_id,
     detectedType: row.detected_type,
     confidence: row.confidence,
+    reviewStatus: row.review_status,
     createdAt: row.created_at
   };
 }
 
-export async function createItem(recipientId: number, sourceId: number, detectedType: ItemType, confidence: number): Promise<Item> {
+export async function createItem(
+  recipientId: number,
+  sourceId: number,
+  detectedType: ItemType,
+  confidence: number,
+  reviewStatus: ItemReviewStatus = 'auto'
+): Promise<Item> {
   const result = await db.query(
-    `INSERT INTO items (recipient_id, source_id, detected_type, confidence)
-     VALUES ($1, $2, $3, $4) RETURNING *`,
-    [recipientId, sourceId, detectedType, confidence]
+    `INSERT INTO items (recipient_id, source_id, detected_type, confidence, review_status)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [recipientId, sourceId, detectedType, confidence, reviewStatus]
   );
   return itemRowToItem(result.rows[0] as ItemRow);
 }

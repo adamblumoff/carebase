@@ -2,10 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import request from 'supertest';
-import { newDb } from 'pg-mem';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import path from 'node:path';
+import { applySchema, wireDbClient } from './helpers/db.js';
 
 process.env.GOOGLE_SYNC_ENABLE_TEST = 'true';
 process.env.NODE_ENV = 'test';
@@ -25,58 +22,6 @@ __setGoogleSyncSchedulerForTests(() => {});
 interface TestUsers {
   owner: User;
   collaborator: User;
-}
-
-function createMemDatabase() {
-  const mem = newDb({ autoCreateForeignKeyIndices: true, noAstCoverageCheck: true });
-  mem.public.registerFunction({
-    name: 'now',
-    returns: 'timestamp',
-    implementation: () => new Date()
-  });
-  return mem;
-}
-
-function applySchema(mem = createMemDatabase()) {
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = path.dirname(__filename);
-  const schemaPath = path.resolve(__dirname, '../../backend/src/db/schema.sql');
-  const schemaSql = readFileSync(schemaPath, 'utf8');
-  mem.public.none(schemaSql);
-  return mem;
-}
-
-function wireDbClient(mem: ReturnType<typeof createMemDatabase>) {
-  const adapter = mem.adapters.createPg();
-  const { Pool } = adapter;
-  const pool = new Pool();
-  const dbAny = dbClient as unknown as {
-    query: (text: string, params?: any[]) => Promise<any>;
-    getClient: () => Promise<any>;
-    end: () => Promise<void>;
-    pool: any;
-  };
-  const original = {
-    query: dbAny.query,
-    getClient: dbAny.getClient,
-    end: dbAny.end,
-    pool: dbAny.pool
-  };
-
-  dbAny.query = (text: string, params?: any[]) => pool.query(text, params);
-  dbAny.getClient = () => pool.connect();
-  dbAny.end = () => pool.end();
-  dbAny.pool = pool;
-
-  return {
-    pool,
-    restore() {
-      dbAny.query = original.query;
-      dbAny.getClient = original.getClient;
-      dbAny.end = original.end;
-      dbAny.pool = original.pool;
-    }
-  };
 }
 
 async function seedPlanFixture(pool: any): Promise<TestUsers> {

@@ -75,7 +75,7 @@ export default function CameraScreen({ navigation }: Props) {
 
       const response = await uploadBillPhoto({ uri: imageUri, fileName: filename, contentType: type });
 
-      const { classification, extracted, overdue } = response;
+      const { classification, extracted, overdue, item } = response;
       emitPlanChanged();
       const details: string[] = [];
       if (extracted?.amount) {
@@ -90,13 +90,19 @@ export default function CameraScreen({ navigation }: Props) {
 
       const detectedType =
         classification?.detectedType ??
-        response.item?.detectedType ??
+        item?.detectedType ??
         'document';
-      const message = details.length > 0
-        ? `Captured a ${detectedType} document.\n${details.join('\n')}`
-        : `Captured a ${detectedType} document.`;
+      const reviewStatus = item?.reviewStatus ?? 'auto';
+      const isPendingReview = reviewStatus === 'pending_review';
+      const message = isPendingReview
+        ? (details.length > 0
+            ? `We saved this ${detectedType}, but a quick manual review is needed before it becomes a bill.\n${details.join('\n')}`
+            : `We saved this ${detectedType}, but a quick manual review is needed before it becomes a bill.`)
+        : (details.length > 0
+            ? `Captured a ${detectedType} document.\n${details.join('\n')}`
+            : `Captured a ${detectedType} document.`);
 
-      Alert.alert('Uploaded', message, [{ text: 'View plan', onPress: () => {
+      Alert.alert(isPendingReview ? 'Needs review' : 'Uploaded', message, [{ text: 'View plan', onPress: () => {
         emitPlanChanged();
         navigation.goBack();
       } }]);
