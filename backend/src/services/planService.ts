@@ -1,13 +1,4 @@
-import type {
-  PlanPayload,
-  User,
-  Appointment,
-  AppointmentPayload,
-  Bill,
-  BillPayload,
-  Collaborator,
-  CollaboratorPayload
-} from '@carebase/shared';
+import type { PlanPayload, User } from '@carebase/shared';
 import {
   findRecipientsByUserId,
   findRecipientForCollaborator,
@@ -18,61 +9,7 @@ import {
   listCollaborators
 } from '../db/queries.js';
 import { NotFoundError } from '../utils/errors.js';
-import { formatDateTimeWithTimeZone, getDefaultTimeZone } from '../utils/timezone.js';
-
-function toCollaboratorPayload(collaborator: Collaborator): CollaboratorPayload {
-  return {
-    ...collaborator,
-    invitedAt:
-      collaborator.invitedAt instanceof Date
-        ? collaborator.invitedAt.toISOString()
-        : new Date(collaborator.invitedAt).toISOString(),
-    acceptedAt: collaborator.acceptedAt
-      ? collaborator.acceptedAt instanceof Date
-        ? collaborator.acceptedAt.toISOString()
-        : new Date(collaborator.acceptedAt).toISOString()
-      : null
-  };
-}
-
-function toAppointmentPayload(appointment: Appointment): AppointmentPayload {
-  const defaultTimeZone = getDefaultTimeZone();
-  const startDate =
-    appointment.startLocal instanceof Date ? appointment.startLocal : new Date(appointment.startLocal);
-  const endDate = appointment.endLocal instanceof Date ? appointment.endLocal : new Date(appointment.endLocal);
-  const startZoned = formatDateTimeWithTimeZone(startDate, defaultTimeZone);
-  const endZoned = formatDateTimeWithTimeZone(endDate, defaultTimeZone);
-
-  return {
-    ...appointment,
-    startLocal: `${startZoned.local}${startZoned.offset}`,
-    endLocal: `${endZoned.local}${endZoned.offset}`,
-    createdAt:
-      appointment.createdAt instanceof Date
-        ? appointment.createdAt.toISOString()
-        : new Date(appointment.createdAt).toISOString()
-  };
-}
-
-function toBillPayload(bill: Bill): BillPayload {
-  return {
-    ...bill,
-    statementDate: bill.statementDate
-      ? bill.statementDate instanceof Date
-        ? bill.statementDate.toISOString()
-        : new Date(bill.statementDate).toISOString()
-      : null,
-    dueDate: bill.dueDate
-      ? bill.dueDate instanceof Date
-        ? bill.dueDate.toISOString()
-        : new Date(bill.dueDate).toISOString()
-      : null,
-    createdAt:
-      bill.createdAt instanceof Date
-        ? bill.createdAt.toISOString()
-        : new Date(bill.createdAt).toISOString()
-  };
-}
+import { toAppointmentPayload, toBillPayload, toCollaboratorPayload } from '../utils/planPayload.js';
 
 export async function buildPlanPayload(user: User, days: number = 7): Promise<PlanPayload> {
   const recipients = await findRecipientsByUserId(user.id);

@@ -11,7 +11,8 @@ const googleSync = await import('../services/googleSync.js');
 const {
   scheduleGoogleSyncForUser,
   __setGoogleSyncRunnerForTests,
-  __resetGoogleSyncStateForTests
+  __resetGoogleSyncStateForTests,
+  __setGoogleSyncLockBehaviorForTests
 } = googleSync;
 
 const queries = await import('../db/queries.js');
@@ -39,21 +40,74 @@ function createSummary(): GoogleSyncSummary {
   return { pushed: 0, pulled: 0, deleted: 0, errors: [], calendarId: 'primary' };
 }
 
-test('scheduleGoogleSyncForUser triggers sync runner once per enqueue', async () => {
-  __resetGoogleSyncStateForTests();
-  let called = 0;
-  __setGoogleSyncRunnerForTests(async (userId) => {
-    called += 1;
-    assert.equal(userId, 77);
-    return createSummary();
+await test('google sync scheduler coordination', async (t) => {
+  await t.test('triggers once per enqueue', async () => {
+    __resetGoogleSyncStateForTests();
+    __setGoogleSyncLockBehaviorForTests({ disableLocks: true });
+    let called = 0;
+    __setGoogleSyncRunnerForTests(async (userId) => {
+      called += 1;
+      assert.equal(userId, 77);
+      return createSummary();
+    });
+
+    scheduleGoogleSyncForUser(77, 0);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(called, 1);
+    __setGoogleSyncRunnerForTests();
+    __resetGoogleSyncStateForTests();
   });
 
-  scheduleGoogleSyncForUser(77, 0);
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await t.test('retries when advisory lock is busy', async () => {
+    __resetGoogleSyncStateForTests();
+    let runnerCalls = 0;
+    let attempt = 0;
 
-  assert.equal(called, 1);
-  __setGoogleSyncRunnerForTests();
-  __resetGoogleSyncStateForTests();
+    __setGoogleSyncLockBehaviorForTests({
+      acquireHook: async () => {
+        attempt += 1;
+        if (attempt === 1) {
+          setTimeout(() => scheduleGoogleSyncForUser(555, 0), 0);
+          return false;
+        }
+        return true;
+      }
+    });
+
+    __setGoogleSyncRunnerForTests(async (userId) => {
+      runnerCalls += 1;
+      assert.equal(userId, 555);
+      return createSummary();
+    });
+
+    scheduleGoogleSyncForUser(555, 0);
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.ok(runnerCalls >= 1);
+
+    __setGoogleSyncRunnerForTests();
+    __resetGoogleSyncStateForTests();
+  });
+
+  await t.test('skips advisory lock when disabled', async () => {
+    __resetGoogleSyncStateForTests();
+    __setGoogleSyncLockBehaviorForTests({ disableLocks: true });
+    let called = 0;
+    __setGoogleSyncRunnerForTests(async (userId) => {
+      called += 1;
+      assert.equal(userId, 88);
+      return createSummary();
+    });
+
+    scheduleGoogleSyncForUser(88, 0);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(called, 1);
+
+    __setGoogleSyncRunnerForTests();
+    __resetGoogleSyncStateForTests();
+  });
 });
 
 test('touchPlanForUser schedules a Google sync job', async () => {

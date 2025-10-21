@@ -51,7 +51,7 @@ export async function query(text: string, params?: any[]): Promise<pg.QueryResul
  * @returns Pool client
  */
 export async function getClient(): Promise<pg.PoolClient> {
-  const client = await pool.getClient();
+  const client = await pool.connect();
   const originalQuery = client.query;
   const originalRelease = client.release;
 

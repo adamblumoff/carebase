@@ -29,11 +29,10 @@ function AppContent() {
   const auth = useAuth();
   const { handleIncomingUrl } = usePendingInviteAcceptance();
 
-  const navigation = useMemo(() => {
+  const navigator = useMemo(() => {
     if (auth.status === 'loading') {
       return <SplashScreen />;
     }
-
     return <AppNavigator isSignedIn={auth.status === 'signedIn'} />;
   }, [auth.status]);
 
@@ -57,7 +56,7 @@ function AppContent() {
 
   return (
     <>
-      {navigation}
+      {auth.status === 'signedIn' ? <PlanProvider>{navigator}</PlanProvider> : navigator}
       <StatusBar style={statusBarStyle} />
     </>
   );
@@ -66,13 +65,11 @@ function AppContent() {
 function AppBootstrap() {
   return (
     <AuthProvider>
-      <PlanProvider>
-        <CollaboratorProvider>
-          <ToastProvider>
-            <AppContent />
-          </ToastProvider>
-        </CollaboratorProvider>
-      </PlanProvider>
+      <CollaboratorProvider>
+        <ToastProvider>
+          <AppContent />
+        </ToastProvider>
+      </CollaboratorProvider>
     </AuthProvider>
   );
 }
