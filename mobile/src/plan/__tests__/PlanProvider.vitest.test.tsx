@@ -2,8 +2,9 @@ import React from 'react';
 import { render, waitFor, act } from '@testing-library/react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { PlanPayload } from '@carebase/shared';
-import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { PlanProvider, usePlan } from '../PlanProvider';
+import { AuthContext } from '../../auth/AuthContext';
 
 type Listener = () => void;
 
@@ -12,6 +13,14 @@ const fetchPlanVersionMock = vi.fn<[], Promise<number>>();
 const addPlanChangeListenerMock = vi.fn<(listener: Listener) => () => void>();
 const ensureRealtimeConnectedMock = vi.fn<[], Promise<void>>();
 const isRealtimeConnectedMock = vi.fn<[], boolean>();
+
+vi.mock('expo-secure-store', () => ({
+  isAvailableAsync: vi.fn().mockResolvedValue(false),
+  getItemAsync: vi.fn(),
+  setItemAsync: vi.fn(),
+  deleteItemAsync: vi.fn(),
+  WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'when-unlocked-this-device-only',
+}));
 
 vi.mock('../../api/plan', () => ({
   fetchPlan: () => fetchPlanMock(),
@@ -46,7 +55,9 @@ function createPlan(overrides: Partial<PlanPayload> = {}): PlanPayload {
   };
 }
 
-function renderProvider() {
+type AuthStatus = 'loading' | 'signedOut' | 'signedIn';
+
+function renderProvider(initialStatus: AuthStatus = 'signedIn') {
   const latestValue: { current: ReturnType<typeof usePlan> | null } = { current: null };
 
   function Capture() {
@@ -55,13 +66,32 @@ function renderProvider() {
     return null;
   }
 
-  render(
-    <PlanProvider>
-      <Capture />
-    </PlanProvider>
-  );
+  function Wrapper({ status }: { status: AuthStatus }) {
+    const authValue = React.useMemo(
+      () => ({
+        status,
+        user: null,
+        signIn: () => {},
+        signOut: async () => {},
+      }),
+      [status]
+    );
 
-  return latestValue;
+    return (
+      <AuthContext.Provider value={authValue}>
+        <PlanProvider>
+          <Capture />
+        </PlanProvider>
+      </AuthContext.Provider>
+    );
+  }
+
+  const utils = render(<Wrapper status={initialStatus} />);
+
+  return {
+    latestValue,
+    setStatus: (nextStatus: AuthStatus) => utils.rerender(<Wrapper status={nextStatus} />),
+  };
 }
 
 describe('PlanProvider', () => {
@@ -101,22 +131,22 @@ describe('PlanProvider', () => {
 
     fetchPlanMock.mockResolvedValue(plan);
 
-    const latest = renderProvider();
+    const { latestValue } = renderProvider();
 
     await act(async () => {
-      const result = await latest.current?.refresh({ source: 'manual' });
+      const result = await latestValue.current?.refresh({ source: 'manual' });
       expect(result?.success).toBe(true);
     });
 
     await waitFor(() => {
-      expect(latest.current?.plan?.collaborators).toEqual([]);
+      expect(latestValue.current?.plan?.collaborators).toEqual([]);
     });
 
     expect(fetchPlanMock).toHaveBeenCalledTimes(1);
-    expect(latest.current?.latestVersion).toBe(5);
-    expect(latest.current?.error).toBeNull();
-    expect(latest.current?.plan?.appointments).toEqual([]);
-    expect(latest.current?.plan?.bills).toEqual([]);
+    expect(latestValue.current?.latestVersion).toBe(5);
+    expect(latestValue.current?.error).toBeNull();
+    expect(latestValue.current?.plan?.appointments).toEqual([]);
+    expect(latestValue.current?.plan?.bills).toEqual([]);
     expect(AsyncStorage.setItem).toHaveBeenCalledWith(
       'plan_cache_v1',
       expect.stringContaining('"planVersion":5')
@@ -126,15 +156,15 @@ describe('PlanProvider', () => {
   it('records an error when all plan refresh attempts fail', async () => {
     fetchPlanMock.mockRejectedValue(new Error('network down'));
 
-    const latest = renderProvider();
+    const { latestValue } = renderProvider();
 
     await act(async () => {
-      const result = await latest.current?.refresh({ source: 'manual' });
+      const result = await latestValue.current?.refresh({ source: 'manual' });
       expect(result?.success).toBe(false);
     });
 
     await waitFor(() => {
-      expect(latest.current?.error).toContain('We couldn’t refresh your plan');
+      expect(latestValue.current?.error).toContain('We couldn’t refresh your plan');
     });
 
     expect(fetchPlanMock).toHaveBeenCalledTimes(3);
@@ -148,13 +178,13 @@ describe('PlanProvider', () => {
     fetchPlanMock.mockResolvedValueOnce(updatedPlan);
     fetchPlanVersionMock.mockResolvedValueOnce(2);
 
-    const latest = renderProvider();
+    const { latestValue } = renderProvider();
 
     await act(async () => {
-      await latest.current?.refresh({ source: 'manual' });
+      await latestValue.current?.refresh({ source: 'manual' });
     });
 
-    expect(latest.current?.latestVersion).toBe(1);
+    expect(latestValue.current?.latestVersion).toBe(1);
 
     listeners.forEach((listener) => listener());
 
@@ -163,9 +193,34 @@ describe('PlanProvider', () => {
     });
 
     await waitFor(() => {
-      expect(latest.current?.latestVersion).toBe(2);
+      expect(latestValue.current?.latestVersion).toBe(2);
     });
 
     expect(fetchPlanMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('skips plan fetches while the user is signed out', async () => {
+    const { latestValue, setStatus } = renderProvider('signedOut');
+
+    await act(async () => {
+      const result = await latestValue.current?.refresh({ source: 'manual' });
+      expect(result?.success).toBe(false);
+    });
+
+    expect(fetchPlanMock).not.toHaveBeenCalled();
+    expect(fetchPlanVersionMock).not.toHaveBeenCalled();
+
+    fetchPlanMock.mockResolvedValue(createPlan({ planVersion: 3 }));
+
+    await act(async () => {
+      setStatus('signedIn');
+    });
+
+    await act(async () => {
+      const result = await latestValue.current?.refresh({ source: 'manual' });
+      expect(result?.success).toBe(true);
+    });
+
+    expect(fetchPlanMock).toHaveBeenCalledTimes(1);
   });
 });

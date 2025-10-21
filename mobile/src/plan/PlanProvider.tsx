@@ -12,6 +12,7 @@ import type { PlanPayload } from '@carebase/shared';
 import { fetchPlan, fetchPlanVersion } from '../api/plan';
 import { addPlanChangeListener } from '../utils/planEvents';
 import { ensureRealtimeConnected, isRealtimeConnected } from '../utils/realtime';
+import { useAuth } from '../auth/AuthContext';
 
 type RefreshSource = 'initial' | 'manual' | 'poll' | 'realtime';
 
@@ -53,6 +54,7 @@ const normalizePlanPayload = (payload: PlanPayload): PlanPayload => ({
 });
 
 export function PlanProvider({ children }: { children: React.ReactNode }) {
+  const { status: authStatus } = useAuth();
   const [plan, setPlan] = useState<PlanPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -63,6 +65,7 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetchPromiseRef = useRef<Promise<void> | null>(null);
   const hasPlanRef = useRef(false);
+  const isSignedInRef = useRef(authStatus === 'signedIn');
 
   const setPlanData = useCallback((nextPlan: PlanPayload) => {
     const normalized = normalizePlanPayload(nextPlan);
@@ -73,6 +76,10 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
       // cache failures are non-blocking
     });
   }, []);
+
+  useEffect(() => {
+    isSignedInRef.current = authStatus === 'signedIn';
+  }, [authStatus]);
 
   useEffect(() => {
     hasPlanRef.current = plan !== null;
@@ -86,6 +93,18 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
         return { success: true };
       }
 
+      if (!isSignedInRef.current) {
+        if (!silent && !hasPlanRef.current) {
+          setLoading(false);
+        }
+        if (source === 'manual') {
+          setRefreshing(false);
+        }
+        const timestamp = Date.now();
+        setLastUpdate({ source, success: false, timestamp });
+        return { success: false };
+      }
+
       if (!silent && !hasPlanRef.current) {
         setLoading(true);
       }
@@ -96,6 +115,10 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
       const fetchPromise = (async () => {
         let success = false;
         try {
+          if (!isSignedInRef.current) {
+            return;
+          }
+
           for (let attempt = 1; attempt <= MAX_FETCH_ATTEMPTS; attempt += 1) {
             try {
               const data = normalizePlanPayload(await fetchPlan());
@@ -133,6 +156,10 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
 
   const refreshIfVersionChanged = useCallback(
     async (source: RefreshSource) => {
+      if (!isSignedInRef.current) {
+        return;
+      }
+
       try {
         const nextVersion = await fetchPlanVersion();
         if (nextVersion > latestVersionRef.current) {
@@ -149,6 +176,23 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+
+    if (authStatus !== 'signedIn') {
+      hasPlanRef.current = false;
+      cacheLoadedRef.current = false;
+      latestVersionRef.current = 0;
+      setPlan(null);
+      setError(null);
+      setRefreshing(false);
+      setLoading(false);
+      if (pollTimerRef.current) {
+        clearTimeout(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+      return () => {
+        cancelled = true;
+      };
+    }
 
     const loadCacheAndFetch = async () => {
       if (process.env.NODE_ENV === 'test') {
@@ -185,9 +229,13 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [refresh]);
+  }, [authStatus, refresh]);
 
   useEffect(() => {
+    if (authStatus !== 'signedIn') {
+      return;
+    }
+
     const unsubscribePlan = addPlanChangeListener(() => {
       refreshIfVersionChanged('realtime').catch(() => {
         // handled in helper
@@ -203,34 +251,54 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
     return () => {
       unsubscribePlan();
     };
+  }, [authStatus, refreshIfVersionChanged]);
+
+  const schedulePoll = useCallback(() => {
+    if (!isSignedInRef.current) {
+      return;
+    }
+    if (pollTimerRef.current) {
+      clearTimeout(pollTimerRef.current);
+    }
+
+    pollTimerRef.current = setTimeout(async () => {
+      try {
+        if (!isSignedInRef.current) {
+          return;
+        }
+        if (isRealtimeConnected()) {
+          return;
+        }
+        await refreshIfVersionChanged('poll');
+      } catch (err) {
+        if (process.env.NODE_ENV !== 'test') {
+          console.warn('Plan version poll failed', err);
+        }
+      } finally {
+        schedulePoll();
+      }
+    }, VERSION_POLL_INTERVAL_MS);
   }, [refreshIfVersionChanged]);
 
-const schedulePoll = useCallback(() => {
-  if (pollTimerRef.current) {
-    clearTimeout(pollTimerRef.current);
-  }
-
-  pollTimerRef.current = setTimeout(async () => {
-    try {
-      if (isRealtimeConnected()) {
-        return;
-      }
-      await refreshIfVersionChanged('poll');
-    } catch (err) {
-      if (process.env.NODE_ENV !== 'test') {
-        console.warn('Plan version poll failed', err);
-      }
-    } finally {
-      schedulePoll();
-    }
-  }, VERSION_POLL_INTERVAL_MS);
-}, [refreshIfVersionChanged]);
-
   useEffect(() => {
+    if (authStatus !== 'signedIn') {
+      if (pollTimerRef.current) {
+        clearTimeout(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+      return () => {
+        if (pollTimerRef.current) {
+          clearTimeout(pollTimerRef.current);
+          pollTimerRef.current = null;
+        }
+      };
+    }
+
     if (process.env.NODE_ENV === 'test') {
       return () => {
         if (pollTimerRef.current) {
           clearTimeout(pollTimerRef.current);
+          pollTimerRef.current = null;
         }
       };
     }
@@ -239,9 +307,10 @@ const schedulePoll = useCallback(() => {
     return () => {
       if (pollTimerRef.current) {
         clearTimeout(pollTimerRef.current);
+        pollTimerRef.current = null;
       }
     };
-  }, [schedulePoll]);
+  }, [authStatus, schedulePoll]);
 
   const contextValue = useMemo<PlanContextValue>(
     () => ({

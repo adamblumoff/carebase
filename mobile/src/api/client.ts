@@ -48,9 +48,13 @@ apiClient.interceptors.response.use(
   },
   (error) => {
     if (error.response) {
-      console.error(`[API] Error: ${error.response.status}`, error.response.data);
+      const status = error.response.status;
+      const hadBearer = typeof error.config?.headers?.Authorization === 'string';
+      const logger =
+        status === 401 && !hadBearer && __DEV__ ? console.debug : console.error;
+      logger(`[API] Error: ${status}`, error.response.data);
 
-      if (error.response.status === 401) {
+      if (status === 401 && hadBearer) {
         removeAccessToken().catch(() => {
           // ignore cleanup errors
         });

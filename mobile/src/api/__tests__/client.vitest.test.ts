@@ -55,6 +55,11 @@ describe('api client interceptors', () => {
 
     await expect(
       responseErrorHandler({
+        config: {
+          headers: {
+            Authorization: 'Bearer token-123'
+          }
+        },
         response: {
           status: 401,
           data: { message: 'Unauthorized' }
@@ -64,6 +69,24 @@ describe('api client interceptors', () => {
 
     expect(mockedTokenStorage.removeAccessToken).toHaveBeenCalled();
     expect(emitSpy).toHaveBeenCalled();
+    emitSpy.mockRestore();
+  });
+
+  it('skips unauthorized emission when no bearer token was sent', async () => {
+    const emitSpy = vi.spyOn(authEvents, 'emitUnauthorized');
+
+    await expect(
+      responseErrorHandler({
+        response: {
+          status: 401,
+          data: { message: 'Unauthorized' }
+        }
+      })
+    ).rejects.toMatchObject({ response: { status: 401 } });
+
+    expect(mockedTokenStorage.removeAccessToken).not.toHaveBeenCalled();
+    expect(emitSpy).not.toHaveBeenCalled();
+    emitSpy.mockRestore();
   });
 
   it('logs network errors without response payload', async () => {
