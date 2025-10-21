@@ -101,3 +101,12 @@ export {
 
 export { createAuditLog, getLowConfidenceItems, reclassifyItem } from './queries/audit.js';
 export type { LowConfidenceItemRow } from './queries/audit.js';
+
+export {
+  upsertBillDraft,
+  deleteBillDraft,
+  getBillDraftByItemId,
+  listPendingReviewItemsForUser,
+  getPendingReviewItemForUser,
+  updateItemReviewStatus
+} from './queries/review.js';

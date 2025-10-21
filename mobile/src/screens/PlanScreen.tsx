@@ -2,7 +2,7 @@
  * Plan Screen
  * Simple weekly overview of appointments and bills
  */
-import React, { useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useEffect, useCallback, useRef, useMemo, useState } from 'react';
 import {
   ScrollView,
   View,
@@ -12,16 +12,32 @@ import {
   ActivityIndicator,
   Pressable,
   Animated,
+  Modal,
+  TextInput,
+  Alert,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
+import type { BillStatus, PendingReviewDraft, PendingReviewItem } from '@carebase/shared';
 import { useTheme, spacing, radius, type Palette, type Shadow } from '../theme';
 import { useToast } from '../ui/ToastProvider';
 import { formatDisplayDate, formatDisplayTime, parseServerDate } from '../utils/date';
 import { usePlan } from '../plan/PlanProvider';
 import { formatCurrency } from '../utils/format';
 import { decideRefreshToast, findCollaboratorEmail, summarizePlan } from './plan/presenter';
+import { usePendingReviews } from '../hooks/usePendingReviews';
+import type { ReviewBillPayload } from '../api/review';
+
+type DraftFormState = {
+  amount: string;
+  dueDate: string;
+  statementDate: string;
+  payUrl: string;
+  status: BillStatus;
+  notes: string;
+};
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Plan'>;
 
@@ -32,6 +48,20 @@ export default function PlanScreen({ navigation }: Props) {
   const { plan, loading, error, refreshing, refresh, lastUpdate } = usePlan();
   const lastToastRef = useRef<number>(0);
   const summary = useMemo(() => summarizePlan(plan ?? null), [plan]);
+  const pendingReviews = usePendingReviews();
+  const [reviewModalVisible, setReviewModalVisible] = useState(false);
+  const [selectedReview, setSelectedReview] = useState<PendingReviewItem | null>(null);
+  const [draftForm, setDraftForm] = useState<DraftFormState>({
+    amount: '',
+    dueDate: '',
+    statementDate: '',
+    payUrl: '',
+    status: 'todo',
+    notes: '',
+  });
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [modalAction, setModalAction] = useState<'save' | 'approve' | null>(null);
+  const [rejectingId, setRejectingId] = useState<number | null>(null);
 
   const AnimatedStatusBadge: React.FC<{ status: string }> = ({ status }) => {
     const scale = useRef(new Animated.Value(1)).current;
@@ -74,6 +104,152 @@ export default function PlanScreen({ navigation }: Props) {
       </Animated.View>
     );
   };
+
+  const hydrateDraft = useCallback((item: PendingReviewItem): DraftFormState => ({
+    amount: item.draft?.amount != null ? String(item.draft.amount) : '',
+    dueDate: item.draft?.dueDate ?? '',
+    statementDate: item.draft?.statementDate ?? '',
+    payUrl: item.draft?.payUrl ?? '',
+    status: item.draft?.status ?? 'todo',
+    notes: item.draft?.notes ?? '',
+  }), []);
+
+  const openReviewModal = useCallback(
+    (item: PendingReviewItem) => {
+      setSelectedReview(item);
+      setDraftForm(hydrateDraft(item));
+      setReviewError(null);
+      setReviewModalVisible(true);
+    },
+    [hydrateDraft]
+  );
+
+  const closeReviewModal = useCallback(() => {
+    setReviewModalVisible(false);
+    setSelectedReview(null);
+    setModalAction(null);
+    setReviewError(null);
+  }, []);
+
+  const updateDraftField = useCallback(
+    <K extends keyof DraftFormState>(field: K, value: DraftFormState[K]) => {
+      setDraftForm((prev) => ({
+        ...prev,
+        [field]: value,
+      }));
+    },
+    []
+  );
+
+  const formatReviewDate = useCallback(
+    (value: string | null | undefined) => {
+      if (!value) return '—';
+      return formatDisplayDate(parseServerDate(value));
+    },
+    []
+  );
+
+  const isActionPending = modalAction !== null;
+
+  const buildReviewPayload = useCallback((): ReviewBillPayload => {
+    const trimmedAmount = draftForm.amount.trim();
+    const amount = trimmedAmount.length > 0 ? Number(trimmedAmount) : null;
+    if (trimmedAmount.length > 0 && Number.isNaN(amount)) {
+      throw new Error('Enter a valid amount (numbers only).');
+    }
+
+    const normalize = (value: string) => {
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    };
+
+    return {
+      amount,
+      dueDate: normalize(draftForm.dueDate),
+      statementDate: normalize(draftForm.statementDate),
+      payUrl: normalize(draftForm.payUrl),
+      status: draftForm.status ?? 'todo',
+      notes: normalize(draftForm.notes),
+    };
+  }, [draftForm]);
+
+  const handleSaveDraft = useCallback(async () => {
+    if (!selectedReview) return;
+    try {
+      const payload = buildReviewPayload();
+      setModalAction('save');
+      const draft = await pendingReviews.saveDraft(selectedReview.itemId, payload);
+      setDraftForm({
+        amount: draft.amount != null ? String(draft.amount) : '',
+        dueDate: draft.dueDate ?? '',
+        statementDate: draft.statementDate ?? '',
+        payUrl: draft.payUrl ?? '',
+        status: draft.status ?? 'todo',
+        notes: draft.notes ?? '',
+      });
+      setReviewError(null);
+      toast.showToast('Draft saved');
+    } catch (error: any) {
+      const message = error?.message || error?.response?.data?.error || 'Unable to save draft right now.';
+      setReviewError(message);
+    } finally {
+      setModalAction(null);
+    }
+  }, [buildReviewPayload, pendingReviews, selectedReview, toast]);
+
+  const handleApprove = useCallback(async () => {
+    if (!selectedReview) return;
+    try {
+      const payload = buildReviewPayload();
+      setModalAction('approve');
+      await pendingReviews.approve(selectedReview.itemId, payload);
+      setReviewError(null);
+      toast.showToast('Bill approved and added to plan');
+      closeReviewModal();
+    } catch (error: any) {
+      const apiError = error?.response?.data?.error;
+      const message = apiError || error?.message || 'Unable to approve this bill right now.';
+      setReviewError(message);
+    } finally {
+      setModalAction(null);
+    }
+  }, [buildReviewPayload, closeReviewModal, pendingReviews, selectedReview, toast]);
+
+  const executeReject = useCallback(
+    async (item: PendingReviewItem) => {
+      try {
+        setRejectingId(item.itemId);
+        await pendingReviews.reject(item.itemId);
+        toast.showToast('Marked as not a bill');
+        if (selectedReview?.itemId === item.itemId) {
+          closeReviewModal();
+        }
+      } catch (error) {
+        toast.showToast('Could not update this item right now.');
+      } finally {
+        setRejectingId(null);
+      }
+    },
+    [closeReviewModal, pendingReviews, selectedReview, toast]
+  );
+
+  const handleReject = useCallback(
+    (item: PendingReviewItem) => {
+      Alert.alert(
+        'Mark as not a bill?',
+        'This removes the item from your review queue.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Mark not a bill',
+            style: 'destructive',
+            onPress: () => executeReject(item),
+          },
+        ]
+      );
+    },
+    [executeReject]
+  );
 
   const onRefresh = useCallback(() => {
     refresh({ source: 'manual', silent: true }).catch(() => {
@@ -160,6 +336,90 @@ export default function PlanScreen({ navigation }: Props) {
               {summary.appointmentCount} appointments • {summary.billsDueCount} bills due
           </Text>
         </View>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionTitleRow}>
+              <Text style={styles.sectionIcon}>🧾</Text>
+              <Text style={styles.sectionTitle}>Needs review</Text>
+            </View>
+            {pendingReviews.pendingCount > 0 && (
+              <Text style={styles.sectionCount}>{pendingReviews.pendingCount}</Text>
+            )}
+          </View>
+
+          {pendingReviews.loading ? (
+            <View style={styles.reviewLoadingCard}>
+              <ActivityIndicator color={palette.primary} />
+              <Text style={styles.reviewLoadingText}>Checking your inbox…</Text>
+            </View>
+          ) : pendingReviews.error ? (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorText}>{pendingReviews.error}</Text>
+              <Pressable
+                style={({ pressed }) => [styles.retryButton, pressed && styles.retryButtonPressed]}
+                onPress={() => pendingReviews.refresh()}
+              >
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </Pressable>
+            </View>
+          ) : pendingReviews.items.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>Nothing to review</Text>
+              <Text style={styles.emptyText}>
+                Upload bills that need confirmation and they’ll land here for quick approval.
+              </Text>
+            </View>
+          ) : (
+            pendingReviews.items.map((item) => {
+              const amountLabel =
+                item.draft?.amount != null ? formatCurrency(item.draft.amount) : 'Not detected';
+              return (
+                <View key={item.itemId} style={styles.reviewCard}>
+                  <View style={styles.reviewCardHeader}>
+                    <Text style={styles.reviewTitle}>
+                      {item.source.subject || 'Bill candidate'}
+                    </Text>
+                    <Text style={styles.reviewTimestamp}>{formatReviewDate(item.createdAt)}</Text>
+                  </View>
+                  <Text style={styles.reviewExcerpt} numberOfLines={3}>
+                    {item.source.shortExcerpt || 'No text captured from this upload yet.'}
+                  </Text>
+                  <View style={styles.reviewMetaRow}>
+                    <Text style={styles.reviewMeta}>Amount: {amountLabel}</Text>
+                    <Text style={styles.reviewMeta}>
+                      Due: {formatReviewDate(item.draft?.dueDate ?? null)}
+                    </Text>
+                  </View>
+                  <View style={styles.reviewActions}>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.reviewPrimaryButton,
+                        pressed && styles.reviewPrimaryButtonPressed,
+                      ]}
+                      onPress={() => openReviewModal(item)}
+                    >
+                      <Text style={styles.reviewPrimaryButtonText}>Edit & approve</Text>
+                    </Pressable>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.reviewSecondaryButton,
+                        pressed && styles.reviewSecondaryButtonPressed,
+                        rejectingId === item.itemId && styles.reviewSecondaryButtonDisabled,
+                      ]}
+                      onPress={() => handleReject(item)}
+                      disabled={rejectingId === item.itemId}
+                    >
+                      <Text style={styles.reviewSecondaryButtonText}>
+                        {rejectingId === item.itemId ? 'Working…' : 'Not a bill'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            })
+          )}
         </View>
 
         {error && (
@@ -259,6 +519,130 @@ export default function PlanScreen({ navigation }: Props) {
           )}
         </View>
       </ScrollView>
+
+      <Modal
+        visible={reviewModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={closeReviewModal}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback onPress={closeReviewModal}>
+            <View style={styles.modalBackdrop} />
+          </TouchableWithoutFeedback>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Review bill</Text>
+            <Text style={styles.modalSubtitle} numberOfLines={2}>
+              {selectedReview?.source.subject || 'Bill candidate'}
+            </Text>
+
+            <Text style={styles.modalLabel}>Amount</Text>
+            <TextInput
+              value={draftForm.amount}
+              onChangeText={(value) => updateDraftField('amount', value)}
+              placeholder="e.g. 245.67"
+              keyboardType="decimal-pad"
+              style={styles.modalInput}
+            />
+
+            <Text style={styles.modalLabel}>Due date</Text>
+            <TextInput
+              value={draftForm.dueDate}
+              onChangeText={(value) => updateDraftField('dueDate', value)}
+              placeholder="YYYY-MM-DD"
+              style={styles.modalInput}
+            />
+
+            <Text style={styles.modalLabel}>Statement date</Text>
+            <TextInput
+              value={draftForm.statementDate}
+              onChangeText={(value) => updateDraftField('statementDate', value)}
+              placeholder="YYYY-MM-DD"
+              style={styles.modalInput}
+            />
+
+            <Text style={styles.modalLabel}>Payment link</Text>
+            <TextInput
+              value={draftForm.payUrl}
+              onChangeText={(value) => updateDraftField('payUrl', value)}
+              placeholder="https://billing.example.com/pay"
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={styles.modalInput}
+            />
+
+            <Text style={styles.modalLabel}>Status</Text>
+            <View style={styles.statusSelectorRow}>
+              {(['todo', 'overdue', 'paid'] as BillStatus[]).map((status) => {
+                const isActive = draftForm.status === status;
+                return (
+                  <Pressable
+                    key={status}
+                    style={({ pressed }) => [
+                      styles.statusPill,
+                      isActive && styles.statusPillActive,
+                      pressed && styles.statusPillPressed,
+                    ]}
+                    onPress={() => updateDraftField('status', status)}
+                  >
+                    <Text style={[styles.statusPillText, isActive && styles.statusPillTextActive]}>
+                      {status}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <Text style={styles.modalLabel}>Notes</Text>
+            <TextInput
+              value={draftForm.notes}
+              onChangeText={(value) => updateDraftField('notes', value)}
+              placeholder="Optional reviewer note"
+              multiline
+              style={[styles.modalInput, styles.modalNotesInput]}
+            />
+
+            {reviewError && <Text style={styles.modalError}>{reviewError}</Text>}
+
+            <View style={styles.modalActions}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.modalSecondaryButton,
+                  pressed && styles.modalSecondaryButtonPressed,
+                ]}
+                onPress={handleSaveDraft}
+                disabled={isActionPending}
+              >
+                <Text style={styles.modalSecondaryButtonText}>
+                  {isActionPending && modalAction === 'save' ? 'Saving…' : 'Save draft'}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.modalPrimaryButton,
+                  pressed && styles.modalPrimaryButtonPressed,
+                ]}
+                onPress={handleApprove}
+                disabled={isActionPending}
+              >
+                <Text style={styles.modalPrimaryButtonText}>
+                  {isActionPending && modalAction === 'approve' ? 'Approving…' : 'Approve bill'}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.modalLinkButton,
+                  pressed && styles.modalLinkButtonPressed,
+                ]}
+                onPress={closeReviewModal}
+                disabled={isActionPending}
+              >
+              <Text style={styles.modalLinkButtonText}>Cancel</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -530,5 +914,232 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
     },
     statusBadgeTextWarning: {
       color: palette.warning,
+    },
+    reviewLoadingCard: {
+      backgroundColor: palette.surface,
+      borderRadius: radius.md,
+      padding: spacing(2),
+      alignItems: 'center',
+      gap: spacing(1),
+    },
+    reviewLoadingText: {
+      color: palette.textSecondary,
+      fontSize: 14,
+    },
+    retryButton: {
+      marginTop: spacing(1),
+      alignSelf: 'center',
+      paddingHorizontal: spacing(2),
+      paddingVertical: spacing(0.75),
+      borderRadius: radius.sm,
+      backgroundColor: palette.danger,
+    },
+    retryButtonPressed: {
+      opacity: 0.9,
+    },
+    retryButtonText: {
+      color: '#fff',
+      fontWeight: '600',
+      fontSize: 13,
+      textTransform: 'uppercase',
+    },
+    reviewCard: {
+      backgroundColor: palette.surface,
+      borderRadius: radius.md,
+      padding: spacing(1.75),
+      borderWidth: 1,
+      borderColor: palette.border,
+      gap: spacing(1),
+    },
+    reviewCardHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: spacing(1),
+    },
+    reviewTitle: {
+      flex: 1,
+      fontSize: 16,
+      fontWeight: '600',
+      color: palette.textPrimary,
+    },
+    reviewTimestamp: {
+      fontSize: 12,
+      color: palette.textMuted,
+    },
+    reviewExcerpt: {
+      fontSize: 14,
+      color: palette.textSecondary,
+      lineHeight: 20,
+    },
+    reviewMetaRow: {
+      flexDirection: 'row',
+      gap: spacing(2),
+      flexWrap: 'wrap',
+    },
+    reviewMeta: {
+      fontSize: 13,
+      color: palette.textSecondary,
+    },
+    reviewActions: {
+      flexDirection: 'row',
+      gap: spacing(1),
+    },
+    reviewPrimaryButton: {
+      flex: 1,
+      backgroundColor: palette.primary,
+      paddingVertical: spacing(1),
+      borderRadius: radius.sm,
+      alignItems: 'center',
+    },
+    reviewPrimaryButtonPressed: {
+      opacity: 0.9,
+    },
+    reviewPrimaryButtonText: {
+      color: '#fff',
+      fontWeight: '600',
+    },
+    reviewSecondaryButton: {
+      flex: 1,
+      borderRadius: radius.sm,
+      paddingVertical: spacing(1),
+      borderWidth: 1,
+      borderColor: palette.border,
+      alignItems: 'center',
+      backgroundColor: palette.surfaceMuted,
+    },
+    reviewSecondaryButtonPressed: {
+      opacity: 0.85,
+    },
+    reviewSecondaryButtonDisabled: {
+      opacity: 0.6,
+    },
+    reviewSecondaryButtonText: {
+      color: palette.textSecondary,
+      fontWeight: '600',
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.45)',
+      justifyContent: 'flex-end',
+    },
+    modalBackdrop: {
+      flex: 1,
+    },
+    modalContainer: {
+      backgroundColor: palette.surface,
+      borderTopLeftRadius: radius.lg,
+      borderTopRightRadius: radius.lg,
+      paddingHorizontal: spacing(3),
+      paddingTop: spacing(3),
+      paddingBottom: spacing(2.5),
+      gap: spacing(1),
+    },
+    modalTitle: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: palette.textPrimary,
+    },
+    modalSubtitle: {
+      fontSize: 14,
+      color: palette.textSecondary,
+    },
+    modalLabel: {
+      marginTop: spacing(1.5),
+      fontSize: 12,
+      fontWeight: '600',
+      color: palette.textMuted,
+      textTransform: 'uppercase',
+    },
+    modalInput: {
+      marginTop: spacing(0.5),
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: palette.border,
+      paddingHorizontal: spacing(1.25),
+      paddingVertical: spacing(1),
+      fontSize: 15,
+      color: palette.textPrimary,
+    },
+    modalNotesInput: {
+      minHeight: 90,
+      textAlignVertical: 'top',
+    },
+    modalError: {
+      marginTop: spacing(1),
+      color: palette.danger,
+      fontSize: 13,
+    },
+    modalActions: {
+      marginTop: spacing(2),
+      gap: spacing(1),
+    },
+    modalSecondaryButton: {
+      backgroundColor: palette.surfaceMuted,
+      borderRadius: radius.sm,
+      paddingVertical: spacing(1.1),
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    modalSecondaryButtonPressed: {
+      opacity: 0.85,
+    },
+    modalSecondaryButtonText: {
+      color: palette.textPrimary,
+      fontWeight: '600',
+    },
+    modalPrimaryButton: {
+      backgroundColor: palette.primary,
+      borderRadius: radius.sm,
+      paddingVertical: spacing(1.1),
+      alignItems: 'center',
+    },
+    modalPrimaryButtonPressed: {
+      opacity: 0.9,
+    },
+    modalPrimaryButtonText: {
+      color: '#fff',
+      fontWeight: '700',
+    },
+    modalLinkButton: {
+      paddingVertical: spacing(1),
+      alignItems: 'center',
+    },
+    modalLinkButtonPressed: {
+      opacity: 0.6,
+    },
+    modalLinkButtonText: {
+      color: palette.textSecondary,
+      fontWeight: '600',
+    },
+    statusSelectorRow: {
+      flexDirection: 'row',
+      gap: spacing(1),
+      marginTop: spacing(0.75),
+    },
+    statusPill: {
+      paddingHorizontal: spacing(1.25),
+      paddingVertical: spacing(0.75),
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: palette.border,
+      backgroundColor: palette.surfaceMuted,
+    },
+    statusPillActive: {
+      backgroundColor: palette.primarySoft,
+      borderColor: palette.primary,
+    },
+    statusPillPressed: {
+      opacity: 0.8,
+    },
+    statusPillText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: palette.textMuted,
+      textTransform: 'uppercase',
+    },
+    statusPillTextActive: {
+      color: palette.primary,
     },
   });

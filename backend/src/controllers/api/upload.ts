@@ -5,6 +5,8 @@ import {
   createBill,
   createAuditLog,
   findRecipientsByUserId,
+  upsertBillDraft,
+  deleteBillDraft,
 } from '../../db/queries.js';
 import { extractTextFromImage, getShortExcerpt } from '../../services/ocr.js';
 import { storeFile, storeText } from '../../services/storage.js';
@@ -90,7 +92,16 @@ export async function uploadPhoto(req: Request, res: Response): Promise<void> {
     let createdBill = null;
     if (canAutoCreateBill && billData) {
       createdBill = await createBill(item.id, billData);
+      await deleteBillDraft(item.id);
     } else if (classification.type === 'bill') {
+      await upsertBillDraft(item.id, {
+        amount: billData?.amount ?? null,
+        dueDate: billData?.dueDate ?? null,
+        statementDate: billData?.statementDate ?? null,
+        payUrl: billData?.payUrl ?? null,
+        status: billData?.status ?? 'todo',
+        notes: null
+      });
       console.log('[upload] Skipping bill creation due to missing supporting fields', {
         billHasAmount,
         hasDueDate: Boolean(billData?.dueDate),

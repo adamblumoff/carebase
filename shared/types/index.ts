@@ -56,6 +56,42 @@ export interface Item {
   createdAt: Date;
 }
 
+export interface PendingReviewDraft {
+  amount: number | null;
+  dueDate: string | null;
+  statementDate: string | null;
+  payUrl: string | null;
+  status: BillStatus;
+  notes: string | null;
+}
+
+export interface PendingReviewItemSource {
+  id: number;
+  subject: string | null;
+  sender: string | null;
+  shortExcerpt: string | null;
+  storageKey: string | null;
+}
+
+export interface PendingReviewRecipient {
+  id: number;
+  displayName: string;
+}
+
+export interface PendingReviewItem {
+  itemId: number;
+  detectedType: ItemType;
+  confidence: number;
+  createdAt: string;
+  recipient: PendingReviewRecipient;
+  source: PendingReviewItemSource;
+  draft: PendingReviewDraft | null;
+}
+
+export interface PendingReviewListResponse {
+  items: PendingReviewItem[];
+}
+
 // ========== GOOGLE SYNC ==========
 
 export type GoogleSyncDirection = 'push' | 'pull';

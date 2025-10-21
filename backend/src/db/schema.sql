@@ -94,6 +94,33 @@ CREATE TABLE IF NOT EXISTS bills (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Bill drafts table (pending review data)
+CREATE TABLE IF NOT EXISTS bill_drafts (
+  id SERIAL PRIMARY KEY,
+  item_id INTEGER NOT NULL UNIQUE REFERENCES items(id) ON DELETE CASCADE,
+  amount DECIMAL(10, 2),
+  due_date DATE,
+  statement_date DATE,
+  pay_url TEXT,
+  status VARCHAR(20) NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'overdue', 'paid')),
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE bill_drafts
+  ADD COLUMN IF NOT EXISTS notes TEXT;
+
+ALTER TABLE bill_drafts
+  ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'todo'
+    CHECK (status IN ('todo', 'overdue', 'paid'));
+
+ALTER TABLE bill_drafts
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+ALTER TABLE bill_drafts
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
 -- Google sync links table
 CREATE TABLE IF NOT EXISTS google_sync_links (
   id SERIAL PRIMARY KEY,

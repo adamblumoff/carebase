@@ -57,6 +57,12 @@ export const API_ENDPOINTS = {
     accept: '/api/collaborators/accept',
   },
 
+  // Review queue
+  review: {
+    pending: '/api/review/pending',
+    item: (id: number) => `/api/review/${id}`,
+  },
+
   // Integrations
   googleIntegration: {
     status: '/api/integrations/google/status',
