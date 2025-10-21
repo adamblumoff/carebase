@@ -80,7 +80,7 @@ function wireDbClient(mem: ReturnType<typeof createMemDatabase>) {
 }
 
 async function seedPlanFixture(pool: any): Promise<TestUsers> {
-  const now = new Date('2025-10-15T12:00:00.000Z');
+  const now = new Date();
   const owner = {
     id: 10,
     email: 'owner@example.com',
@@ -175,8 +175,17 @@ async function seedPlanFixture(pool: any): Promise<TestUsers> {
     [recipientId, sourceBill.rows[0].id]
   );
 
-  const appointmentStart = new Date('2025-10-18T14:00:00.000Z');
-  const appointmentEnd = new Date('2025-10-18T15:00:00.000Z');
+  const appointmentStart = new Date(
+    Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate() + 2,
+      14,
+      0,
+      0
+    )
+  );
+  const appointmentEnd = new Date(appointmentStart.getTime() + 60 * 60 * 1000);
 
   await pool.query(
     `INSERT INTO appointments (item_id, start_local, end_local, location, prep_note, summary, ics_token, created_at)
