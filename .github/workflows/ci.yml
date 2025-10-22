@@ -12,6 +12,12 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/carebase_ci
       DATABASE_SSL: disable
+      SESSION_SECRET: ci-session-secret
+      MOBILE_AUTH_SECRET: ci-mobile-secret
+      GOOGLE_AUTH_STATE_SECRET: ci-google-state
+      GOOGLE_CREDENTIALS_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      GOOGLE_CLIENT_ID: ci-google-client-id
+      GOOGLE_CLIENT_SECRET: ci-google-client-secret
     services:
       postgres:
         image: postgres:16
