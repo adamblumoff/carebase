@@ -8,7 +8,13 @@ export default defineConfig({
     coverage: {
       reporter: ['text', 'json-summary'],
       include: ['src/**/*.ts'],
-      exclude: ['src/**/*.d.ts', 'src/**/*.test.ts']
+      exclude: [
+        'src/**/*.d.ts',
+        'src/**/*.test.ts',
+        'src/**/__tests__/**',
+        'src/**/*.testUtils.ts',
+        'src/**/*.testDoubles.ts'
+      ]
     }
   }
 });

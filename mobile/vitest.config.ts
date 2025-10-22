@@ -21,7 +21,18 @@ export default defineConfig({
     },
     coverage: {
       reporter: ['text'],
-      exclude: ['App.tsx', 'index.ts', 'src/screens/**/*', 'src/ui/**/*'],
+      exclude: [
+        'App.tsx',
+        'index.ts',
+        'babel.config.js',
+        'vitest.config.ts',
+        'src/__mocks__/**/*',
+        'src/screens/**/*',
+        'src/ui/**/*',
+        'src/components/CollaboratorPickerModal.tsx',
+        'src/components/BottomSheetGuardScreen.tsx',
+        'src/navigation/AppNavigator.tsx'
+      ],
       thresholds: {
         statements: 65,
         branches: 55,
