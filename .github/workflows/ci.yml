@@ -10,7 +10,7 @@ jobs:
   build-test:
     runs-on: ubuntu-latest
     env:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/carebase_ci
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/carebase_ci
       DATABASE_SSL: disable
       SESSION_SECRET: ci-session-secret
       MOBILE_AUTH_SECRET: ci-mobile-secret
