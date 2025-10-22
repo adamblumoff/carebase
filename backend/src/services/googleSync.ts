@@ -30,7 +30,7 @@ import {
 import { getClient } from '../db/client.js';
 import { getGoogleSyncConfig, isTestEnv } from './googleSync/config.js';
 import { logError, logInfo, logWarn } from './googleSync/logger.js';
-import { formatDateTimeWithTimeZone } from '../utils/timezone.js';
+import { formatDateTimeWithTimeZone, formatInstantWithZone } from '../utils/timezone.js';
 
 const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
@@ -278,6 +278,10 @@ export function calculateAppointmentHash(appointment: Appointment): string {
     appointment.summary,
     appointment.startLocal,
     appointment.endLocal,
+    appointment.startTimeZone,
+    appointment.endTimeZone,
+    appointment.startOffset,
+    appointment.endOffset,
     appointment.location,
     appointment.prepNote,
     appointment.assignedCollaboratorId
@@ -297,21 +301,13 @@ export function calculateBillHash(bill: Bill): string {
 
 function buildDateTimeForGoogle(date: Date, preferredTimeZone: string): { dateTime: string; timeZone: string } {
   try {
-    const formatted = formatDateTimeWithTimeZone(date, preferredTimeZone);
-    return {
-      dateTime: `${formatted.local}${formatted.offset}`,
-      timeZone: preferredTimeZone
-    };
+    return formatInstantWithZone(date, preferredTimeZone);
   } catch (error) {
     logWarn(
       'Failed to format appointment time with preferred timezone; falling back to UTC',
       error instanceof Error ? error.message : String(error)
     );
-    const fallback = formatDateTimeWithTimeZone(date, 'UTC');
-    return {
-      dateTime: `${fallback.local}${fallback.offset}`,
-      timeZone: 'UTC'
-    };
+    return formatInstantWithZone(date, 'UTC');
   }
 }
 
@@ -345,14 +341,92 @@ function extractLocalDateTime(
   return null;
 }
 
+function extractEventTimeZone(
+  eventDate: GoogleEventResource['start'] | GoogleEventResource['end'] | undefined,
+  fallback?: string | null
+): string | null {
+  if (eventDate?.timeZone && eventDate.timeZone.trim().length > 0) {
+    return eventDate.timeZone;
+  }
+  return fallback ?? null;
+}
+
+function extractOffsetFromDateTime(dateTime?: string): string | null {
+  if (!dateTime) {
+    return null;
+  }
+  const match = dateTime.match(/([+-]\d{2}:\d{2}|Z)$/);
+  return match ? match[1] : null;
+}
+
+const OFFSET_TIME_ZONE_FALLBACKS: Record<string, string> = {
+  '+00:00': 'UTC',
+  '-04:00': 'America/New_York',
+  '-05:00': 'America/New_York',
+  '-06:00': 'America/Chicago',
+  '-07:00': 'America/Denver',
+  '-08:00': 'America/Los_Angeles',
+  '-09:00': 'America/Anchorage',
+  '-10:00': 'Pacific/Honolulu',
+  '+01:00': 'Europe/Paris',
+  '+02:00': 'Europe/Athens',
+  '+03:00': 'Europe/Moscow',
+  '+05:30': 'Asia/Kolkata',
+  '+08:00': 'Asia/Shanghai',
+  '+09:00': 'Asia/Tokyo',
+  '+10:00': 'Australia/Sydney'
+};
+
+function inferTimeZoneFromOffset(offset: string | null, reference: Date): string | null {
+  if (!offset) {
+    return null;
+  }
+
+  const normalized = offset === 'Z' ? '+00:00' : offset;
+
+  try {
+    if (formatInstantWithZone(reference, DEFAULT_TIME_ZONE).dateTime.endsWith(normalized)) {
+      return DEFAULT_TIME_ZONE;
+    }
+  } catch {
+    // ignore default timezone errors
+  }
+
+  const mapped = OFFSET_TIME_ZONE_FALLBACKS[normalized];
+  if (mapped && mapped !== 'UTC') {
+    return mapped;
+  }
+
+  const match = normalized.match(/^([+-])(\d{2}):(\d{2})$/);
+  if (!match) {
+    return mapped ?? null;
+  }
+  const [, sign, hoursRaw, minutesRaw] = match;
+  const minutes = Number.parseInt(minutesRaw, 10);
+  if (!Number.isFinite(minutes) || minutes !== 0) {
+    return mapped ?? null;
+  }
+  const hours = Number.parseInt(hoursRaw, 10);
+  if (!Number.isFinite(hours) || hours < 0 || hours > 14) {
+    return mapped ?? null;
+  }
+  if (hours === 0) {
+    return 'UTC';
+  }
+  const etcSign = sign === '+' ? '-' : '+';
+  return mapped ?? `Etc/GMT${etcSign}${hours}`;
+}
+
 function buildAppointmentEventPayload(appointment: Appointment): Record<string, unknown> {
   const descriptionParts: string[] = [];
   if (appointment.prepNote) {
     descriptionParts.push(appointment.prepNote);
   }
 
-  const startDateTime = buildDateTimeForGoogle(appointment.startLocal, DEFAULT_TIME_ZONE);
-  const endDateTime = buildDateTimeForGoogle(appointment.endLocal, DEFAULT_TIME_ZONE);
+  const startPreferredTimeZone = appointment.startTimeZone ?? DEFAULT_TIME_ZONE;
+  const endPreferredTimeZone = appointment.endTimeZone ?? startPreferredTimeZone;
+  const startDateTime = buildDateTimeForGoogle(appointment.startLocal, startPreferredTimeZone);
+  const endDateTime = buildDateTimeForGoogle(appointment.endLocal, endPreferredTimeZone);
 
   return {
     summary: appointment.summary,
@@ -999,19 +1073,24 @@ async function applyGoogleAppointmentUpdate(
     });
     return;
   }
-  const startLocalStr = extractLocalDateTime(event.start);
-  const endLocalStr = extractLocalDateTime(event.end);
-  if (!startLocalStr || !endLocalStr) {
-    const message = 'Unable to extract local start/end time';
-    summary.errors.push({ itemId, message });
-    logWarn(message, {
-      calendarId,
-      eventId: event.id,
-      itemId,
-      userId: await getItemOwnerUserId(itemId)
-    });
-    return;
-  }
+  const startOffset = extractOffsetFromDateTime(event.start?.dateTime);
+  const endOffset = extractOffsetFromDateTime(event.end?.dateTime);
+  const fallbackStartZone =
+    appointment.startTimeZone ??
+    inferTimeZoneFromOffset(startOffset, start) ??
+    DEFAULT_TIME_ZONE;
+  const startTimeZone =
+    extractEventTimeZone(event.start, fallbackStartZone) ?? fallbackStartZone;
+  const fallbackEndZone =
+    appointment.endTimeZone ??
+    appointment.startTimeZone ??
+    inferTimeZoneFromOffset(endOffset, end) ??
+    startTimeZone;
+  const endTimeZone =
+    extractEventTimeZone(event.end, fallbackEndZone) ?? fallbackEndZone;
+
+  const startLocalStr = formatDateTimeWithTimeZone(start, startTimeZone).local;
+  const endLocalStr = formatDateTimeWithTimeZone(end, endTimeZone).local;
 
   const ownerUserId = await getItemOwnerUserId(itemId);
   if (!ownerUserId) {
@@ -1025,6 +1104,8 @@ async function applyGoogleAppointmentUpdate(
       summary: event.summary ?? appointment.summary,
       startLocal: startLocalStr,
       endLocal: endLocalStr,
+      startTimeZone,
+      endTimeZone,
       location: event.location ?? appointment.location ?? undefined,
       prepNote: event.description ?? appointment.prepNote ?? undefined,
       assignedCollaboratorId: appointment.assignedCollaboratorId ?? null
