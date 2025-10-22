@@ -41,6 +41,10 @@ test('legacy Google events without carebaseType still update local plan', async 
     itemId,
     startLocal: '2025-10-16T16:00:00.000Z',
     endLocal: '2025-10-16T17:00:00.000Z',
+    startTimeZone: 'UTC',
+    endTimeZone: 'UTC',
+    startOffset: '+00:00',
+    endOffset: '+00:00',
     location: null,
     prepNote: null,
     summary: 'Consultation',
@@ -168,6 +172,8 @@ test('legacy Google events without carebaseType still update local plan', async 
             item_id: appointment.itemId,
             start_local: new Date(appointment.startLocal),
             end_local: new Date(appointment.endLocal),
+            start_time_zone: appointment.startTimeZone ?? null,
+            end_time_zone: appointment.endTimeZone ?? null,
             location: appointment.location,
             prep_note: appointment.prepNote,
             summary: appointment.summary,
@@ -192,7 +198,19 @@ test('legacy Google events without carebaseType still update local plan', async 
     }
 
     if (sql.startsWith('update appointments as a')) {
-      const [startLocal, endLocal, location, prepNote, summary, assignedId, updateId] = params;
+      const [
+        startLocal,
+        endLocal,
+        startTimeZone,
+        endTimeZone,
+        startOffset,
+        endOffset,
+        location,
+        prepNote,
+        summary,
+        assignedId,
+        updateId
+      ] = params;
       const appointment = Array.from(appointmentsByItem.values()).find((appt) => appt.id === Number(updateId));
       if (!appointment) {
         return { rows: [], rowCount: 0, command: 'UPDATE' };
@@ -201,6 +219,10 @@ test('legacy Google events without carebaseType still update local plan', async 
         ...appointment,
         startLocal: startLocal ?? appointment.startLocal,
         endLocal: endLocal ?? appointment.endLocal,
+        startTimeZone: startTimeZone ?? appointment.startTimeZone ?? null,
+        endTimeZone: endTimeZone ?? appointment.endTimeZone ?? startTimeZone ?? appointment.startTimeZone ?? null,
+        startOffset: startOffset ?? appointment.startOffset ?? null,
+        endOffset: endOffset ?? appointment.endOffset ?? null,
         location: location ?? appointment.location,
         prepNote: prepNote ?? appointment.prepNote,
         summary: summary ?? appointment.summary,
@@ -215,6 +237,10 @@ test('legacy Google events without carebaseType still update local plan', async 
             item_id: updated.itemId,
             start_local: new Date(updated.startLocal),
             end_local: new Date(updated.endLocal),
+            start_time_zone: updated.startTimeZone ?? null,
+            end_time_zone: updated.endTimeZone ?? null,
+            start_offset: updated.startOffset ?? null,
+            end_offset: updated.endOffset ?? null,
             location: updated.location,
             prep_note: updated.prepNote,
             summary: updated.summary,
@@ -457,8 +483,16 @@ test('legacy Google events without carebaseType still update local plan', async 
   assert.ok(updatedAppointment);
   assert.equal(updatedAppointment?.summary, 'Consultation (Google)');
   assert.equal(updatedAppointment?.location, 'Downtown Clinic');
-  assert.equal(updatedAppointment?.startLocal, '2025-10-16T18:00:00');
-  assert.equal(updatedAppointment?.endLocal, '2025-10-16T19:00:00');
+  assert.ok(updatedAppointment?.startLocal instanceof Date);
+  assert.ok(updatedAppointment?.endLocal instanceof Date);
+  assert.equal(
+    (updatedAppointment?.startLocal as Date).toISOString(),
+    '2025-10-16T18:00:00.000Z'
+  );
+  assert.equal(
+    (updatedAppointment?.endLocal as Date).toISOString(),
+    '2025-10-16T19:00:00.000Z'
+  );
 
   const link = googleSyncLinks.get(itemId);
   assert.ok(link);
@@ -499,6 +533,10 @@ test('remote edits with newer timestamp override pending local push', async (t) 
     itemId,
     startLocal: '2025-10-16T16:30:00.000Z',
     endLocal: '2025-10-16T17:30:00.000Z',
+    startTimeZone: 'UTC',
+    endTimeZone: 'UTC',
+    startOffset: '+00:00',
+    endOffset: '+00:00',
     location: 'Valley Medical',
     prepNote: null,
     summary: 'Neurology consult',
@@ -630,6 +668,8 @@ test('remote edits with newer timestamp override pending local push', async (t) 
             item_id: appointment.itemId,
             start_local: new Date(appointment.startLocal),
             end_local: new Date(appointment.endLocal),
+            start_time_zone: appointment.startTimeZone ?? null,
+            end_time_zone: appointment.endTimeZone ?? null,
             location: appointment.location,
             prep_note: appointment.prepNote,
             summary: appointment.summary,
@@ -654,7 +694,19 @@ test('remote edits with newer timestamp override pending local push', async (t) 
     }
 
     if (sql.startsWith('update appointments as a')) {
-      const [startLocal, endLocal, location, prepNote, summary, assignedId, updateId] = params;
+      const [
+        startLocal,
+        endLocal,
+        startTimeZone,
+        endTimeZone,
+        startOffset,
+        endOffset,
+        location,
+        prepNote,
+        summary,
+        assignedId,
+        updateId
+      ] = params;
       const appointment = Array.from(appointmentsByItem.values()).find((appt) => appt.id === Number(updateId));
       if (!appointment) {
         return { rows: [], rowCount: 0, command: 'UPDATE' };
@@ -663,6 +715,10 @@ test('remote edits with newer timestamp override pending local push', async (t) 
         ...appointment,
         startLocal: startLocal ?? appointment.startLocal,
         endLocal: endLocal ?? appointment.endLocal,
+        startTimeZone: startTimeZone ?? appointment.startTimeZone ?? null,
+        endTimeZone: endTimeZone ?? appointment.endTimeZone ?? startTimeZone ?? appointment.startTimeZone ?? null,
+        startOffset: startOffset ?? appointment.startOffset ?? null,
+        endOffset: endOffset ?? appointment.endOffset ?? null,
         location: location ?? appointment.location,
         prepNote: prepNote ?? appointment.prepNote,
         summary: summary ?? appointment.summary,
@@ -677,6 +733,10 @@ test('remote edits with newer timestamp override pending local push', async (t) 
             item_id: updated.itemId,
             start_local: new Date(updated.startLocal),
             end_local: new Date(updated.endLocal),
+            start_time_zone: updated.startTimeZone ?? null,
+            end_time_zone: updated.endTimeZone ?? null,
+            start_offset: updated.startOffset ?? null,
+            end_offset: updated.endOffset ?? null,
             location: updated.location,
             prep_note: updated.prepNote,
             summary: updated.summary,
@@ -836,8 +896,16 @@ test('remote edits with newer timestamp override pending local push', async (t) 
 
   const updatedAppointment = appointmentsByItem.get(itemId);
   assert.ok(updatedAppointment);
-  assert.equal(updatedAppointment?.startLocal, '2025-10-16T17:00:00');
-  assert.equal(updatedAppointment?.endLocal, '2025-10-16T18:00:00');
+  assert.ok(updatedAppointment?.startLocal instanceof Date);
+  assert.ok(updatedAppointment?.endLocal instanceof Date);
+  assert.equal(
+    (updatedAppointment?.startLocal as Date).toISOString(),
+    '2025-10-16T17:00:00.000Z'
+  );
+  assert.equal(
+    (updatedAppointment?.endLocal as Date).toISOString(),
+    '2025-10-16T18:00:00.000Z'
+  );
   assert.equal(updatedAppointment?.summary, 'Neurology consult (Google)');
   assert.equal(updatedAppointment?.location, 'Downtown Clinic');
 

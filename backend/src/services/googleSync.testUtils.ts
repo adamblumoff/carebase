@@ -71,6 +71,10 @@ export async function createGoogleSyncTestContext(t: TestContext): Promise<Googl
       const [
         startLocal,
         endLocal,
+        startTimeZone,
+        endTimeZone,
+        startOffset,
+        endOffset,
         location,
         prepNote,
         summary,
@@ -96,15 +100,23 @@ export async function createGoogleSyncTestContext(t: TestContext): Promise<Googl
         `UPDATE appointments
          SET start_local = $1,
              end_local = $2,
-             location = $3,
-             prep_note = $4,
-             summary = $5,
-             assigned_collaborator_id = $6
-         WHERE id = $7
+             start_time_zone = $3,
+             end_time_zone = $4,
+             start_offset = $5,
+             end_offset = $6,
+             location = $7,
+             prep_note = $8,
+             summary = $9,
+             assigned_collaborator_id = $10
+         WHERE id = $11
          RETURNING *`,
         [
           startLocal ?? null,
           endLocal ?? null,
+          startTimeZone ?? null,
+          endTimeZone ?? null,
+          startOffset ?? null,
+          endOffset ?? null,
           location ?? null,
           prepNote ?? null,
           summary ?? null,
@@ -253,6 +265,8 @@ const GOOGLE_SYNC_TEST_SCHEMA = `
     item_id INTEGER NOT NULL UNIQUE REFERENCES items(id) ON DELETE CASCADE,
     start_local TIMESTAMPTZ NOT NULL,
     end_local TIMESTAMPTZ NOT NULL,
+    start_time_zone TEXT,
+    end_time_zone TEXT,
     location TEXT,
     prep_note TEXT,
     summary TEXT NOT NULL,

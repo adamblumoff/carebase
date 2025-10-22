@@ -10,6 +10,7 @@ import {
   markGoogleSyncPending
 } from '../db/queries.js';
 import { formatForPayload } from '../utils/dateFormatting.js';
+import { getDefaultTimeZone } from '../utils/timezone.js';
 import { ForbiddenError, NotFoundError } from '../utils/errors.js';
 
 interface AppointmentContext {
@@ -80,10 +81,24 @@ export async function updateAppointmentAsOwner(
     }
   }
 
+  const defaultTimeZone = getDefaultTimeZone();
+  const currentStartTimeZone = appointment.startTimeZone ?? defaultTimeZone;
+  const currentEndTimeZone = appointment.endTimeZone ?? currentStartTimeZone;
+  const nextStartTimeZone =
+    updates.startTimeZone === undefined
+      ? currentStartTimeZone
+      : updates.startTimeZone ?? defaultTimeZone;
+  const nextEndTimeZone =
+    updates.endTimeZone === undefined
+      ? currentEndTimeZone
+      : updates.endTimeZone ?? nextStartTimeZone;
+
   const updated = await updateAppointment(appointmentId, user.id, {
     summary: updates.summary ?? appointment.summary,
     startLocal: updates.startLocal ?? formatForPayload(normalizeDate(appointment.startLocal)),
     endLocal: updates.endLocal ?? formatForPayload(normalizeDate(appointment.endLocal)),
+    startTimeZone: nextStartTimeZone,
+    endTimeZone: nextEndTimeZone,
     location: updates.location ?? appointment.location ?? undefined,
     prepNote: updates.prepNote ?? appointment.prepNote ?? undefined,
     assignedCollaboratorId: nextAssignedCollaboratorId ?? null
@@ -112,6 +127,8 @@ export async function updateAppointmentAsCollaborator(
     summary: existing.summary,
     startLocal: formatForPayload(normalizeDate(existing.startLocal)),
     endLocal: formatForPayload(normalizeDate(existing.endLocal)),
+    startTimeZone: existing.startTimeZone ?? getDefaultTimeZone(),
+    endTimeZone: existing.endTimeZone ?? existing.startTimeZone ?? getDefaultTimeZone(),
     location: existing.location ?? undefined,
     prepNote,
     assignedCollaboratorId: existing.assignedCollaboratorId ?? null

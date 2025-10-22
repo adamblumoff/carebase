@@ -13,12 +13,21 @@ import {
   projectGoogleSyncMetadata
 } from './google.js';
 import { touchPlanForItem } from './plan.js';
+import { formatInstantWithZone, getDefaultTimeZone, toUtcDateFromLocalTime } from '../../utils/timezone.js';
+
+function computeOffsetForZone(date: Date, timeZone: string): string {
+  return formatInstantWithZone(date, timeZone).dateTime.slice(-6);
+}
 
 interface AppointmentRow {
   id: number;
   item_id: number;
   start_local: Date;
   end_local: Date;
+  start_time_zone: string | null;
+  end_time_zone: string | null;
+  start_offset: string | null;
+  end_offset: string | null;
   location: string | null;
   prep_note: string | null;
   summary: string;
@@ -43,6 +52,10 @@ export function appointmentRowToAppointment(row: AppointmentRow): Appointment {
     itemId: row.item_id,
     startLocal: row.start_local,
     endLocal: row.end_local,
+    startTimeZone: row.start_time_zone,
+    endTimeZone: row.end_time_zone,
+    startOffset: row.start_offset,
+    endOffset: row.end_offset,
     location: row.location,
     prepNote: row.prep_note,
     summary: row.summary,
@@ -54,13 +67,32 @@ export function appointmentRowToAppointment(row: AppointmentRow): Appointment {
 }
 
 export async function createAppointment(itemId: number, data: AppointmentCreateRequest): Promise<Appointment> {
-  const { startLocal, endLocal, location, prepNote, summary } = data;
+  const { startLocal, endLocal, startTimeZone, endTimeZone, location, prepNote, summary } = data;
   const icsToken = generateToken(32);
+  const defaultTimeZone = getDefaultTimeZone();
+  const resolvedStartTimeZone = startTimeZone ?? defaultTimeZone;
+  const resolvedEndTimeZone = endTimeZone ?? resolvedStartTimeZone;
+  const startInstant = toUtcDateFromLocalTime(startLocal, resolvedStartTimeZone);
+  const endInstant = toUtcDateFromLocalTime(endLocal, resolvedEndTimeZone);
+  const startOffset = computeOffsetForZone(startInstant, resolvedStartTimeZone);
+  const endOffset = computeOffsetForZone(endInstant, resolvedEndTimeZone);
 
   const result = await db.query(
-    `INSERT INTO appointments (item_id, start_local, end_local, location, prep_note, summary, ics_token)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-    [itemId, startLocal, endLocal, location, prepNote, summary, icsToken]
+    `INSERT INTO appointments (item_id, start_local, end_local, start_time_zone, end_time_zone, start_offset, end_offset, location, prep_note, summary, ics_token)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+    [
+      itemId,
+      startInstant,
+      endInstant,
+      resolvedStartTimeZone,
+      resolvedEndTimeZone,
+      startOffset,
+      endOffset,
+      location,
+      prepNote,
+      summary,
+      icsToken
+    ]
   );
   const appointment = appointmentRowToAppointment(result.rows[0] as AppointmentRow);
   await touchPlanForItem(appointment.itemId);
@@ -102,18 +134,57 @@ export async function updateAppointment(
   options?: { queueGoogleSync?: boolean }
 ): Promise<Appointment> {
   await ensureCollaboratorSchema();
-  const { startLocal, endLocal, location, prepNote, summary, assignedCollaboratorId } = data;
+  const {
+    startLocal,
+    endLocal,
+    startTimeZone,
+    endTimeZone,
+    location,
+    prepNote,
+    summary,
+    assignedCollaboratorId
+  } = data;
+  if (startLocal === undefined || endLocal === undefined) {
+    throw new Error('startLocal and endLocal are required');
+  }
+  const startZone = startTimeZone ?? getDefaultTimeZone();
+  const endZone = endTimeZone ?? startZone;
+  const startInstant = toUtcDateFromLocalTime(startLocal, startZone);
+  const endInstant = toUtcDateFromLocalTime(endLocal, endZone);
+  const startOffset = computeOffsetForZone(startInstant, startZone);
+  const endOffset = computeOffsetForZone(endInstant, endZone);
   const result = await db.query(
     `UPDATE appointments AS a
-     SET start_local = $1, end_local = $2, location = $3, prep_note = $4, summary = $5,
-         assigned_collaborator_id = $6
+     SET start_local = $1,
+         end_local = $2,
+         start_time_zone = $3,
+         end_time_zone = $4,
+         start_offset = $5,
+         end_offset = $6,
+         location = $7,
+         prep_note = $8,
+         summary = $9,
+         assigned_collaborator_id = $10
      FROM items i
      JOIN recipients r ON i.recipient_id = r.id
-     WHERE a.id = $7
+     WHERE a.id = $11
        AND a.item_id = i.id
-       AND r.user_id = $8
+       AND r.user_id = $12
      RETURNING a.*`,
-    [startLocal, endLocal, location, prepNote, summary, assignedCollaboratorId ?? null, id, userId]
+    [
+      startInstant,
+      endInstant,
+      startZone ?? null,
+      endZone ?? null,
+      startOffset,
+      endOffset,
+      location,
+      prepNote,
+      summary,
+      assignedCollaboratorId ?? null,
+      id,
+      userId
+    ]
   );
   if (result.rows.length === 0) {
     throw new Error('Appointment not found');
@@ -130,17 +201,56 @@ export async function updateAppointmentForRecipient(
   options?: { queueGoogleSync?: boolean }
 ): Promise<Appointment> {
   await ensureCollaboratorSchema();
-  const { startLocal, endLocal, location, prepNote, summary, assignedCollaboratorId } = data;
+  const {
+    startLocal,
+    endLocal,
+    startTimeZone,
+    endTimeZone,
+    location,
+    prepNote,
+    summary,
+    assignedCollaboratorId
+  } = data;
+  if (startLocal === undefined || endLocal === undefined) {
+    throw new Error('startLocal and endLocal are required');
+  }
+  const startZone = startTimeZone ?? getDefaultTimeZone();
+  const endZone = endTimeZone ?? startZone;
+  const startInstant = toUtcDateFromLocalTime(startLocal, startZone);
+  const endInstant = toUtcDateFromLocalTime(endLocal, endZone);
+  const startOffset = computeOffsetForZone(startInstant, startZone);
+  const endOffset = computeOffsetForZone(endInstant, endZone);
   const result = await db.query(
     `UPDATE appointments AS a
-     SET start_local = $1, end_local = $2, location = $3, prep_note = $4, summary = $5,
-         assigned_collaborator_id = $6
+     SET start_local = $1,
+         end_local = $2,
+         start_time_zone = $3,
+         end_time_zone = $4,
+         start_offset = $5,
+         end_offset = $6,
+         location = $7,
+         prep_note = $8,
+         summary = $9,
+         assigned_collaborator_id = $10
      FROM items i
-     WHERE a.id = $7
+     WHERE a.id = $11
        AND a.item_id = i.id
-       AND i.recipient_id = $8
+       AND i.recipient_id = $12
      RETURNING a.*`,
-    [startLocal, endLocal, location, prepNote, summary, assignedCollaboratorId ?? null, id, recipientId]
+    [
+      startInstant,
+      endInstant,
+      startZone ?? null,
+      endZone ?? null,
+      startOffset,
+      endOffset,
+      location,
+      prepNote,
+      summary,
+      assignedCollaboratorId ?? null,
+      id,
+      recipientId
+    ]
   );
   if (result.rows.length === 0) {
     throw new Error('Appointment not found');
