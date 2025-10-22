@@ -70,8 +70,12 @@ CREATE TABLE IF NOT EXISTS care_collaborators (
 CREATE TABLE IF NOT EXISTS appointments (
   id SERIAL PRIMARY KEY,
   item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE UNIQUE,
-  start_local TIMESTAMP NOT NULL,
-  end_local TIMESTAMP NOT NULL,
+  start_local TIMESTAMPTZ NOT NULL,
+  end_local TIMESTAMPTZ NOT NULL,
+  start_time_zone VARCHAR(100),
+  end_time_zone VARCHAR(100),
+  start_offset VARCHAR(6),
+  end_offset VARCHAR(6),
   location VARCHAR(500),
   prep_note TEXT,
   summary VARCHAR(500) NOT NULL,
@@ -79,6 +83,38 @@ CREATE TABLE IF NOT EXISTS appointments (
   assigned_collaborator_id INTEGER REFERENCES care_collaborators(id) ON DELETE SET NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE appointments
+  ADD COLUMN IF NOT EXISTS start_time_zone VARCHAR(100);
+
+ALTER TABLE appointments
+  ADD COLUMN IF NOT EXISTS end_time_zone VARCHAR(100);
+
+ALTER TABLE appointments
+  ADD COLUMN IF NOT EXISTS start_offset VARCHAR(6);
+
+ALTER TABLE appointments
+  ADD COLUMN IF NOT EXISTS end_offset VARCHAR(6);
+
+ALTER TABLE appointments
+  ALTER COLUMN start_local TYPE TIMESTAMPTZ
+  USING (
+    CASE
+      WHEN pg_typeof(start_local)::text = 'timestamp without time zone'
+        THEN start_local AT TIME ZONE COALESCE(start_time_zone, 'UTC')
+      ELSE start_local
+    END
+  );
+
+ALTER TABLE appointments
+  ALTER COLUMN end_local TYPE TIMESTAMPTZ
+  USING (
+    CASE
+      WHEN pg_typeof(end_local)::text = 'timestamp without time zone'
+        THEN end_local AT TIME ZONE COALESCE(end_time_zone, 'UTC')
+      ELSE end_local
+    END
+  );
 
 -- Bills table
 CREATE TABLE IF NOT EXISTS bills (

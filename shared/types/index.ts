@@ -124,6 +124,10 @@ export interface Appointment {
   itemId: number;
   startLocal: Date;
   endLocal: Date;
+  startTimeZone: string | null;
+  endTimeZone: string | null;
+  startOffset: string | null;
+  endOffset: string | null;
   location: string | null;
   prepNote: string | null;
   summary: string;
@@ -178,6 +182,8 @@ export interface AuditLog {
 export interface AppointmentCreateRequest {
   startLocal: string; // ISO string
   endLocal: string; // ISO string
+  startTimeZone?: string | null;
+  endTimeZone?: string | null;
   location?: string;
   prepNote?: string;
   summary: string;
@@ -186,6 +192,8 @@ export interface AppointmentCreateRequest {
 export interface AppointmentUpdateRequest {
   startLocal?: string;
   endLocal?: string;
+  startTimeZone?: string | null;
+  endTimeZone?: string | null;
   location?: string;
   prepNote?: string;
   summary?: string;

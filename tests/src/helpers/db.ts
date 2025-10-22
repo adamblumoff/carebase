@@ -19,7 +19,16 @@ export function applySchema(mem = createMemDatabase()) {
   const __dirname = path.dirname(__filename);
   const schemaPath = path.resolve(__dirname, '../../../backend/src/db/schema.sql');
   const schemaSql = readFileSync(schemaPath, 'utf8');
-  mem.public.none(schemaSql);
+  const sanitizedSchema = schemaSql
+    .replace(
+      /ALTER TABLE appointments\s+ALTER COLUMN start_local[^;]+;/g,
+      ''
+    )
+    .replace(
+      /ALTER TABLE appointments\s+ALTER COLUMN end_local[^;]+;/g,
+      ''
+    );
+  mem.public.none(sanitizedSchema);
   return mem;
 }
 

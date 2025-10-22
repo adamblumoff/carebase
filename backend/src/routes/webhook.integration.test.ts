@@ -74,6 +74,8 @@ test('inbound email webhook creates bill, bumps plan version, and emits realtime
       item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
       start_local TIMESTAMP NOT NULL,
       end_local TIMESTAMP NOT NULL,
+      start_time_zone TEXT,
+      end_time_zone TEXT,
       location TEXT,
       prep_note TEXT,
       summary TEXT NOT NULL,

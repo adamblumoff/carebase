@@ -63,13 +63,17 @@ async function seedAppointmentFixture(pool: any, overrides?: { summary?: string 
 
   const summary = overrides?.summary ?? 'Initial consultation';
   const { rows: appointmentRows } = await pool.query(
-    `INSERT INTO appointments (item_id, start_local, end_local, summary, ics_token, prep_note, location)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO appointments (item_id, start_local, end_local, start_time_zone, end_time_zone, start_offset, end_offset, summary, ics_token, prep_note, location)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING id`,
     [
       itemId,
       '2025-10-20T16:00:00.000Z',
       '2025-10-20T17:00:00.000Z',
+      'America/New_York',
+      'America/New_York',
+      '-04:00',
+      '-04:00',
       summary,
       nextValue('ics'),
       null,

@@ -133,12 +133,16 @@ async function seedPlanFixture(pool: any): Promise<TestUsers> {
   const appointmentEnd = new Date(appointmentStart.getTime() + 60 * 60 * 1000);
 
   await pool.query(
-    `INSERT INTO appointments (item_id, start_local, end_local, location, prep_note, summary, ics_token, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+    `INSERT INTO appointments (item_id, start_local, end_local, start_time_zone, end_time_zone, start_offset, end_offset, location, prep_note, summary, ics_token, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())`,
     [
       appointmentItem.rows[0].id,
       appointmentStart,
       appointmentEnd,
+      'America/New_York',
+      'America/New_York',
+      '-04:00',
+      '-04:00',
       'Valley Medical Center',
       'Bring insurance card',
       'Follow-up visit',
@@ -213,6 +217,11 @@ test('GET /api/plan returns payload compatible with shared PlanPayload for owner
   assert.ok(appointment, 'should include appointment');
   assert.ok(appointment.summary.includes('Follow-up'));
   assert.ok(new Date(appointment.startLocal).getTime());
+  assert.equal(appointment.startTimeZone, 'America/New_York');
+  assert.equal(
+    appointment.startLocal.endsWith('-04:00') || appointment.startLocal.endsWith('-05:00'),
+    true
+  );
 
   const bill = payload.bills[0];
   assert.ok(bill, 'should include bill');
