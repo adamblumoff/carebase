@@ -9,6 +9,8 @@ import { formatForPayload } from '../utils/date';
 export interface UpdateAppointmentParams {
   start?: Date;
   end?: Date;
+  startTimeZone?: string | null;
+  endTimeZone?: string | null;
   summary?: string;
   location?: string | null;
   prepNote?: string | null;
@@ -25,6 +27,12 @@ const serializeAppointmentUpdate = (
   }
   if (params.end) {
     payload.endLocal = formatForPayload(params.end);
+  }
+  if (params.startTimeZone !== undefined) {
+    payload.startTimeZone = params.startTimeZone ?? null;
+  }
+  if (params.endTimeZone !== undefined) {
+    payload.endTimeZone = params.endTimeZone ?? null;
   }
   if (params.summary !== undefined) {
     payload.summary = params.summary;

@@ -121,12 +121,17 @@ const closePicker = () => {
       return;
     }
     const end = new Date(pendingStart.getTime() + durationMs);
+    const deviceTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const startTimeZone = currentAppointment.startTimeZone ?? deviceTimeZone;
+    const endTimeZone = currentAppointment.endTimeZone ?? startTimeZone;
 
     setSaving(true);
     try {
       const updated = await updateAppointment(appointment.id, {
         start: pendingStart,
         end,
+        startTimeZone,
+        endTimeZone,
         summary: pendingSummary,
         location: pendingLocation || null,
         prepNote: pendingNote || null,

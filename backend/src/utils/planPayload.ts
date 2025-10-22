@@ -6,7 +6,7 @@ import type {
   Collaborator,
   CollaboratorPayload
 } from '@carebase/shared';
-import { formatDateTimeWithTimeZone, getDefaultTimeZone } from './timezone.js';
+import { formatInstantWithZone, getDefaultTimeZone } from './timezone.js';
 
 export function toCollaboratorPayload(collaborator: Collaborator): CollaboratorPayload {
   return {
@@ -28,13 +28,26 @@ export function toAppointmentPayload(appointment: Appointment): AppointmentPaylo
   const startDate =
     appointment.startLocal instanceof Date ? appointment.startLocal : new Date(appointment.startLocal);
   const endDate = appointment.endLocal instanceof Date ? appointment.endLocal : new Date(appointment.endLocal);
-  const startZoned = formatDateTimeWithTimeZone(startDate, defaultTimeZone);
-  const endZoned = formatDateTimeWithTimeZone(endDate, defaultTimeZone);
+  const startTimeZone = appointment.startTimeZone ?? defaultTimeZone;
+  const endTimeZone = appointment.endTimeZone ?? appointment.startTimeZone ?? defaultTimeZone;
+
+  let startDateTimeString: string;
+  let endDateTimeString: string;
+  try {
+    startDateTimeString = formatInstantWithZone(startDate, startTimeZone).dateTime;
+  } catch {
+    startDateTimeString = formatInstantWithZone(startDate, defaultTimeZone).dateTime;
+  }
+  try {
+    endDateTimeString = formatInstantWithZone(endDate, endTimeZone).dateTime;
+  } catch {
+    endDateTimeString = formatInstantWithZone(endDate, defaultTimeZone).dateTime;
+  }
 
   return {
     ...appointment,
-    startLocal: `${startZoned.local}${startZoned.offset}`,
-    endLocal: `${endZoned.local}${endZoned.offset}`,
+    startLocal: startDateTimeString,
+    endLocal: endDateTimeString,
     createdAt:
       appointment.createdAt instanceof Date
         ? appointment.createdAt.toISOString()
