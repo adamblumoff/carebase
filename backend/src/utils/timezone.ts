@@ -45,6 +45,17 @@ function formatLocalDateTime(parts: DateParts): string {
   return `${parts.year}-${zeroPad(parts.month)}-${zeroPad(parts.day)}T${zeroPad(parts.hour)}:${zeroPad(parts.minute)}:${zeroPad(parts.second)}`;
 }
 
+function getLocalParts(date: Date): DateParts {
+  return {
+    year: date.getFullYear(),
+    month: date.getMonth() + 1,
+    day: date.getDate(),
+    hour: date.getHours(),
+    minute: date.getMinutes(),
+    second: date.getSeconds()
+  };
+}
+
 function parseDateParts(parts: Intl.DateTimeFormatPart[]): DateParts {
   const parsed: Partial<DateParts> = {};
   for (const part of parts) {
@@ -126,9 +137,10 @@ export function getDefaultTimeZone(): string {
 }
 
 export function formatDateTimeWithTimeZone(date: Date, timeZone: string): { local: string; offset: string } {
-  const parts = getUtcParts(date);
-  const local = formatLocalDateTime(parts);
-  const offset = resolveOffset(parts, timeZone);
+  const formatter = getFormatter(timeZone);
+  const localParts = parseDateParts(formatter.formatToParts(date));
+  const local = formatLocalDateTime(localParts);
+  const offset = resolveOffset(localParts, timeZone);
   return { local, offset };
 }
 
@@ -137,4 +149,68 @@ export function formatDateTimeForZone(input: Date | string, timeZone?: string): 
   const date = input instanceof Date ? input : new Date(input);
   const { local, offset } = formatDateTimeWithTimeZone(date, zone);
   return `${local}${offset}`;
+}
+
+export function formatInstantWithZone(date: Date, timeZone: string): { dateTime: string; timeZone: string } {
+  // getFormatter will throw RangeError if the timezone is invalid
+  getFormatter(timeZone);
+  const { local, offset } = formatDateTimeWithTimeZone(date, timeZone);
+  return {
+    dateTime: `${local}${offset}`,
+    timeZone
+  };
+}
+
+export function isValidTimeZone(timeZone: string): boolean {
+  try {
+    getFormatter(timeZone);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function parseLocalDateTimeString(input: string): DateParts {
+  const match = input.match(
+    /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?$/
+  );
+  if (!match) {
+    throw new Error(`Invalid local datetime string: ${input}`);
+  }
+  return {
+    year: Number.parseInt(match[1], 10),
+    month: Number.parseInt(match[2], 10),
+    day: Number.parseInt(match[3], 10),
+    hour: Number.parseInt(match[4], 10),
+    minute: Number.parseInt(match[5], 10),
+    second: match[6] ? Number.parseInt(match[6], 10) : 0
+  };
+}
+
+export function toUtcDateFromLocalTime(
+  input: Date | string,
+  timeZone: string
+): Date {
+  if (typeof input === 'string' && /([+-]\d{2}:\d{2}|Z)$/i.test(input)) {
+    return new Date(input);
+  }
+
+  const parts =
+    typeof input === 'string' ? parseLocalDateTimeString(input) : getLocalParts(input);
+  const offset = resolveOffset(parts, timeZone);
+  const sign = offset.startsWith('-') ? -1 : 1;
+  const hours = Number.parseInt(offset.slice(1, 3), 10);
+  const minutes = Number.parseInt(offset.slice(4, 6), 10);
+  const totalMinutes = sign * (hours * 60 + minutes);
+  const utcMillis =
+    Date.UTC(
+      parts.year,
+      parts.month - 1,
+      parts.day,
+      parts.hour,
+      parts.minute,
+      parts.second
+    ) -
+    totalMinutes * 60000;
+  return new Date(utcMillis);
 }
