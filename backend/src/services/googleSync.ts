@@ -33,12 +33,26 @@ import {
 import { getClient } from '../db/client.js';
 import { getGoogleSyncConfig, isTestEnv } from './googleSync/config.js';
 import { logError, logInfo, logWarn } from './googleSync/logger.js';
+import {
+  googleJsonRequest,
+  GOOGLE_CALENDAR_API,
+  GOOGLE_TOKEN_ENDPOINT,
+  GOOGLE_CHANNELS_API,
+  getGoogleWebhookAddress
+} from './googleSync/http.js';
+import { GoogleSyncException } from './googleSync/errors.js';
+import type {
+  GoogleSyncOptions,
+  SyncError,
+  GoogleSyncSummary,
+  SyncRunner,
+  RetryState,
+  AuthenticatedCredential,
+  GoogleEventResource
+} from './googleSync/types.js';
 import { formatDateTimeWithTimeZone, formatInstantWithZone } from '../utils/timezone.js';
 
-const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
-const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
-const GOOGLE_CHANNELS_API = 'https://www.googleapis.com/calendar/v3/channels/stop';
-const GOOGLE_WEBHOOK_PATH = '/api/integrations/google/webhook';
+export type { GoogleSyncSummary } from './googleSync/types.js';
 const WATCH_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
 const WATCH_RENEWAL_THRESHOLD_MS = 60 * 60 * 1000; // 1 hour
 const WATCH_RENEWAL_LOOKAHEAD_MS = 12 * 60 * 60 * 1000; // 12 hours
@@ -59,11 +73,6 @@ const {
 const IS_TEST_ENV = isTestEnv();
 const MANAGED_CALENDAR_SUMMARY = 'CareBase';
 
-interface RetryState {
-  attempt: number;
-  timer: NodeJS.Timeout | null;
-}
-
 const debounceTimers = new Map<number, NodeJS.Timeout>();
 const retryTimers = new Map<number, RetryState>();
 const runningSyncs = new Set<number>();
@@ -74,79 +83,7 @@ let locksDisabledForTests = false;
 let lockHookForTests: ((userId: number) => boolean | Promise<boolean>) | null = null;
 let testSchedulerOverride: ((userId: number, debounceMs: number) => void) | null = null;
 
-type SyncRunner = (userId: number, options?: GoogleSyncOptions) => Promise<GoogleSyncSummary>;
 let syncRunner: SyncRunner;
-
-interface GoogleSyncOptions {
-  forceFull?: boolean;
-  calendarId?: string | null;
-  pullRemote?: boolean;
-}
-
-interface SyncError {
-  itemId?: number;
-  message: string;
-}
-
-export interface GoogleSyncSummary {
-  pushed: number;
-  pulled: number;
-  deleted: number;
-  errors: SyncError[];
-  calendarId: string;
-}
-
-interface AuthenticatedCredential {
-  credential: GoogleCredential;
-  accessToken: string;
-}
-
-interface GoogleEventResource {
-  id: string;
-  status?: string;
-  updated?: string;
-  etag?: string;
-  summary?: string;
-  description?: string;
-  location?: string;
-  start?: {
-    date?: string;
-    dateTime?: string;
-    timeZone?: string;
-  };
-  end?: {
-    date?: string;
-    dateTime?: string;
-    timeZone?: string;
-  };
-  extendedProperties?: {
-    private?: Record<string, string>;
-  };
-}
-
-class GoogleSyncException extends Error {
-  status?: number;
-  code?: string;
-  context?: Record<string, unknown>;
-
-  constructor(message: string, status?: number, code?: string, context?: Record<string, unknown>) {
-    super(message);
-    this.name = 'GoogleSyncException';
-    this.status = status;
-    this.code = code;
-    this.context = context;
-  }
-}
-
-function getGoogleWebhookAddress(): string {
-  const base =
-    process.env.GOOGLE_SYNC_WEBHOOK_BASE_URL ??
-    process.env.GOOGLE_SYNC_WEBHOOK_URL ??
-    process.env.BASE_URL ??
-    'http://localhost:3000';
-  const url = new URL(GOOGLE_WEBHOOK_PATH, base);
-  return url.toString();
-}
 
 function assertClientCredentials(): { clientId: string; clientSecret: string } {
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID ?? process.env.GOOGLE_CLIENT_ID;
