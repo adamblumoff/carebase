@@ -27,6 +27,10 @@ export function applySchema(mem = createMemDatabase()) {
     .replace(
       /ALTER TABLE appointments\s+ALTER COLUMN end_local[^;]+;/g,
       ''
+    )
+    .replace(
+      /UPDATE users\s+SET legacy_google_id = google_id[\s\S]*?;/g,
+      ''
     );
   mem.public.none(sanitizedSchema);
   return mem;
