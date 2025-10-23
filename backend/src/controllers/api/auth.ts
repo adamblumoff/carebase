@@ -89,6 +89,11 @@ export async function postMobileLogin(req: Request, res: Response): Promise<void
         sessionId: clerkBridge.sessionId,
         sessionToken: clerkBridge.sessionToken,
       };
+      console.log('[Auth] Issued Clerk bridge session from mobile login', {
+        userId: user.id,
+        clerkUserId: clerkBridge.clerkUserId,
+        sessionId: clerkBridge.sessionId
+      });
     }
 
     res.json(responsePayload);

@@ -42,6 +42,7 @@ async function authenticateSocket(socket: Socket): Promise<User | null> {
   if (payload) {
     const user = await findUserById(payload.sub);
     if (user) {
+      console.log('[Realtime] Authenticated via mobile access token', { userId: user.id });
       return user;
     }
   }
@@ -50,6 +51,11 @@ async function authenticateSocket(socket: Socket): Promise<User | null> {
   if (clerkVerification) {
     const user = await findUserByClerkUserId(clerkVerification.userId);
     if (user) {
+      console.log('[Realtime] Authenticated via Clerk session', {
+        userId: user.id,
+        clerkUserId: clerkVerification.userId,
+        sessionId: clerkVerification.sessionId
+      });
       return user;
     }
   }

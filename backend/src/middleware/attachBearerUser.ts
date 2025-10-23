@@ -25,6 +25,7 @@ export async function attachBearerUser(req: Request, res: Response, next: NextFu
         if (typeof req.isAuthenticated === 'function') {
           (req as any).isAuthenticated = () => true;
         }
+        console.log('[Auth] Bearer token resolved via mobile access token', { userId: user.id });
         return next();
       }
     }
@@ -42,6 +43,11 @@ export async function attachBearerUser(req: Request, res: Response, next: NextFu
         if (typeof req.isAuthenticated === 'function') {
           (req as any).isAuthenticated = () => true;
         }
+        console.log('[Auth] Bearer token resolved via Clerk session', {
+          userId: user.id,
+          clerkUserId: clerkVerification.userId,
+          sessionId: clerkVerification.sessionId
+        });
         return next();
       }
     }

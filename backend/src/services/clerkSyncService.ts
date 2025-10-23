@@ -11,6 +11,14 @@ import {
 let cachedClient: ClerkClient | null = null;
 let warnedMissingSecret = false;
 
+function logClerk(message: string, meta?: Record<string, unknown>): void {
+  if (meta) {
+    console.log(`[ClerkSync] ${message}`, meta);
+  } else {
+    console.log(`[ClerkSync] ${message}`);
+  }
+}
+
 interface ClerkSyncMetadata {
   publicMetadata: Record<string, unknown>;
   privateMetadata: Record<string, unknown>;
@@ -232,6 +240,12 @@ export async function syncClerkUser(userId: number): Promise<ClerkSyncResult | n
   }
   await setPasswordResetRequired(record.id, true);
 
+  logClerk(created ? 'Created/linked Clerk user' : 'Synced Clerk user', {
+    userId,
+    clerkUserId: clerkUser.id,
+    metadataUpdated
+  });
+
   return {
     clerkUserId: clerkUser.id,
     created,
@@ -266,6 +280,13 @@ export async function createClerkBridgeSession(userId: number): Promise<ClerkSes
   const session = await clerkClient.sessions.createSession({ userId: syncResult.clerkUserId });
   const templateName = process.env.CLERK_JWT_TEMPLATE_NAME;
   const sessionToken = await issueSessionToken(clerkClient, session, templateName);
+
+  logClerk('Issued Clerk bridge session', {
+    userId,
+    clerkUserId: syncResult.clerkUserId,
+    sessionId: session.id,
+    template: templateName ?? 'default'
+  });
 
   return {
     clerkUserId: syncResult.clerkUserId,
@@ -302,15 +323,21 @@ export async function verifyClerkSessionToken(token: string): Promise<ClerkToken
     const expiresAt =
       typeof (payload as any).exp === 'number' ? ((payload as any).exp as number) * 1000 : undefined;
 
-    return {
+    const verification = {
       userId: String(userId),
       sessionId: sessionId ? String(sessionId) : null,
       expiresAt
     };
+
+    logClerk('Verified Clerk token', {
+      clerkUserId: verification.userId,
+      sessionId: verification.sessionId,
+      expiresAt: verification.expiresAt ?? null
+    });
+
+    return verification;
   } catch (error) {
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('[ClerkSync] Clerk token verification failed:', (error as Error).message);
-    }
+    console.warn('[ClerkSync] Clerk token verification failed:', (error as Error).message);
     return null;
   }
 }
