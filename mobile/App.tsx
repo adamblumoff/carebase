@@ -12,6 +12,14 @@ import { ToastProvider } from './src/ui/ToastProvider';
 import { CollaboratorProvider } from './src/collaborators/CollaboratorProvider';
 import { PlanProvider } from './src/plan/PlanProvider';
 import { usePendingInviteAcceptance } from './src/hooks/usePendingInviteAcceptance';
+import { ClerkProvider, ClerkLoaded, useAuth as useClerkAuth } from '@clerk/clerk-expo';
+import {
+  CLERK_PUBLISHABLE_KEY,
+  CLERK_SIGN_IN_URL,
+  CLERK_SIGN_UP_URL,
+  CLERK_JWT_TEMPLATE
+} from './src/config';
+import { clerkTokenCache, setClerkTokenFetcher } from './src/auth/clerkTokenCache';
 
 function SplashScreen() {
   const { colorScheme, palette } = useTheme();
@@ -74,11 +82,47 @@ function AppBootstrap() {
   );
 }
 
+function ClerkTokenBridge(): null {
+  const { getToken, isSignedIn } = useClerkAuth();
+
+  useEffect(() => {
+    setClerkTokenFetcher(() => {
+      if (!isSignedIn) {
+        return Promise.resolve(null);
+      }
+      const options = CLERK_JWT_TEMPLATE ? { template: CLERK_JWT_TEMPLATE } : undefined;
+      return getToken(options).catch(() => null);
+    });
+
+    return () => {
+      setClerkTokenFetcher(null);
+    };
+  }, [getToken, isSignedIn]);
+
+  return null;
+}
+
 export default function App() {
+  if (!CLERK_PUBLISHABLE_KEY && __DEV__) {
+    console.warn(
+      '[Clerk] EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY is not set. Authentication will not function.'
+    );
+  }
+
   return (
-    <ThemeProvider>
-      <AppBootstrap />
-    </ThemeProvider>
+    <ClerkProvider
+      publishableKey={CLERK_PUBLISHABLE_KEY}
+      signInUrl={CLERK_SIGN_IN_URL}
+      signUpUrl={CLERK_SIGN_UP_URL}
+      tokenCache={clerkTokenCache}
+    >
+      <ThemeProvider>
+        <ClerkLoaded>
+          <ClerkTokenBridge />
+          <AppBootstrap />
+        </ClerkLoaded>
+      </ThemeProvider>
+    </ClerkProvider>
   );
 }
 

@@ -33,14 +33,44 @@
 - Deprecate `mobileTokenService` issuance while bridge is active; keep verification until cutover.
 - ✅ Prep work: Bearer + Socket.IO already honor Clerk tokens; metrics/logging in place.
 - Next steps:
-  1. Introduce Clerk Express middleware alongside existing session handling (feature flag).
-  2. Gradually swap legacy `req.user` population to rely on Clerk context when available.
-  3. Once parity confirmed, remove Express session + Passport wiring and retire legacy login tokens.
+  1. ✅ Define hard-cutover scope with product (Clerk-only auth, legacy tokens removed).
+  2. ✅ Phase 4A – Replace Express session + Passport (2025-10-23):
+     - Removed session + Passport middleware from HTTP/Socket.IO; deleted legacy `/auth` routes.
+     - Clerk middleware now stands alone; `attachBearerUser` continues to populate `req.user`.
+     - Verified env/docs trimmed of `SESSION_SECRET` + session store guidance.
+  3. ✅ Phase 4B – Remove legacy mobile token flow (2025-10-23):
+     - Deleted mobile token utilities + routes, refreshed docs/metadata, and renamed metrics to `auth.clerk.*`.
+     - REST + realtime layers now trust only Clerk tokens; env/docs shed `MOBILE_AUTH_SECRET` references.
+  4. ✅ Phase 4C – Clean up residual Passport artifacts (2025-10-23):
+     - Scrubbed env/docs of legacy `/auth/google` flows, regenerated route docs, and tightened middleware guards.
+     - `ensureAuthenticated` now checks `req.user`; web redirects replaced with 401 for consistency.
+  5. ✅ Phase 4D – Final verification (2025-10-23):
+     - Backend + contract suites passing; pg-mem schema shim updated to skip legacy migration backfill.
+     - Manual smoke test confirmed Clerk session token authenticates REST + Socket.IO against running backend.
+     - Monitoring: follow `auth.clerk.http`/`auth.clerk.socket` counters; bridge metrics removed.
 
 ## Phase 5 – Mobile App Migration
 - Integrate Clerk Expo SDK with hosted components.
 - Wrap app in `ClerkProvider` and update API client to send Clerk session tokens.
 - Remove legacy mobile login flow and ensure SecureStore still holds app-specific secrets.
+- ✅ Phase ready: backend now Clerk-only; mobile must stop relying on legacy tokens.
+- Execution steps:
+  1. Phase 5A – Clerk provider & env wiring:
+     - Add `@clerk/clerk-expo` dependency and env keys to templates.
+     - Introduce `ClerkProvider` in `App.tsx` with publishable key + token cache helper.
+     - Bridge Clerk token retrieval via a shared module for API interceptors.
+  2. Phase 5B – API client + auth services:
+     - Rework Axios interceptors to fetch Clerk session tokens.
+     - Remove legacy token storage helpers and adjust tests/mocks.
+     - Emit unauthorized events by calling Clerk `signOut` fallback when needed.
+  3. Phase 5C – Auth context & session bootstrap:
+     - Refactor `AuthProvider` to derive status from Clerk `useAuth` and hydrate backend session data.
+     - Ensure logout delegates to Clerk and clears collaborator/plan state as needed.
+     - Update hooks/tests relying on old sign-in semantics.
+  4. Phase 5D – UI flows & smoke tests:
+     - Replace `LoginScreen` with Clerk hosted sign-in (email/password/link + Google/Facebook/Apple).
+     - Remove deep link mobile-login exchange; ensure invite flow still works.
+     - Run Expo Vitest suite and manual sign-in smoke test.
 
 ## Phase 6 – Web Frontend (if applicable)
 - Replace existing web auth UI with Clerk hosted sign-in/up components.

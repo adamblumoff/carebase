@@ -14,6 +14,18 @@ export const API_BASE_URL =
   envVars.EXPO_PUBLIC_API_BASE_URL ||
   (__DEV__ ? DEFAULT_DEV_URL : DEFAULT_PROD_URL);
 
+export const CLERK_PUBLISHABLE_KEY =
+  envVars.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY || envVars.CLERK_PUBLISHABLE_KEY || '';
+
+export const CLERK_SIGN_IN_URL =
+  envVars.EXPO_PUBLIC_CLERK_SIGN_IN_URL || envVars.CLERK_SIGN_IN_URL || undefined;
+
+export const CLERK_SIGN_UP_URL =
+  envVars.EXPO_PUBLIC_CLERK_SIGN_UP_URL || envVars.CLERK_SIGN_UP_URL || undefined;
+
+export const CLERK_JWT_TEMPLATE =
+  envVars.EXPO_PUBLIC_CLERK_JWT_TEMPLATE || envVars.CLERK_JWT_TEMPLATE || undefined;
+
 // Google OAuth configuration
 // Get these from Google Cloud Console
 export const GOOGLE_CLIENT_ID = {
