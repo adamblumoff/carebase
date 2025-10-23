@@ -44,18 +44,48 @@ const defaultClerkState = {
   getToken: vi.fn().mockResolvedValue(null)
 };
 
+const defaultSignInResource = {
+  create: vi.fn(),
+  attemptFirstFactor: vi.fn(),
+  reload: vi.fn(),
+  firstFactorVerification: {}
+};
+
+const defaultSignUpResource = {
+  create: vi.fn()
+};
+
+const defaultOAuthResource = {
+  startOAuthFlow: vi.fn().mockResolvedValue({ createdSessionId: '', setActive: vi.fn() })
+};
+
 vi.mock('@clerk/clerk-expo', () => ({
   __esModule: true,
   ClerkProvider: ({ children }: { children?: React.ReactNode }) =>
     React.createElement(React.Fragment, null, children),
   ClerkLoaded: ({ children }: { children?: React.ReactNode }) =>
     React.createElement(React.Fragment, null, children),
-  useAuth: () => ({
-    ...defaultClerkState
-  }),
   SignedIn: ({ children }: { children?: React.ReactNode }) =>
     React.createElement(React.Fragment, null, children),
   SignedOut: ({ children }: { children?: React.ReactNode }) =>
     React.createElement(React.Fragment, null, children),
-  __clerkMockState: defaultClerkState
+  useAuth: () => ({
+    ...defaultClerkState
+  }),
+  useSignIn: () => ({
+    isLoaded: true,
+    signIn: defaultSignInResource,
+    setActive: vi.fn()
+  }),
+  useSignUp: () => ({
+    isLoaded: true,
+    signUp: defaultSignUpResource
+  }),
+  useOAuth: () => defaultOAuthResource,
+  __clerkMockState: {
+    auth: defaultClerkState,
+    signIn: defaultSignInResource,
+    signUp: defaultSignUpResource,
+    oauth: defaultOAuthResource
+  }
 }));

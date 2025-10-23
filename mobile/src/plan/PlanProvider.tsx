@@ -126,12 +126,16 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
               setError(null);
               success = true;
               break;
-            } catch (err) {
-              if (attempt < MAX_FETCH_ATTEMPTS) {
-                await sleep(RETRY_DELAY_MS * attempt);
+              } catch (err) {
+                if (attempt < MAX_FETCH_ATTEMPTS) {
+                  const delay =
+                    process.env.NODE_ENV === 'test' ? 0 : RETRY_DELAY_MS * attempt;
+                  if (delay > 0) {
+                    await sleep(delay);
+                  }
+                }
               }
             }
-          }
           if (!success) {
             setError('We couldn’t refresh your plan. Pull to try again.');
           }

@@ -17,12 +17,39 @@ const clerkState = {
   isSignedIn: false,
 };
 
+const setActiveMock = vi.fn();
+const signInResource = {
+  create: vi.fn(),
+  attemptFirstFactor: vi.fn(),
+  reload: vi.fn(),
+  firstFactorVerification: {}
+};
+const signUpResource = {
+  create: vi.fn()
+};
+const oauthResource = {
+  startOAuthFlow: vi.fn().mockResolvedValue({ createdSessionId: '', setActive: vi.fn() })
+};
+
 vi.mock('@clerk/clerk-expo', () => ({
   useAuth: () => ({
     isLoaded: clerkState.isLoaded,
     isSignedIn: clerkState.isSignedIn,
     signOut: () => clerkSignOutMock(),
+    getToken: vi.fn().mockResolvedValue(null)
   }),
+  useSignIn: () => ({
+    isLoaded: true,
+    signIn: signInResource,
+    setActive: setActiveMock
+  }),
+  useSignUp: () => ({
+    isLoaded: true,
+    signUp: signUpResource
+  }),
+  useOAuth: () => oauthResource,
+  ClerkProvider: ({ children }: any) => <>{children}</>,
+  ClerkLoaded: ({ children }: any) => <>{children}</>
 }));
 
 let AuthProvider: typeof import('../AuthContext').AuthProvider;

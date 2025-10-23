@@ -3,11 +3,12 @@ import * as SecureStore from 'expo-secure-store';
 
 type TokenFetcher = () => Promise<string | null>;
 
-const STORAGE_PREFIX = 'clerk-token-cache';
+const STORAGE_PREFIX = 'clerk_token_cache';
 
 export const clerkTokenCache = {
   async getToken(key: string): Promise<string | null> {
-    const storageKey = `${STORAGE_PREFIX}:${key}`;
+    const safeKey = key.replace(/[^a-zA-Z0-9_.-]/g, '_');
+    const storageKey = `${STORAGE_PREFIX}_${safeKey}`;
 
     try {
       if (typeof SecureStore.getItemAsync === 'function') {
@@ -30,7 +31,8 @@ export const clerkTokenCache = {
     }
   },
   async saveToken(key: string, value: string): Promise<void> {
-    const storageKey = `${STORAGE_PREFIX}:${key}`;
+    const safeKey = key.replace(/[^a-zA-Z0-9_.-]/g, '_');
+    const storageKey = `${STORAGE_PREFIX}_${safeKey}`;
 
     try {
       if (typeof SecureStore.setItemAsync === 'function') {

@@ -1,6 +1,6 @@
 # API Route Registry
 
-Generated 2025-10-23T20:35:37.880Z
+Generated 2025-10-23T21:02:52.975Z
 
 ## Routers
 

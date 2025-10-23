@@ -42,7 +42,6 @@ export const API_ENDPOINTS = {
   checkSession: '/api/auth/session',
   logout: '/api/auth/logout',
   getUserInfo: '/api/auth/user',
-  mobileLogin: '/api/auth/mobile-login',
 
   // Plan
   getPlan: '/api/plan',

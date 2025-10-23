@@ -67,9 +67,10 @@
      - Refactor `AuthProvider` to derive status from Clerk `useAuth` and hydrate backend session data.
      - Ensure logout delegates to Clerk and clears collaborator/plan state as needed.
      - Update hooks/tests relying on old sign-in semantics.
-  4. Phase 5D – UI flows & smoke tests:
-     - Remove legacy token storage helpers and replace `LoginScreen` with Clerk hosted sign-in (email/password/link + Google/Facebook/Apple).
-     - Remove deep link mobile-login exchange; ensure invite flow still works.
+  4. ✅ Phase 5D – UI flows & smoke tests (2025-10-23):
+     - Removed legacy token storage, migrated API/auth tests, and rewired realtime/token consumers.
+     - Replaced `LoginScreen` with Clerk hosted sign-in component (email, magic link, password, Google, Facebook, Apple) and trimmed deep-link mobile-login flow.
+     - Added Clerk mocks to Vitest setup + shortened plan retry delay under test to keep suites fast.
      - Run Expo Vitest suite and manual sign-in smoke test.
 
 ## Phase 6 – Web Frontend (if applicable)
