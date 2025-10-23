@@ -5,7 +5,7 @@ This document tracks the security controls currently in place across the Carebas
 ## Implemented Controls
 
 - **Mandatory Secrets & Config Guardrails**
-  - Backend boot fails fast if any critical secret is missing (`MOBILE_AUTH_SECRET`, `GOOGLE_AUTH_STATE_SECRET`, `GOOGLE_CREDENTIALS_ENCRYPTION_KEY`, Google OAuth creds, `DATABASE_URL`).
+  - Backend boot fails fast if any critical secret is missing (`GOOGLE_AUTH_STATE_SECRET`, `GOOGLE_CREDENTIALS_ENCRYPTION_KEY`, Google OAuth creds, `DATABASE_URL`).
   - OCR service account keys now load from the `OCR_SERVICE_ACCOUNT_JSON` env secret (base64 or raw JSON), eliminating the need to ship credential files.
   - Deterministic test-only secrets prevent suites from polluting real values.
 
@@ -28,9 +28,9 @@ This document tracks the security controls currently in place across the Carebas
 - **Reduced Sensitive Logging**
   - Bearer tokens and sync payloads avoid landing in logs; Google sync uses structured info logging only.
 
-- **Mobile Token Storage**
-  - Access tokens stored in Expo SecureStore when available, falling back to AsyncStorage with automatic migration.
-  - API client and realtime socket pull tokens exclusively through the secure storage helper.
+**Clerk Session Handling**
+  - Clerk-hosted auth provides session management; clients forward Clerk session tokens for API + realtime access.
+  - Backend verifies tokens via Clerk Sessions API and JWKS fallback, logging verification metrics for monitoring.
 
 - **Documentation & Tooling**
   - `AGENTS.md` and env examples detail required secrets, TLS setup, and webhook keys.

@@ -1,4 +1,4 @@
-import type { ClerkClient, Session } from '@clerk/backend';
+import type { ClerkClient } from '@clerk/backend';
 import { createClerkClient } from '@clerk/backend';
 import jwt from 'jsonwebtoken';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
@@ -30,14 +30,6 @@ interface ClerkSyncMetadata {
 
 export interface ClerkSyncResult {
   clerkUserId: string;
-  created: boolean;
-  metadataUpdated: boolean;
-}
-
-export interface ClerkSessionResult {
-  clerkUserId: string;
-  sessionId: string;
-  sessionToken: string;
   created: boolean;
   metadataUpdated: boolean;
 }
@@ -257,54 +249,6 @@ export async function syncClerkUser(userId: number): Promise<ClerkSyncResult | n
     clerkUserId: clerkUser.id,
     created,
     metadataUpdated
-  };
-}
-
-async function issueSessionToken(
-  clerkClient: ClerkClient,
-  session: Session,
-  templateName?: string
-): Promise<string> {
-  if (!templateName) {
-    const token = await clerkClient.sessions.getToken(session.id);
-    return token.jwt;
-  }
-  const token = await clerkClient.sessions.getToken(session.id, templateName);
-  return token.jwt;
-}
-
-export async function createClerkBridgeSession(userId: number): Promise<ClerkSessionResult | null> {
-  const clerkClient = getClerkClient();
-  if (!clerkClient) {
-    return null;
-  }
-
-  const syncResult = await syncClerkUser(userId);
-  if (!syncResult) {
-    return null;
-  }
-
-  const session = await clerkClient.sessions.createSession({ userId: syncResult.clerkUserId });
-  const templateName = process.env.CLERK_JWT_TEMPLATE_NAME;
-  const sessionToken = await issueSessionToken(clerkClient, session, templateName);
-
-  logClerk('Issued Clerk bridge session', {
-    userId,
-    clerkUserId: syncResult.clerkUserId,
-    sessionId: session.id,
-    template: templateName ?? 'default'
-  });
-  incrementMetric('clerk.bridge.session', 1, {
-    template: templateName ?? 'default',
-    created: syncResult.created ? 'yes' : 'no'
-  });
-
-  return {
-    clerkUserId: syncResult.clerkUserId,
-    sessionId: session.id,
-    sessionToken,
-    created: syncResult.created,
-    metadataUpdated: syncResult.metadataUpdated
   };
 }
 

@@ -1,7 +1,6 @@
 import type { Server as SocketIOServer, Socket } from 'socket.io';
 import type { User } from '@carebase/shared';
-import { verifyMobileAccessToken } from '../auth/mobileTokenService.js';
-import { findUserById, findUserByClerkUserId } from '../db/queries.js';
+import { findUserByClerkUserId } from '../db/queries.js';
 import { verifyClerkSessionToken } from './clerkSyncService.js';
 import { incrementMetric } from '../utils/metrics.js';
 
@@ -31,16 +30,6 @@ async function authenticateSocket(socket: Socket): Promise<User | null> {
     return null;
   }
 
-  const payload = verifyMobileAccessToken(token);
-  if (payload) {
-    const user = await findUserById(payload.sub);
-    if (user) {
-      console.log('[Realtime] Authenticated via mobile access token', { userId: user.id });
-      incrementMetric('auth.bridge.socket', 1, { via: 'mobile-token' });
-      return user;
-    }
-  }
-
   const clerkVerification = await verifyClerkSessionToken(token);
   if (clerkVerification) {
     const user = await findUserByClerkUserId(clerkVerification.userId);
@@ -50,7 +39,7 @@ async function authenticateSocket(socket: Socket): Promise<User | null> {
         clerkUserId: clerkVerification.userId,
         sessionId: clerkVerification.sessionId
       });
-      incrementMetric('auth.bridge.socket', 1, { via: 'clerk-session' });
+      incrementMetric('auth.clerk.socket', 1, { via: 'clerk-session' });
       return user;
     }
   }

@@ -1,6 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import { verifyMobileAccessToken } from '../auth/mobileTokenService.js';
-import { findUserById, findUserByClerkUserId } from '../db/queries.js';
+import { findUserByClerkUserId } from '../db/queries.js';
 import { verifyClerkSessionToken } from '../services/clerkSyncService.js';
 import { incrementMetric } from '../utils/metrics.js';
 
@@ -19,10 +18,7 @@ export async function attachBearerUser(req: Request, res: Response, next: NextFu
               sessionId: authState.sessionId ?? null,
               expiresAt: authState.sessionClaims?.exp ? authState.sessionClaims.exp * 1000 : null
             };
-            if (typeof req.isAuthenticated === 'function') {
-              (req as any).isAuthenticated = () => true;
-            }
-            incrementMetric('auth.bridge.http', 1, { via: 'clerk-middleware' });
+            incrementMetric('auth.clerk.http', 1, { via: 'clerk-middleware' });
             console.log('[Auth] Request authenticated via Clerk middleware', {
               userId: user.id,
               clerkUserId: authState.userId,
@@ -42,26 +38,7 @@ export async function attachBearerUser(req: Request, res: Response, next: NextFu
       return next();
     }
 
-    if (typeof req.isAuthenticated === 'function' && req.isAuthenticated()) {
-      return next();
-    }
-
     const token = authHeader.slice(7).trim();
-    const payload = verifyMobileAccessToken(token);
-
-    if (payload) {
-      const user = await findUserById(payload.sub);
-      if (user) {
-        (req as any).user = user;
-        if (typeof req.isAuthenticated === 'function') {
-          (req as any).isAuthenticated = () => true;
-        }
-        console.log('[Auth] Bearer token resolved via mobile access token', { userId: user.id });
-        incrementMetric('auth.bridge.bearer', 1, { via: 'mobile-token' });
-        return next();
-      }
-    }
-
     const clerkVerification = await verifyClerkSessionToken(token);
     if (clerkVerification) {
       const user = await findUserByClerkUserId(clerkVerification.userId);
@@ -72,15 +49,12 @@ export async function attachBearerUser(req: Request, res: Response, next: NextFu
           sessionId: clerkVerification.sessionId,
           expiresAt: clerkVerification.expiresAt ?? null
         };
-        if (typeof req.isAuthenticated === 'function') {
-          (req as any).isAuthenticated = () => true;
-        }
         console.log('[Auth] Bearer token resolved via Clerk session', {
           userId: user.id,
           clerkUserId: clerkVerification.userId,
           sessionId: clerkVerification.sessionId
         });
-        incrementMetric('auth.bridge.bearer', 1, { via: 'clerk-session' });
+        incrementMetric('auth.clerk.http', 1, { via: 'clerk-session' });
         return next();
       }
     }

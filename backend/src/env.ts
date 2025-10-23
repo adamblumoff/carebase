@@ -41,7 +41,6 @@ const isTestEnv = process.env.NODE_ENV === 'test';
 
 // Provide deterministic secrets during test runs to keep suites hermetic.
 if (isTestEnv) {
-  process.env.MOBILE_AUTH_SECRET ??= 'test-mobile-secret';
   process.env.GOOGLE_AUTH_STATE_SECRET ??= 'test-google-state-secret';
   process.env.GOOGLE_CREDENTIALS_ENCRYPTION_KEY ??= 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
 }
@@ -54,7 +53,6 @@ interface RequiredSetting {
 
 const requiredSettings: RequiredSetting[] = [
   { key: 'DATABASE_URL', description: 'Postgres connection string' },
-  { key: 'MOBILE_AUTH_SECRET', description: 'JWT signing secret for mobile tokens' },
   { key: 'GOOGLE_AUTH_STATE_SECRET', description: 'Google OAuth state signing secret' },
   { key: 'GOOGLE_CREDENTIALS_ENCRYPTION_KEY', description: 'AES key for Google credential encryption' },
   { key: 'GOOGLE_CLIENT_ID', description: 'Google OAuth client identifier' },
@@ -75,20 +73,4 @@ if (missing.length > 0) {
   console.error('❌ Missing required environment variables:\n  -', missing.join('\n  - '));
   console.error('Set the variables above before starting the backend.');
   process.exit(1);
-}
-
-const duplicateSecrets = [
-  ['GOOGLE_AUTH_STATE_SECRET', 'MOBILE_AUTH_SECRET']
-]
-  .filter(([primary, fallback]) => {
-    const primaryValue = process.env[primary];
-    const fallbackValue = process.env[fallback];
-    return primaryValue && fallbackValue && primaryValue === fallbackValue;
-  })
-  .map(([primary, fallback]) => `${primary} should not reuse ${fallback}`);
-
-if (!isTestEnv && duplicateSecrets.length > 0) {
-  console.warn('⚠️  Detected reused secret material:');
-  duplicateSecrets.forEach((message) => console.warn('   •', message));
-  console.warn('Rotate the affected secrets so each value is unique.');
 }

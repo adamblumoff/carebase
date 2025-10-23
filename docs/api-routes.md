@@ -1,25 +1,20 @@
 # API Route Registry
 
-Generated 2025-10-15T23:41:01.203Z
+Generated 2025-10-23T20:35:37.880Z
 
 ## Routers
 
 | Base Path | Scope | Description |
 | --- | --- | --- |
-| /auth | web | Web auth + session management |
 | /webhook | web | Inbound Postmark webhook |
-| /plan | web | Web plan viewer |
-| /calendar | web | ICS feeds |
-| /upload | web | Web bill upload |
-| /settings | web | Web settings |
-| /review | web | Low-confidence review tools |
 | /collaborators | web | Collaborator invite landing pages |
-| /api/auth | api | Mobile auth APIs |
+| /api/auth | api | Clerk-authenticated session APIs |
 | /api/plan | api | Plan data APIs |
 | /api/appointments | api | Appointment CRUD APIs |
 | /api/bills | api | Bill CRUD APIs |
 | /api/upload | api | Mobile photo upload API |
 | /api/collaborators | api | Care team collaborator APIs |
+| /api/review | api | Pending item review APIs |
 | /api/integrations/google | api | Google Calendar integration APIs |
 
 ## Endpoints
@@ -27,9 +22,8 @@ Generated 2025-10-15T23:41:01.203Z
 | Method | Path | Description |
 | --- | --- | --- |
 | GET | /api/auth/session | Return auth status and user profile |
-| POST | /api/auth/logout | Invalidate current session (mobile) |
+| POST | /api/auth/logout | Acknowledge logout (Clerk-managed session) |
 | GET | /api/auth/user | Return authenticated user details |
-| POST | /api/auth/mobile-login | Exchange OAuth token for bearer access token |
 | GET | /api/plan | Retrieve weekly appointments and bills |
 | GET | /api/plan/version | Retrieve latest plan version number + timestamp |
 | GET | /api/appointments/:id | Fetch appointment by id |
@@ -40,6 +34,8 @@ Generated 2025-10-15T23:41:01.203Z
 | DELETE | /api/bills/:id | Delete bill |
 | POST | /api/bills/:id/mark-paid | Mark bill as paid |
 | POST | /api/upload/photo | Upload bill photo for OCR + ingestion |
+| GET | /api/review/pending | List pending items requiring manual review |
+| PATCH | /api/review/:itemId | Take action on a pending review item (approve/save/reject) |
 | GET | /api/collaborators | List collaborators for the active recipient |
 | POST | /api/collaborators | Invite a collaborator by email |
 | POST | /api/collaborators/accept | Accept a collaborator invite |
@@ -48,4 +44,5 @@ Generated 2025-10-15T23:41:01.203Z
 | POST | /api/integrations/google/connect | Store Google OAuth tokens and trigger initial sync |
 | DELETE | /api/integrations/google/connect | Disconnect Google Calendar integration |
 | POST | /api/integrations/google/sync | Manually trigger Google Calendar sync |
+| POST | /api/integrations/google/webhook | Google Calendar change notifications webhook |
 | GET | /api/integrations/google/callback | OAuth callback endpoint for Google Calendar integration |

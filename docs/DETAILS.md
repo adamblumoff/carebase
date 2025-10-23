@@ -69,7 +69,7 @@ npm run env:mobile:prod      # Expo → carebase.dev
 
 ### Auth & Sessions
 - Clerk manages hosted sign-in (backend bridge lives in `services/clerkSyncService.ts` + `middleware/attachBearerUser.ts`).
-- Legacy mobile login tokens remain as a temporary bridge via `/api/auth/mobile-login` until the Expo app migrates to Clerk (Phase 5).
+- Clients authenticate by forwarding Clerk session tokens to both REST and realtime endpoints.
 
 ### Request Pipeline
 1. `server.ts` loads env, mounts middleware (JSON, session, bearer-token attach) and registers routers via `routes/registry.ts`.

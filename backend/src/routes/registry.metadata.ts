@@ -13,7 +13,7 @@ export interface RouteMeta {
 export const ROUTER_METADATA: RouterMeta[] = [
   { basePath: '/webhook', scope: 'web', description: 'Inbound Postmark webhook' },
   { basePath: '/collaborators', scope: 'web', description: 'Collaborator invite landing pages' },
-  { basePath: '/api/auth', scope: 'api', description: 'Mobile auth APIs' },
+  { basePath: '/api/auth', scope: 'api', description: 'Clerk-authenticated session APIs' },
   { basePath: '/api/plan', scope: 'api', description: 'Plan data APIs' },
   { basePath: '/api/appointments', scope: 'api', description: 'Appointment CRUD APIs' },
   { basePath: '/api/bills', scope: 'api', description: 'Bill CRUD APIs' },
@@ -25,9 +25,8 @@ export const ROUTER_METADATA: RouterMeta[] = [
 
 export const API_ROUTE_METADATA: RouteMeta[] = [
   { method: 'GET', path: '/api/auth/session', description: 'Return auth status and user profile' },
-  { method: 'POST', path: '/api/auth/logout', description: 'Invalidate current session (mobile)' },
+  { method: 'POST', path: '/api/auth/logout', description: 'Acknowledge logout (Clerk-managed session)' },
   { method: 'GET', path: '/api/auth/user', description: 'Return authenticated user details' },
-  { method: 'POST', path: '/api/auth/mobile-login', description: 'Exchange OAuth token for bearer access token' },
   { method: 'GET', path: '/api/plan', description: 'Retrieve weekly appointments and bills' },
   { method: 'GET', path: '/api/plan/version', description: 'Retrieve latest plan version number + timestamp' },
   { method: 'GET', path: '/api/appointments/:id', description: 'Fetch appointment by id' },
