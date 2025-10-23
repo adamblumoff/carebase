@@ -2,7 +2,7 @@ import type { Socket } from 'socket.io-client';
 import { io as createSocket } from 'socket.io-client';
 import { API_BASE_URL } from '../config';
 import { emitPlanChanged } from './planEvents';
-import { getAccessToken } from '../auth/tokenStorage';
+import { fetchClerkSessionToken } from '../auth/clerkTokenCache';
 
 let socket: Socket | null = null;
 let connecting = false;
@@ -21,9 +21,9 @@ function notifyStatus(status: 'connected' | 'disconnected') {
 
 async function getAuthToken(): Promise<string | null> {
   try {
-    return await getAccessToken();
+    return await fetchClerkSessionToken();
   } catch (error) {
-    console.warn('[Realtime] Failed to load access token', error);
+    console.warn('[Realtime] Failed to resolve Clerk session token', error);
     return null;
   }
 }

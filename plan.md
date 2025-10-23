@@ -64,11 +64,11 @@
      - Emit unauthorized events by calling Clerk `signOut` fallback when needed.
      - Update API-layer tests/mocks for the new token fetcher.
   3. Phase 5C – Auth context & session bootstrap:
-     - Remove legacy token storage helpers; refactor `AuthProvider` to derive status from Clerk `useAuth` and hydrate backend session data.
+     - Refactor `AuthProvider` to derive status from Clerk `useAuth` and hydrate backend session data.
      - Ensure logout delegates to Clerk and clears collaborator/plan state as needed.
      - Update hooks/tests relying on old sign-in semantics.
   4. Phase 5D – UI flows & smoke tests:
-     - Replace `LoginScreen` with Clerk hosted sign-in (email/password/link + Google/Facebook/Apple).
+     - Remove legacy token storage helpers and replace `LoginScreen` with Clerk hosted sign-in (email/password/link + Google/Facebook/Apple).
      - Remove deep link mobile-login exchange; ensure invite flow still works.
      - Run Expo Vitest suite and manual sign-in smoke test.
 

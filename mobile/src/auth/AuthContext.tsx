@@ -1,7 +1,15 @@
-import React, { createContext, useContext, useMemo, useState, useCallback, useEffect, useRef } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useMemo,
+  useState,
+  useCallback,
+  useEffect,
+  useRef
+} from 'react';
 import { checkSession, logout as apiLogout } from '../api/auth';
 import { authEvents } from './authEvents';
-import { getAccessToken, removeAccessToken } from './tokenStorage';
+import { useAuth as useClerkAuth } from '@clerk/clerk-expo';
 
 interface AuthContextValue {
   status: 'loading' | 'signedOut' | 'signedIn';
@@ -16,11 +24,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [status, setStatus] = useState<'loading' | 'signedOut' | 'signedIn'>('loading');
   const [user, setUser] = useState<any | null>(null);
   const signOutInProgress = useRef(false);
+  const { isLoaded, isSignedIn, signOut: clerkSignOut } = useClerkAuth();
 
-const signIn = useCallback((nextUser?: any) => {
-  setUser(nextUser ?? null);
-  setStatus('signedIn');
-}, []);
+  const loadSessionUser = useCallback(async () => {
+    setStatus('loading');
+    try {
+      const session = await checkSession();
+      if (session.authenticated) {
+        setUser(session.user ?? null);
+        setStatus('signedIn');
+      } else {
+        setUser(null);
+        setStatus('signedOut');
+      }
+    } catch (error) {
+      console.error('Session bootstrap error', error);
+      setUser(null);
+      setStatus('signedOut');
+    }
+  }, []);
+
+  const signIn = useCallback(
+    (nextUser?: any) => {
+      if (nextUser) {
+        setUser(nextUser ?? null);
+        setStatus('signedIn');
+        return;
+      }
+      loadSessionUser().catch(() => {
+        // handled in loadSessionUser
+      });
+    },
+    [loadSessionUser]
+  );
 
   const signOut = useCallback(async () => {
     if (status === 'signedOut' || signOutInProgress.current) {
@@ -31,15 +67,17 @@ const signIn = useCallback((nextUser?: any) => {
       await apiLogout().catch((error) => {
         console.warn('Logout call failed', error);
       });
+      await clerkSignOut().catch((error) => {
+        console.warn('Clerk sign out failed', error);
+      });
     } catch (error) {
       console.warn('Logout request error', error);
     } finally {
-      await removeAccessToken().catch(() => {});
       setUser(null);
       setStatus('signedOut');
       signOutInProgress.current = false;
     }
-  }, [status]);
+  }, [status, clerkSignOut]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -54,42 +92,23 @@ const signIn = useCallback((nextUser?: any) => {
   useEffect(() => {
     let mounted = true;
 
-    const bootstrap = async () => {
-      try {
-        const token = await getAccessToken();
-        if (!token) {
-          if (mounted) {
-            setStatus('signedOut');
-          }
-          return;
-        }
+    if (!isLoaded) {
+      return () => {
+        mounted = false;
+      };
+    }
 
-        try {
-          const response = await checkSession();
-          if (response.authenticated && mounted) {
-            setUser(response.user ?? null);
-            setStatus('signedIn');
-            return;
-          }
-        } catch (error) {
-          console.warn('Session check failed, clearing token', error);
-        }
+    if (!isSignedIn) {
+      setUser(null);
+      setStatus('signedOut');
+      return () => {
+        mounted = false;
+      };
+    }
 
-        await removeAccessToken().catch(() => {});
-        if (mounted) {
-          setUser(null);
-          setStatus('signedOut');
-        }
-      } catch (error) {
-        console.error('Auth bootstrap error', error);
-        if (mounted) {
-          setUser(null);
-          setStatus('signedOut');
-        }
-      }
-    };
-
-    bootstrap();
+    loadSessionUser().catch(() => {
+      /* handled in loader */
+    });
 
     const unsubscribe = authEvents.onUnauthorized(() => {
       signOut().catch(() => {});
@@ -99,7 +118,7 @@ const signIn = useCallback((nextUser?: any) => {
       mounted = false;
       unsubscribe();
     };
-  }, [signOut]);
+  }, [isLoaded, isSignedIn, loadSessionUser, signOut]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

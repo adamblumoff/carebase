@@ -1,9 +1,9 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { ensureRealtimeConnected, isRealtimeConnected, addRealtimeStatusListener } from '../realtime';
-import { getAccessToken } from '../../auth/tokenStorage';
+import { fetchClerkSessionToken } from '../../auth/clerkTokenCache';
 
-vi.mock('../../auth/tokenStorage', () => ({
-  getAccessToken: vi.fn()
+vi.mock('../../auth/clerkTokenCache', () => ({
+  fetchClerkSessionToken: vi.fn()
 }));
 
 const mockEmitPlanChanged = vi.fn();
@@ -27,14 +27,14 @@ vi.mock('socket.io-client', () => ({
   }
 }));
 
-const mockedTokenStorage = getAccessToken as unknown as ReturnType<typeof vi.fn>;
+const mockedTokenFetcher = fetchClerkSessionToken as unknown as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.clearAllMocks();
   for (const key of Object.keys(socketHandlers)) {
     delete socketHandlers[key];
   }
-  mockedTokenStorage.mockResolvedValue('token-123');
+  mockedTokenFetcher.mockResolvedValue('token-123');
 });
 
 describe('realtime', () => {

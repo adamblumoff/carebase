@@ -1,3 +1,4 @@
+import React from 'react';
 import { vi } from 'vitest';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -34,4 +35,27 @@ vi.mock('expo-constants', () => ({
   default: {
     expoConfig: { extra: {} }
   }
+}));
+
+const defaultClerkState = {
+  isLoaded: true,
+  isSignedIn: false,
+  signOut: vi.fn().mockResolvedValue(undefined),
+  getToken: vi.fn().mockResolvedValue(null)
+};
+
+vi.mock('@clerk/clerk-expo', () => ({
+  __esModule: true,
+  ClerkProvider: ({ children }: { children?: React.ReactNode }) =>
+    React.createElement(React.Fragment, null, children),
+  ClerkLoaded: ({ children }: { children?: React.ReactNode }) =>
+    React.createElement(React.Fragment, null, children),
+  useAuth: () => ({
+    ...defaultClerkState
+  }),
+  SignedIn: ({ children }: { children?: React.ReactNode }) =>
+    React.createElement(React.Fragment, null, children),
+  SignedOut: ({ children }: { children?: React.ReactNode }) =>
+    React.createElement(React.Fragment, null, children),
+  __clerkMockState: defaultClerkState
 }));
