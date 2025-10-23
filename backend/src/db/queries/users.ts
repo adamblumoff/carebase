@@ -16,6 +16,12 @@ interface UserRow {
   created_at: Date;
 }
 
+interface UserWithFlagsRow extends UserRow {
+  is_owner: boolean;
+  is_contributor: boolean;
+  has_google_credential: boolean;
+}
+
 interface UserMfaStatusRow {
   user_id: number;
   status: UserMfaStatusState;
@@ -95,6 +101,60 @@ export async function setPasswordResetRequired(userId: number, required: boolean
 
 export async function deleteUser(userId: number): Promise<void> {
   await db.query('DELETE FROM users WHERE id = $1', [userId]);
+}
+
+export interface UserBackfillRecord extends User {
+  roles: {
+    owner: boolean;
+    contributor: boolean;
+  };
+  hasGoogleCredential: boolean;
+}
+
+export async function listUsersForClerkBackfill(): Promise<UserBackfillRecord[]> {
+  const result = await db.query<UserWithFlagsRow>(
+    `
+      SELECT
+        u.*,
+        EXISTS (
+          SELECT 1
+          FROM recipients r
+          WHERE r.user_id = u.id
+        ) OR EXISTS (
+          SELECT 1
+          FROM care_collaborators cc
+          WHERE cc.user_id = u.id
+            AND cc.role = 'owner'
+            AND (cc.status = 'accepted' OR cc.status = 'pending')
+        ) AS is_owner,
+        EXISTS (
+          SELECT 1
+          FROM care_collaborators cc
+          WHERE cc.user_id = u.id
+            AND cc.role = 'contributor'
+            AND cc.status = 'accepted'
+        ) AS is_contributor,
+        EXISTS (
+          SELECT 1
+          FROM google_credentials gc
+          WHERE gc.user_id = u.id
+        ) AS has_google_credential
+      FROM users u
+      ORDER BY u.id
+    `
+  );
+
+  return result.rows.map((row) => {
+    const user = userRowToUser(row);
+    return {
+      ...user,
+      roles: {
+        owner: Boolean(row.is_owner),
+        contributor: Boolean(row.is_contributor)
+      },
+      hasGoogleCredential: Boolean(row.has_google_credential)
+    };
+  });
 }
 
 function mapMfaStatusRow(row: UserMfaStatusRow): UserMfaStatus {

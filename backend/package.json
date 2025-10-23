@@ -21,6 +21,7 @@
   "author": "",
   "license": "UNLICENSED",
   "dependencies": {
+    "@clerk/backend": "^2.19.0",
     "@google-cloud/vision": "^4.0.0",
     "chrono-node": "^2.9.0",
     "connect-pg-simple": "^9.0.1",

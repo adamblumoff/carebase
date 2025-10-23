@@ -63,6 +63,7 @@ export {
   findUserById,
   setClerkUserId,
   setPasswordResetRequired,
+  listUsersForClerkBackfill,
   getUserMfaStatus,
   upsertUserMfaStatus
 } from './queries/users.js';
