@@ -15,10 +15,10 @@ declare global {
  * Middleware to ensure user is authenticated
  */
 export function ensureAuthenticated(req: Request, res: Response, next: NextFunction): void {
-  if (req.isAuthenticated()) {
+  if (req.user) {
     return next();
   }
-  res.redirect('/');
+  res.status(401).send('Not authenticated');
 }
 
 /**

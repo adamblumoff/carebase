@@ -10,7 +10,6 @@ This guide captures the full architecture, workflows, and conventions for the Ca
 carebase/
 ├── backend/                # Express + TypeScript API
 │   ├── src/
-│   │   ├── auth/           # Passport + mobile token helpers
 │   │   ├── controllers/    # REST handlers (thin HTTP wrappers)
 │   │   ├── db/             # Query helpers + pg client
 │   │   ├── middleware/     # Express middleware
