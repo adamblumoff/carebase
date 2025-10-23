@@ -1,7 +1,8 @@
 import type { Server as SocketIOServer, Socket } from 'socket.io';
 import type { User } from '@carebase/shared';
 import { verifyMobileAccessToken } from '../auth/mobileTokenService.js';
-import { findUserById } from '../db/queries.js';
+import { findUserById, findUserByClerkUserId } from '../db/queries.js';
+import { verifyClerkSessionToken } from './clerkSyncService.js';
 
 const userRoom = (userId: number) => `user:${userId}`;
 
@@ -26,18 +27,34 @@ async function authenticateSocket(socket: Socket): Promise<User | null> {
     }
   }
 
-  const token = socket.handshake.auth?.token || req.headers?.authorization?.split(' ')[1];
+  const authHeader: string | undefined = req.headers?.authorization;
+  let bearerToken: string | undefined;
+  if (authHeader?.startsWith('Bearer ')) {
+    bearerToken = authHeader.slice(7).trim();
+  }
+
+  const token = socket.handshake.auth?.token || bearerToken;
   if (!token) {
     return null;
   }
 
   const payload = verifyMobileAccessToken(token);
-  if (!payload) {
-    return null;
+  if (payload) {
+    const user = await findUserById(payload.sub);
+    if (user) {
+      return user;
+    }
   }
 
-  const user = await findUserById(payload.sub);
-  return user ?? null;
+  const clerkVerification = await verifyClerkSessionToken(token);
+  if (clerkVerification) {
+    const user = await findUserByClerkUserId(clerkVerification.userId);
+    if (user) {
+      return user;
+    }
+  }
+
+  return null;
 }
 
 export function initRealtime(io: SocketIOServer): void {
