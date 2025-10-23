@@ -150,11 +150,11 @@ test('initial sync pushes pending appointments and stores next sync token', asyn
   assert.ok(linkRows[0].event_id);
   assert.ok(linkRows[0].local_hash);
   assert.ok(linkRows[0].remote_updated_at);
-  const remoteEvent = fakeCalendar.getEvent('primary', linkRows[0].event_id);
+  const remoteEvent = fakeCalendar.getEvent(summary.calendarId, linkRows[0].event_id);
   assert.ok(remoteEvent, 'expected remote event to exist after push');
   const remoteStart = remoteEvent?.start as Record<string, unknown> | undefined;
-  assert.equal(remoteStart?.timeZone, 'UTC');
-  assert.equal(remoteStart?.dateTime, '2025-10-20T16:00:00+00:00');
+  assert.equal(remoteStart?.timeZone, 'America/New_York');
+  assert.equal(remoteStart?.dateTime, '2025-10-20T12:00:00-04:00');
 
   assert.equal(ctx.scheduleCalls.length, 0);
 });
@@ -172,7 +172,7 @@ test('remote updates supersede local appointment when Google timestamp is newer'
   const { userId, itemId, appointmentId } = await seedAppointmentFixture(ctx.pool, { summary: 'Local summary' });
   await seedGoogleCredential(ctx.pool, userId);
 
-  await syncUserWithGoogle(userId, { pullRemote: true });
+  const firstSync = await syncUserWithGoogle(userId, { pullRemote: true });
 
   const { rows: linkRows } = await ctx.exec(
     'SELECT event_id, remote_updated_at FROM google_sync_links WHERE item_id = $1',
@@ -180,7 +180,7 @@ test('remote updates supersede local appointment when Google timestamp is newer'
   );
   assert.equal(linkRows.length, 1);
   const eventId = linkRows[0].event_id as string;
-  const remoteBefore = fakeCalendar.getEvent('primary', eventId);
+  const remoteBefore = fakeCalendar.getEvent(firstSync.calendarId, eventId);
   assert.ok(remoteBefore);
   const previousRemoteUpdatedAt = linkRows[0].remote_updated_at as Date | null;
 
@@ -191,7 +191,7 @@ test('remote updates supersede local appointment when Google timestamp is newer'
   const previousSyncToken = credentialRows[0].sync_token as string | null;
   assert.ok(previousSyncToken);
 
-  fakeCalendar.updateRemoteEvent('primary', eventId, {
+  fakeCalendar.updateRemoteEvent(firstSync.calendarId, eventId, {
     summary: 'Remote authored summary',
     extendedProperties: {
       private: {

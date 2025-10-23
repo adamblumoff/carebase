@@ -15,7 +15,11 @@ import {
   exchangeGoogleAuthorizationCode,
   exchangeGoogleAuthorizationCodeServer,
   type GoogleSyncSummary,
-  stopCalendarWatchForUser
+  stopCalendarWatchForUser,
+  ensureManagedCalendarForUser,
+  migrateEventsToManagedCalendar,
+  refreshManagedCalendarWatch,
+  ensureManagedCalendarAclForUser
 } from './googleSync.js';
 import { UnauthorizedError, ValidationError } from '../utils/errors.js';
 
@@ -125,7 +129,17 @@ export async function handleGoogleCallback(params: {
     lastPulledAt: null
   });
 
-  await queueGoogleSyncForUser(user.id, credential.calendarId ?? null);
+  const managed = await ensureManagedCalendarForUser(credential, exchange.accessToken);
+  const migrationSummary = await migrateEventsToManagedCalendar(credential, exchange.accessToken, managed.calendarId);
+  await refreshManagedCalendarWatch(
+    credential,
+    exchange.accessToken,
+    managed.calendarId,
+    migrationSummary.previousCalendarIds
+  );
+  await ensureManagedCalendarAclForUser(credential, exchange.accessToken, managed.calendarId);
+
+  await queueGoogleSyncForUser(user.id, managed.calendarId);
 
   return { redirect: 'carebase://integrations/google?status=success' };
 }
@@ -181,7 +195,7 @@ export async function connectGoogleIntegration(
     throw new ValidationError({ code: 'missing_tokens', message: 'Missing Google OAuth tokens' });
   }
 
-  await upsertGoogleCredential(user.id, {
+  const credential = await upsertGoogleCredential(user.id, {
     accessToken,
     refreshToken,
     scope,
@@ -193,11 +207,21 @@ export async function connectGoogleIntegration(
     lastPulledAt: null
   });
 
-  await queueGoogleSyncForUser(user.id, calendarId);
- 
+  const managed = await ensureManagedCalendarForUser(credential, accessToken);
+  const migrationSummary = await migrateEventsToManagedCalendar(credential, accessToken, managed.calendarId);
+  await refreshManagedCalendarWatch(
+    credential,
+    accessToken,
+    managed.calendarId,
+    migrationSummary.previousCalendarIds
+  );
+  await ensureManagedCalendarAclForUser(credential, accessToken, managed.calendarId);
+
+  await queueGoogleSyncForUser(user.id, managed.calendarId);
+
   const summary = await syncUserWithGoogle(user.id, {
     forceFull: true,
-    calendarId,
+    calendarId: managed.calendarId,
     pullRemote: true
   });
 
