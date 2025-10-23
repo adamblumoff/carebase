@@ -9,6 +9,7 @@ export async function attachBearerUser(req: Request, res: Response, next: NextFu
     if (!req.user && typeof (req as any).auth === 'function') {
       try {
         const authState = (req as any).auth();
+        console.log('[Auth] Clerk middleware auth state', authState);
         if (authState?.userId) {
           const user = await findUserByClerkUserId(authState.userId);
           if (user) {

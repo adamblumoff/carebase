@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import '../src/env.js';
+import process from 'node:process';
 
 import { createClerkClient } from '@clerk/backend';
 import type { User } from '@clerk/backend/dist/api/resources/User';
@@ -110,8 +111,15 @@ async function loadClerkUser(
     }
   }
 
-  const list = await clerkClient.users.getUserList({ emailAddress: [email], limit: 1 });
-  return Array.isArray(list) && list.length > 0 ? list[0] : null;
+  try {
+    const list = await clerkClient.users.getUserList({ emailAddress: [email], limit: 1 });
+    return Array.isArray(list) && list.length > 0 ? list[0] : null;
+  } catch (error) {
+    if ((error as any)?.status === 404) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 async function updateClerkMetadata(
@@ -137,7 +145,7 @@ async function updateClerkMetadata(
   });
 }
 
-async function process(): Promise<void> {
+async function run(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   const clerkClient = getClerkClient();
   if (!clerkClient) {
@@ -205,7 +213,7 @@ async function process(): Promise<void> {
   console.log('Summary:', summary);
 }
 
-process()
+run()
   .then(() => dbClient.end())
   .catch(async (error) => {
     console.error('Fatal error while marking Clerk Google re-link flags:', error);
