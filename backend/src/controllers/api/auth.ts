@@ -43,13 +43,7 @@ export async function getSession(req: Request, res: Response): Promise<void> {
 }
 
 export function postLogout(req: Request, res: Response): void {
-  req.logout((err) => {
-    if (err) {
-      res.status(500).json({ error: 'Logout failed' });
-      return;
-    }
-    res.json({ success: true });
-  });
+  res.json({ success: true });
 }
 
 export async function getUser(req: Request, res: Response): Promise<void> {

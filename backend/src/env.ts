@@ -41,7 +41,6 @@ const isTestEnv = process.env.NODE_ENV === 'test';
 
 // Provide deterministic secrets during test runs to keep suites hermetic.
 if (isTestEnv) {
-  process.env.SESSION_SECRET ??= 'test-session-secret';
   process.env.MOBILE_AUTH_SECRET ??= 'test-mobile-secret';
   process.env.GOOGLE_AUTH_STATE_SECRET ??= 'test-google-state-secret';
   process.env.GOOGLE_CREDENTIALS_ENCRYPTION_KEY ??= 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
@@ -55,7 +54,6 @@ interface RequiredSetting {
 
 const requiredSettings: RequiredSetting[] = [
   { key: 'DATABASE_URL', description: 'Postgres connection string' },
-  { key: 'SESSION_SECRET', description: 'express-session HMAC secret' },
   { key: 'MOBILE_AUTH_SECRET', description: 'JWT signing secret for mobile tokens' },
   { key: 'GOOGLE_AUTH_STATE_SECRET', description: 'Google OAuth state signing secret' },
   { key: 'GOOGLE_CREDENTIALS_ENCRYPTION_KEY', description: 'AES key for Google credential encryption' },
@@ -80,8 +78,6 @@ if (missing.length > 0) {
 }
 
 const duplicateSecrets = [
-  ['MOBILE_AUTH_SECRET', 'SESSION_SECRET'],
-  ['GOOGLE_AUTH_STATE_SECRET', 'SESSION_SECRET'],
   ['GOOGLE_AUTH_STATE_SECRET', 'MOBILE_AUTH_SECRET']
 ]
   .filter(([primary, fallback]) => {

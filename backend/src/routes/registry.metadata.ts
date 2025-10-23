@@ -11,7 +11,6 @@ export interface RouteMeta {
 }
 
 export const ROUTER_METADATA: RouterMeta[] = [
-  { basePath: '/auth', scope: 'web', description: 'Web auth + session management' },
   { basePath: '/webhook', scope: 'web', description: 'Inbound Postmark webhook' },
   { basePath: '/collaborators', scope: 'web', description: 'Collaborator invite landing pages' },
   { basePath: '/api/auth', scope: 'api', description: 'Mobile auth APIs' },

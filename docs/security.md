@@ -5,13 +5,9 @@ This document tracks the security controls currently in place across the Carebas
 ## Implemented Controls
 
 - **Mandatory Secrets & Config Guardrails**
-  - Backend boot fails fast if any critical secret is missing (`SESSION_SECRET`, `MOBILE_AUTH_SECRET`, `GOOGLE_AUTH_STATE_SECRET`, `GOOGLE_CREDENTIALS_ENCRYPTION_KEY`, Google OAuth creds, `DATABASE_URL`).
+  - Backend boot fails fast if any critical secret is missing (`MOBILE_AUTH_SECRET`, `GOOGLE_AUTH_STATE_SECRET`, `GOOGLE_CREDENTIALS_ENCRYPTION_KEY`, Google OAuth creds, `DATABASE_URL`).
   - OCR service account keys now load from the `OCR_SERVICE_ACCOUNT_JSON` env secret (base64 or raw JSON), eliminating the need to ship credential files.
   - Deterministic test-only secrets prevent suites from polluting real values.
-
-- **Session Hardening**
-  - Express sessions persist in Postgres via `connect-pg-simple`, enabling horizontal scaling.
-  - Cookies are `httpOnly`, `sameSite=strict`, and marked `secure` in production.
 
 - **Database Transport Security**
   - TLS enforced by default; provide the Railway CA via `DATABASE_SSL_CA` or `DATABASE_SSL_CA_BASE64` so we keep `rejectUnauthorized: true`.

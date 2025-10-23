@@ -68,9 +68,8 @@ npm run env:mobile:prod      # Expo → carebase.dev
 ## 3. Backend Architecture
 
 ### Auth & Sessions
-- Google OAuth via Passport (`backend/src/auth/passport.ts`).
-- Web login persists a session (express-session); mobile sign-in trades the OAuth code for a JWT via `issueMobileLoginToken`.
-- `mobile/src/App.tsx` handles the deep-link containing `loginToken` and then exchanges it through `/api/auth/mobile-login`.
+- Clerk manages hosted sign-in (backend bridge lives in `services/clerkSyncService.ts` + `middleware/attachBearerUser.ts`).
+- Legacy mobile login tokens remain as a temporary bridge via `/api/auth/mobile-login` until the Expo app migrates to Clerk (Phase 5).
 
 ### Request Pipeline
 1. `server.ts` loads env, mounts middleware (JSON, session, bearer-token attach) and registers routers via `routes/registry.ts`.

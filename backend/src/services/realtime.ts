@@ -20,14 +20,6 @@ async function authenticateSocket(socket: Socket): Promise<User | null> {
     return req.user as User;
   }
 
-  const sessionUserId = req.session?.passport?.user;
-  if (sessionUserId) {
-    const user = await findUserById(sessionUserId);
-    if (user) {
-      return user;
-    }
-  }
-
   const authHeader: string | undefined = req.headers?.authorization;
   let bearerToken: string | undefined;
   if (authHeader?.startsWith('Bearer ')) {
