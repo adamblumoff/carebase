@@ -269,4 +269,27 @@ export async function findCollaboratorByToken(token: string): Promise<Collaborat
   return result.rows[0] ? collaboratorRowToCollaborator(result.rows[0] as CollaboratorRow) : undefined;
 }
 
+export async function listAcceptedCollaboratorEmailsForOwner(userId: number): Promise<string[]> {
+  try {
+    await ensureCollaboratorSchema();
+  } catch (error) {
+    if (!(error instanceof Error) || !/Not supported/i.test(error.message)) {
+      throw error;
+    }
+  }
+  const result = await db.query(
+    `SELECT DISTINCT LOWER(c.email) AS email
+     FROM care_collaborators c
+     JOIN recipients r ON c.recipient_id = r.id
+     WHERE r.user_id = $1
+       AND c.status = 'accepted'
+       AND c.role IN ('owner', 'contributor')
+       AND (c.user_id IS NULL OR c.user_id <> $1)`,
+    [userId]
+  );
+  return result.rows
+    .map((row) => (row.email as string | null)?.trim())
+    .filter((email): email is string => Boolean(email));
+}
+
 export { ensureCollaboratorSchema };

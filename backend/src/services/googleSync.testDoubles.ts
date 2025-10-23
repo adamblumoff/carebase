@@ -25,11 +25,26 @@ interface FetchResult {
   body?: Record<string, unknown> | null;
 }
 
+interface CalendarMetadata {
+  id: string;
+  summary: string;
+  timeZone: string;
+}
+
+interface CalendarAclEntry {
+  role: string;
+  scopeType: string;
+  scopeValue: string;
+}
+
 export class FakeGoogleCalendarApi {
   private calendars = new Map<string, CalendarState>();
+  private calendarMetadata = new Map<string, CalendarMetadata>();
+  private calendarAcls = new Map<string, Map<string, CalendarAclEntry>>();
   private requestLog: Array<{ method: string; url: string }> = [];
   private tokenCounter = 1;
   private eventCounter = 1;
+  private calendarCounter = 1;
   private clockMs = Date.parse('2025-10-17T00:00:00.000Z');
   private originalFetch: typeof fetch | null = null;
 
@@ -49,13 +64,47 @@ export class FakeGoogleCalendarApi {
     }
     this.requestLog = [];
     this.calendars.clear();
+    this.calendarMetadata.clear();
+    this.calendarAcls.clear();
     this.tokenCounter = 1;
     this.eventCounter = 1;
+    this.calendarCounter = 1;
     this.clockMs = Date.parse('2025-10-17T00:00:00.000Z');
   }
 
   log(): Array<{ method: string; url: string }> {
     return [...this.requestLog];
+  }
+
+  seedCalendarList(calendars: Array<{ id: string; summary: string; timeZone?: string }>): void {
+    for (const calendar of calendars) {
+      this.calendarMetadata.set(calendar.id, {
+        id: calendar.id,
+        summary: calendar.summary,
+        timeZone: calendar.timeZone ?? 'UTC'
+      });
+      this.ensureCalendar(calendar.id);
+    }
+  }
+
+  seedCalendarAcl(calendarId: string, entries: Array<{ email: string; role: string }>): void {
+    const acl = this.ensureCalendarAcl(calendarId);
+    for (const entry of entries) {
+      const normalized = entry.email.toLowerCase();
+      acl.set(normalized, {
+        role: entry.role,
+        scopeType: 'user',
+        scopeValue: normalized
+      });
+    }
+  }
+
+  getCalendarAcl(calendarId: string): CalendarAclEntry[] {
+    const acl = this.calendarAcls.get(calendarId);
+    if (!acl) {
+      return [];
+    }
+    return Array.from(acl.values()).map((entry) => ({ ...entry }));
   }
 
   seedCalendar(calendarId: string, events: FakeEvent[]): void {
@@ -141,6 +190,16 @@ export class FakeGoogleCalendarApi {
     if (existing) {
       return existing;
     }
+    if (!this.calendarMetadata.has(normalized)) {
+      this.calendarMetadata.set(normalized, {
+        id: normalized,
+        summary: normalized,
+        timeZone: 'UTC'
+      });
+    }
+    if (!this.calendarAcls.has(normalized)) {
+      this.calendarAcls.set(normalized, new Map());
+    }
     const created: CalendarState = {
       events: new Map<string, FakeEvent>(),
       version: 0,
@@ -190,10 +249,34 @@ export class FakeGoogleCalendarApi {
   private handleCalendarRequest(url: string, method: string, payload?: Record<string, unknown>): FetchResult {
     const parsed = new URL(url);
     const segments = parsed.pathname.split('/').filter(Boolean);
+
+    if (segments[2] === 'users' && segments[3] === 'me' && segments[4] === 'calendarList' && method === 'GET') {
+      return this.handleCalendarList();
+    }
+
+    if (segments[2] === 'calendars' && segments.length === 3) {
+      if (method === 'POST') {
+        return this.handleInsertCalendar(payload ?? {});
+      }
+      if (method === 'GET') {
+        return this.handleCalendarList();
+      }
+    }
+
+    if (segments[2] === 'calendars' && segments.length === 4 && method === 'GET') {
+      const calendarId = decodeURIComponent(segments[3]);
+      return this.handleGetCalendar(calendarId);
+    }
+
     const calendarId = segments[3] ? decodeURIComponent(segments[3]) : 'primary';
     const resource = segments[4] ?? '';
 
     if (resource === 'events') {
+      if (method === 'POST' && segments.length > 6 && segments[6] === 'move') {
+        const eventId = decodeURIComponent(segments[5]);
+        const destination = parsed.searchParams.get('destination');
+        return this.handleMoveEvent(calendarId, eventId, destination);
+      }
       if (method === 'GET') {
         if (segments.length > 5) {
           const eventId = decodeURIComponent(segments[5]);
@@ -213,7 +296,16 @@ export class FakeGoogleCalendarApi {
       }
     }
 
-    if (segments[4] === 'channels' && segments[5] === 'stop' && method === 'POST') {
+    if (resource === 'acl') {
+      if (method === 'GET') {
+        return this.handleAclList(calendarId);
+      }
+      if (method === 'POST') {
+        return this.handleAclInsert(calendarId, payload ?? {});
+      }
+    }
+
+    if (segments[2] === 'channels' && segments[3] === 'stop' && method === 'POST') {
       return { status: 204, body: null };
     }
 
@@ -323,6 +415,56 @@ export class FakeGoogleCalendarApi {
     };
   }
 
+  private handleMoveEvent(
+    calendarId: string,
+    eventId: string,
+    destinationCalendarId: string | null
+  ): FetchResult {
+    if (!destinationCalendarId) {
+      return {
+        status: 400,
+        body: {
+          error: {
+            code: 400,
+            message: 'Missing destination calendar'
+          }
+        }
+      };
+    }
+
+    const sourceState = this.ensureCalendar(calendarId);
+    const existing = sourceState.events.get(eventId);
+    if (!existing) {
+      return {
+        status: 404,
+        body: {
+          error: {
+            code: 404,
+            message: 'Event not found'
+          }
+        }
+      };
+    }
+
+    sourceState.events.delete(eventId);
+
+    const destinationState = this.ensureCalendar(destinationCalendarId);
+    const version = ++destinationState.version;
+    const updated = this.bumpClock();
+    const moved: FakeEvent = {
+      ...existing,
+      updated,
+      etag: `"${version}"`,
+      version
+    };
+    destinationState.events.set(eventId, moved);
+
+    return {
+      status: 200,
+      body: { ...moved }
+    };
+  }
+
   private handleWatch(calendarId: string): FetchResult {
     return {
       status: 200,
@@ -331,6 +473,139 @@ export class FakeGoogleCalendarApi {
         expiration: Date.now() + 60 * 60 * 1000
       }
     };
+  }
+
+  private handleAclInsert(calendarId: string, payload: Record<string, unknown>): FetchResult {
+    const scope = payload.scope as { type?: string; value?: string } | undefined;
+    const role = typeof payload.role === 'string' ? payload.role : undefined;
+    if (!role || !scope?.type || !scope.value) {
+      return {
+        status: 400,
+        body: {
+          error: {
+            code: 400,
+            message: 'Invalid ACL payload'
+          }
+        }
+      };
+    }
+
+    const normalizedValue = scope.value.toLowerCase();
+    const acl = this.ensureCalendarAcl(calendarId);
+    if (acl.has(normalizedValue)) {
+      return {
+        status: 409,
+        body: {
+          error: {
+            code: 409,
+            message: 'Scope already exists'
+          }
+        }
+      };
+    }
+
+    acl.set(normalizedValue, {
+      role,
+      scopeType: scope.type,
+      scopeValue: normalizedValue
+    });
+
+    return {
+      status: 200,
+      body: {
+        id: normalizedValue,
+        role,
+        scope: {
+          type: scope.type,
+          value: normalizedValue
+        }
+      }
+    };
+  }
+
+  private handleAclList(calendarId: string): FetchResult {
+    const acl = this.ensureCalendarAcl(calendarId);
+    const items = Array.from(acl.values()).map((entry) => ({
+      id: entry.scopeValue,
+      role: entry.role,
+      scope: {
+        type: entry.scopeType,
+        value: entry.scopeValue
+      }
+    }));
+    return {
+      status: 200,
+      body: {
+        items
+      }
+    };
+  }
+
+  private handleCalendarList(): FetchResult {
+    const items = Array.from(this.calendarMetadata.values()).map((calendar) => ({
+      id: calendar.id,
+      summary: calendar.summary,
+      timeZone: calendar.timeZone
+    }));
+    return {
+      status: 200,
+      body: { items }
+    };
+  }
+
+  private handleInsertCalendar(payload: Record<string, unknown>): FetchResult {
+    const summary =
+      typeof payload.summary === 'string' && payload.summary.trim().length > 0
+        ? payload.summary.trim()
+        : `Calendar ${this.calendarCounter}`;
+    const timeZone =
+      typeof payload.timeZone === 'string' && payload.timeZone.trim().length > 0
+        ? payload.timeZone.trim()
+        : 'UTC';
+    const id = `fake-calendar-${this.calendarCounter++}`;
+    this.calendarMetadata.set(id, {
+      id,
+      summary,
+      timeZone
+    });
+    this.ensureCalendar(id);
+    return {
+      status: 200,
+      body: {
+        id,
+        summary,
+        timeZone
+      }
+    };
+  }
+
+  private handleGetCalendar(calendarId: string): FetchResult {
+    const metadata = this.calendarMetadata.get(calendarId);
+    if (!metadata) {
+      return {
+        status: 404,
+        body: {
+          error: {
+            code: 404,
+            message: 'Calendar not found'
+          }
+        }
+      };
+    }
+    return {
+      status: 200,
+      body: { ...metadata }
+    };
+  }
+
+  private ensureCalendarAcl(calendarId: string): Map<string, CalendarAclEntry> {
+    const normalized = decodeURIComponent(calendarId);
+    let acl = this.calendarAcls.get(normalized);
+    if (!acl) {
+      acl = new Map<string, CalendarAclEntry>();
+      this.calendarAcls.set(normalized, acl);
+    }
+    return acl;
   }
 
   private buildResponse(result: FetchResult): Response {

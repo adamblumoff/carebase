@@ -243,6 +243,12 @@ interface GoogleCredentialRow {
   calendar_id: string | null;
   sync_token: string | null;
   last_pulled_at: Date | null;
+  managed_calendar_id: string | null;
+  managed_calendar_summary: string | null;
+  managed_calendar_state: string | null;
+  managed_calendar_verified_at: Date | null;
+  managed_calendar_acl_role: string | null;
+  legacy_calendar_id: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -315,6 +321,12 @@ export interface GoogleCredential {
   calendarId: string | null;
   syncToken: string | null;
   lastPulledAt: Date | null;
+  managedCalendarId: string | null;
+  managedCalendarSummary: string | null;
+  managedCalendarState: string | null;
+  managedCalendarVerifiedAt: Date | null;
+  managedCalendarAclRole: string | null;
+  legacyCalendarId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -384,6 +396,12 @@ async function googleCredentialRowToCredential(row: GoogleCredentialRow): Promis
     calendarId: row.calendar_id,
     syncToken: row.sync_token,
     lastPulledAt: row.last_pulled_at,
+    managedCalendarId: row.managed_calendar_id ?? null,
+    managedCalendarSummary: row.managed_calendar_summary ?? null,
+    managedCalendarState: row.managed_calendar_state ?? null,
+    managedCalendarVerifiedAt: row.managed_calendar_verified_at ?? null,
+    managedCalendarAclRole: row.managed_calendar_acl_role ?? null,
+    legacyCalendarId: row.legacy_calendar_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -413,6 +431,12 @@ export async function upsertGoogleCredential(
     calendarId?: string | null;
     syncToken?: string | null;
     lastPulledAt?: Date | null;
+    managedCalendarId?: string | null;
+    managedCalendarSummary?: string | null;
+    managedCalendarState?: string | null;
+    managedCalendarVerifiedAt?: Date | null;
+    managedCalendarAclRole?: string | null;
+    legacyCalendarId?: string | null;
   }
 ): Promise<GoogleCredential> {
   await ensureGoogleIntegrationSchema();
@@ -436,10 +460,20 @@ export async function upsertGoogleCredential(
         calendar_id,
         sync_token,
         last_pulled_at,
+        managed_calendar_id,
+        managed_calendar_summary,
+        managed_calendar_state,
+        managed_calendar_verified_at,
+        managed_calendar_acl_role,
+        legacy_calendar_id,
         created_at,
         updated_at
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+     VALUES (
+       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+       $11, $12, $13, $14, $15, $16,
+       NOW(), NOW()
+     )
      ON CONFLICT (user_id)
      DO UPDATE SET
        access_token = EXCLUDED.access_token,
@@ -451,6 +485,12 @@ export async function upsertGoogleCredential(
        calendar_id = EXCLUDED.calendar_id,
        sync_token = EXCLUDED.sync_token,
        last_pulled_at = EXCLUDED.last_pulled_at,
+       managed_calendar_id = EXCLUDED.managed_calendar_id,
+       managed_calendar_summary = EXCLUDED.managed_calendar_summary,
+       managed_calendar_state = EXCLUDED.managed_calendar_state,
+       managed_calendar_verified_at = EXCLUDED.managed_calendar_verified_at,
+       managed_calendar_acl_role = EXCLUDED.managed_calendar_acl_role,
+       legacy_calendar_id = EXCLUDED.legacy_calendar_id,
        updated_at = NOW()
     RETURNING *`,
     [
@@ -463,7 +503,13 @@ export async function upsertGoogleCredential(
       encryptedIdToken,
       data.calendarId ?? null,
       data.syncToken ?? null,
-      data.lastPulledAt ?? null
+      data.lastPulledAt ?? null,
+      data.managedCalendarId ?? null,
+      data.managedCalendarSummary ?? null,
+      data.managedCalendarState ?? null,
+      data.managedCalendarVerifiedAt ?? null,
+      data.managedCalendarAclRole ?? null,
+      data.legacyCalendarId ?? null
     ]
   );
   return googleCredentialRowToCredential(result.rows[0] as GoogleCredentialRow);
@@ -822,6 +868,27 @@ export async function listPendingGoogleSyncItems(
     itemId: row.item_id as number,
     itemType: row.detected_type as ItemType,
     recipientId: row.recipient_id as number
+  }));
+}
+
+export async function listGoogleSyncLinksForUser(
+  userId: number
+): Promise<Array<{ itemId: number; calendarId: string | null; eventId: string | null; itemType: ItemType }>> {
+  await ensureGoogleIntegrationSchema();
+  const result = await db.query(
+    `SELECT gsl.item_id, gsl.calendar_id, gsl.event_id, i.detected_type
+     FROM google_sync_links gsl
+     JOIN items i ON gsl.item_id = i.id
+     JOIN recipients r ON i.recipient_id = r.id
+     WHERE r.user_id = $1`,
+    [userId]
+  );
+
+  return result.rows.map((row) => ({
+    itemId: row.item_id as number,
+    calendarId: (row.calendar_id as string | null) ?? null,
+    eventId: (row.event_id as string | null) ?? null,
+    itemType: row.detected_type as ItemType
   }));
 }
 

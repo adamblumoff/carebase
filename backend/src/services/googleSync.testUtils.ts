@@ -267,6 +267,8 @@ const GOOGLE_SYNC_TEST_SCHEMA = `
     end_local TIMESTAMPTZ NOT NULL,
     start_time_zone TEXT,
     end_time_zone TEXT,
+    start_offset TEXT,
+    end_offset TEXT,
     location TEXT,
     prep_note TEXT,
     summary TEXT NOT NULL,
@@ -313,6 +315,12 @@ const GOOGLE_SYNC_TEST_SCHEMA = `
     calendar_id TEXT,
     sync_token TEXT,
     last_pulled_at TIMESTAMPTZ,
+    managed_calendar_id TEXT,
+    managed_calendar_summary TEXT,
+    managed_calendar_state TEXT DEFAULT 'pending',
+    managed_calendar_verified_at TIMESTAMPTZ,
+    managed_calendar_acl_role TEXT,
+    legacy_calendar_id TEXT,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
   );

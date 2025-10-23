@@ -29,6 +29,7 @@ export {
   listGoogleWatchChannelsByUser,
   listGoogleConnectedUserIds,
   listPendingGoogleSyncItems,
+  listGoogleSyncLinksForUser,
   markGoogleSyncError,
   markGoogleSyncPending,
   markGoogleSyncSuccess,
@@ -48,6 +49,7 @@ export {
   findRecipientForCollaborator,
   hasCollaboratorInviteForEmail,
   listCollaborators,
+  listAcceptedCollaboratorEmailsForOwner,
   resolveRecipientContextForUser
 } from './queries/collaborators.js';
 
