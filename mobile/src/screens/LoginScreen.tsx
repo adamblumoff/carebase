@@ -216,6 +216,13 @@ export default function LoginScreen() {
     setInfo(null);
 
     try {
+      if (clerkAuth.isSignedIn) {
+        try {
+          await clerkAuth.signOut();
+        } catch (signOutError: any) {
+          console.warn('[Auth] Failed to clear existing Clerk session before OAuth', signOutError);
+        }
+      }
       console.log(`[Auth] Starting ${provider} OAuth flow`);
       const result = await flow.startOAuthFlow();
       console.log('[Auth] OAuth flow result', result);

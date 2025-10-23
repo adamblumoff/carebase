@@ -19,7 +19,12 @@ import {
   CLERK_SIGN_UP_URL,
   CLERK_JWT_TEMPLATE
 } from './src/config';
-import { clerkTokenCache, setClerkTokenFetcher } from './src/auth/clerkTokenCache';
+import {
+  clerkTokenCache,
+  setClerkTokenFetcher,
+  fetchClerkSessionToken,
+  clearClerkTokenCache
+} from './src/auth/clerkTokenCache';
 
 function SplashScreen() {
   const { colorScheme, palette } = useTheme();
@@ -82,20 +87,36 @@ function AppBootstrap() {
   );
 }
 
+const TOKEN_REFRESH_INTERVAL_MS = 4 * 60 * 1000;
+
 function ClerkTokenBridge(): null {
   const { getToken, isSignedIn } = useClerkAuth();
 
   useEffect(() => {
-    setClerkTokenFetcher(() => {
-      if (!isSignedIn) {
-        return Promise.resolve(null);
-      }
-      const options = CLERK_JWT_TEMPLATE ? { template: CLERK_JWT_TEMPLATE } : undefined;
-      return getToken(options).catch(() => null);
-    });
+    if (!isSignedIn) {
+      setClerkTokenFetcher(null);
+      clearClerkTokenCache();
+      return () => {};
+    }
+
+    const options = CLERK_JWT_TEMPLATE ? { template: CLERK_JWT_TEMPLATE } : undefined;
+    setClerkTokenFetcher(() => getToken(options).catch(() => null));
+
+    const prime = async () => {
+      await fetchClerkSessionToken();
+    };
+    prime().catch(() => {});
+
+    const interval = setInterval(() => {
+      fetchClerkSessionToken().catch(() => {});
+    }, TOKEN_REFRESH_INTERVAL_MS);
 
     return () => {
+      clearInterval(interval);
       setClerkTokenFetcher(null);
+      if (!isSignedIn) {
+        clearClerkTokenCache();
+      }
     };
   }, [getToken, isSignedIn]);
 

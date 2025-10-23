@@ -134,11 +134,22 @@ function metadataChanged(
 }
 
 async function findUserByEmail(clerkClient: ClerkClient, email: string) {
-  const response = await clerkClient.users.getUserList({ emailAddress: [email], limit: 1 });
-  if (Array.isArray(response) && response.length > 0) {
-    return response[0];
+  try {
+    const response = await clerkClient.users.getUserList({ emailAddress: [email], limit: 1 });
+    if (Array.isArray(response) && response.length > 0) {
+      return response[0];
+    }
+    return null;
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      const fallback = await clerkClient.users.getUserList({ limit: 100 });
+      if (Array.isArray(fallback)) {
+        return fallback.find((entry) => entry.emailAddresses?.some((addr: any) => addr.emailAddress?.toLowerCase() === email.toLowerCase())) ?? null;
+      }
+      return null;
+    }
+    throw error;
   }
-  return null;
 }
 
 function isNotFoundError(error: unknown): boolean {
@@ -276,34 +287,6 @@ export async function verifyClerkSessionToken(token: string): Promise<ClerkToken
   const sessionId = decoded.sid;
 
   try {
-    const session = await clerkClient.sessions.verifySession(sessionId, token);
-    const expiresAt = session.expireAt ? new Date(session.expireAt).getTime() : decoded.exp ? decoded.exp * 1000 : undefined;
-
-    logClerk('Verified Clerk session via API', {
-      clerkUserId: session.userId,
-      sessionId: session.id,
-      expiresAt: expiresAt ?? null
-    });
-
-    incrementMetric('clerk.token.verify', 1, {
-      hasSession: 'yes'
-    });
-
-    return {
-      userId: session.userId,
-      sessionId: session.id,
-      expiresAt
-    };
-  } catch (error) {
-    const status = (error as { status?: number }).status;
-    console.warn('[ClerkSync] Clerk session verify via API failed:', (error as Error).message);
-    if (status !== 404 && status !== 403) {
-      incrementMetric('clerk.token.verify', 1, { outcome: 'error' });
-      return null;
-    }
-  }
-
-  try {
     if (!cachedJwks) {
       const issuerUrl = new URL(decoded.iss);
       cachedJwks = createRemoteJWKSet(new URL('/.well-known/jwks.json', issuerUrl));
@@ -322,7 +305,8 @@ export async function verifyClerkSessionToken(token: string): Promise<ClerkToken
     });
 
     incrementMetric('clerk.token.verify', 1, {
-      hasSession: payloadSessionId ? 'yes' : 'no'
+      hasSession: payloadSessionId ? 'yes' : 'no',
+      via: 'jwks'
     });
 
     return {
@@ -335,15 +319,47 @@ export async function verifyClerkSessionToken(token: string): Promise<ClerkToken
     if (process.env.NODE_ENV !== 'production') {
       console.warn('[ClerkSync] JWKS verification error details:', error);
     }
-    incrementMetric('clerk.token.verify', 1, { outcome: 'error' });
-    if (decoded?.sub) {
-      console.warn('[ClerkSync] Falling back to decoded token payload (verification skipped)');
-      return {
-        userId: String(decoded.sub),
-        sessionId: decoded.sid ? String(decoded.sid) : null,
-        expiresAt: decoded.exp ? decoded.exp * 1000 : undefined
-      };
-    }
-    return null;
+    incrementMetric('clerk.token.verify', 1, { outcome: 'jwks_error' });
   }
+
+  try {
+    const session = await clerkClient.sessions.verifySession(sessionId, token);
+    const expiresAt = session.expireAt ? new Date(session.expireAt).getTime() : decoded.exp ? decoded.exp * 1000 : undefined;
+
+    logClerk('Verified Clerk session via API', {
+      clerkUserId: session.userId,
+      sessionId: session.id,
+      expiresAt: expiresAt ?? null
+    });
+
+    incrementMetric('clerk.token.verify', 1, {
+      hasSession: 'yes',
+      via: 'api'
+    });
+
+    return {
+      userId: session.userId,
+      sessionId: session.id,
+      expiresAt
+    };
+  } catch (error) {
+    const status = (error as { status?: number }).status;
+    console.warn('[ClerkSync] Clerk session verify via API failed:', (error as Error).message);
+    if (status !== 404 && status !== 403) {
+      incrementMetric('clerk.token.verify', 1, { outcome: 'error' });
+      return null;
+    }
+  }
+
+  if (decoded?.sub) {
+    incrementMetric('clerk.token.verify', 1, { outcome: 'error' });
+    console.warn('[ClerkSync] Falling back to decoded token payload (verification skipped)');
+    return {
+      userId: String(decoded.sub),
+      sessionId: decoded.sid ? String(decoded.sid) : null,
+      expiresAt: decoded.exp ? decoded.exp * 1000 : undefined
+    };
+  }
+
+  return null;
 }

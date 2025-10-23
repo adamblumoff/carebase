@@ -181,7 +181,7 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
-    if (authStatus !== 'signedIn') {
+    if (authStatus === 'signedOut') {
       hasPlanRef.current = false;
       cacheLoadedRef.current = false;
       latestVersionRef.current = 0;
@@ -193,6 +193,12 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
         clearTimeout(pollTimerRef.current);
         pollTimerRef.current = null;
       }
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (authStatus !== 'signedIn') {
       return () => {
         cancelled = true;
       };

@@ -46,7 +46,9 @@ export function CollaboratorProvider({ children }: { children: React.ReactNode }
 
   const loadCollaborators = useCallback(async () => {
     if (auth.status !== 'signedIn') {
-      resetState();
+      if (auth.status === 'signedOut') {
+        resetState();
+      }
       return;
     }
 
@@ -71,8 +73,12 @@ export function CollaboratorProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     let active = true;
-    if (auth.status !== 'signedIn') {
+    if (auth.status === 'signedOut') {
       resetState();
+      return;
+    }
+
+    if (auth.status !== 'signedIn') {
       return;
     }
 
@@ -90,7 +96,9 @@ export function CollaboratorProvider({ children }: { children: React.ReactNode }
 
   const refresh = useCallback(async () => {
     if (auth.status !== 'signedIn') {
-      resetState();
+      if (auth.status === 'signedOut') {
+        resetState();
+      }
       return;
     }
     await loadCollaborators();

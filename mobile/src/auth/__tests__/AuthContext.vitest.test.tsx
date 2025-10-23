@@ -6,10 +6,15 @@ import { authEvents } from '../authEvents';
 const checkSessionMock = vi.fn();
 const logoutMock = vi.fn();
 const clerkSignOutMock = vi.fn();
+const clearClerkTokenCacheMock = vi.fn();
 
 vi.mock('../../api/auth', () => ({
   checkSession: () => checkSessionMock(),
   logout: () => logoutMock(),
+}));
+
+vi.mock('../clerkTokenCache', () => ({
+  clearClerkTokenCache: () => clearClerkTokenCacheMock(),
 }));
 
 const clerkState = {
@@ -36,7 +41,8 @@ vi.mock('@clerk/clerk-expo', () => ({
     isLoaded: clerkState.isLoaded,
     isSignedIn: clerkState.isSignedIn,
     signOut: () => clerkSignOutMock(),
-    getToken: vi.fn().mockResolvedValue(null)
+    getToken: vi.fn().mockResolvedValue(null),
+    setActive: vi.fn(),
   }),
   useSignIn: () => ({
     isLoaded: true,
@@ -87,6 +93,7 @@ describe('AuthProvider', () => {
     checkSessionMock.mockReset();
     checkSessionMock.mockResolvedValue({ authenticated: false, user: null });
     logoutMock.mockReset();
+    clearClerkTokenCacheMock.mockReset();
   });
 
   it('stays signedOut when Clerk reports signed out', async () => {
@@ -111,6 +118,7 @@ describe('AuthProvider', () => {
     await waitFor(() => {
       expect(latest.current?.status).toBe('signedIn');
       expect(latest.current?.user).toEqual(user);
+      expect(checkSessionMock).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -147,6 +155,41 @@ describe('AuthProvider', () => {
     });
   });
 
+  it('keeps signedIn status during background session refresh', async () => {
+    clerkState.isSignedIn = true;
+    const user = { email: 'user@test.com' };
+    checkSessionMock.mockResolvedValueOnce({ authenticated: true, user });
+
+    const latest = renderAuthProvider();
+
+    await waitFor(() => {
+      expect(latest.current?.status).toBe('signedIn');
+    });
+
+    let resolveSession: ((value: any) => void) | null = null;
+    checkSessionMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveSession = resolve;
+        })
+    );
+
+    act(() => {
+      latest.current?.signIn();
+    });
+
+    expect(latest.current?.status).toBe('signedIn');
+
+    await act(async () => {
+      resolveSession?.({ authenticated: true, user });
+    });
+
+    await waitFor(() => {
+      expect(checkSessionMock).toHaveBeenCalledTimes(2);
+      expect(latest.current?.status).toBe('signedIn');
+    });
+  });
+
   it('signOut calls backend + Clerk once', async () => {
     clerkState.isSignedIn = true;
     checkSessionMock
@@ -173,6 +216,7 @@ describe('AuthProvider', () => {
       expect(clerkSignOutMock).toHaveBeenCalledTimes(1);
       expect(latest.current?.status).toBe('signedOut');
       expect(latest.current?.user).toBeNull();
+      expect(clearClerkTokenCacheMock).toHaveBeenCalled();
     });
   });
 
@@ -202,6 +246,7 @@ describe('AuthProvider', () => {
       expect(clerkSignOutMock).toHaveBeenCalled();
       expect(latest.current?.status).toBe('signedOut');
       expect(latest.current?.user).toBeNull();
+      expect(clearClerkTokenCacheMock).toHaveBeenCalled();
     });
   });
 });

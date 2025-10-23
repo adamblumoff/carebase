@@ -5,10 +5,11 @@ import React, {
   useState,
   useCallback,
   useEffect,
-  useRef
+  useRef,
 } from 'react';
 import { checkSession, logout as apiLogout } from '../api/auth';
 import { authEvents } from './authEvents';
+import { clearClerkTokenCache } from './clerkTokenCache';
 import { useAuth as useClerkAuth } from '@clerk/clerk-expo';
 
 interface AuthContextValue {
@@ -25,28 +26,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<any | null>(null);
   const signOutInProgress = useRef(false);
   const statusRef = useRef<'loading' | 'signedOut' | 'signedIn'>(status);
+  const bootstrappedRef = useRef(false);
+  const sessionRequestRef = useRef<Promise<void> | null>(null);
+  const clerkSignedInRef = useRef<boolean | null>(null);
   const { isLoaded, isSignedIn, signOut: clerkSignOut } = useClerkAuth();
 
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
 
-  const loadSessionUser = useCallback(async () => {
-    setStatus('loading');
-    try {
-      const session = await checkSession();
-      if (session.authenticated) {
-        setUser(session.user ?? null);
-        setStatus('signedIn');
-      } else {
+  type LoadSessionOptions = {
+    initial?: boolean;
+    keepSignedIn?: boolean;
+  };
+
+  const loadSessionUser = useCallback(async (options: LoadSessionOptions = {}) => {
+    const { initial = false, keepSignedIn = false } = options;
+
+    if (sessionRequestRef.current) {
+      return sessionRequestRef.current;
+    }
+
+    if (initial) {
+      setStatus('loading');
+    } else if (!keepSignedIn) {
+      setStatus('loading');
+    }
+
+    const request = (async () => {
+      try {
+        const session = await checkSession();
+        if (session.authenticated) {
+          setUser(session.user ?? null);
+          setStatus('signedIn');
+        } else {
+          setUser(null);
+          setStatus('signedOut');
+        }
+      } catch (error) {
+        console.error('Session bootstrap error', error);
         setUser(null);
         setStatus('signedOut');
+      } finally {
+        bootstrappedRef.current = true;
+        sessionRequestRef.current = null;
       }
-    } catch (error) {
-      console.error('Session bootstrap error', error);
-      setUser(null);
-      setStatus('signedOut');
-    }
+    })();
+
+    sessionRequestRef.current = request;
+    return request;
   }, []);
 
   const signIn = useCallback(
@@ -54,9 +82,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (nextUser) {
         setUser(nextUser ?? null);
         setStatus('signedIn');
+        bootstrappedRef.current = true;
         return;
       }
-      loadSessionUser().catch(() => {
+      loadSessionUser({ keepSignedIn: true }).catch(() => {
         // handled in loadSessionUser
       });
     },
@@ -69,17 +98,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     signOutInProgress.current = true;
     try {
-      await apiLogout().catch((error) => {
-        console.warn('Logout call failed', error);
-      });
-      await clerkSignOut().catch((error) => {
-        console.warn('Clerk sign out failed', error);
-      });
+      await Promise.allSettled([
+        clerkSignOut().catch((error) => {
+          console.warn('Clerk sign out failed', error);
+        }),
+        apiLogout().catch((error) => {
+          console.warn('Logout call failed', error);
+        })
+      ]);
+      clearClerkTokenCache();
+      setUser(null);
+      setStatus('signedOut');
     } catch (error) {
       console.warn('Logout request error', error);
     } finally {
-      setUser(null);
-      setStatus('signedOut');
       signOutInProgress.current = false;
     }
   }, [clerkSignOut]);
@@ -99,9 +131,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return () => {};
     }
 
-    loadSessionUser().catch(() => {
-      /* handled in loader */
-    });
+    const wasSignedIn = clerkSignedInRef.current;
+
+    if (!bootstrappedRef.current) {
+      clerkSignedInRef.current = isSignedIn;
+      loadSessionUser({ initial: true, keepSignedIn: isSignedIn }).catch(() => {
+        /* handled in loader */
+      });
+    } else if (isSignedIn && !wasSignedIn) {
+      loadSessionUser({ keepSignedIn: true }).catch(() => {
+        /* handled in loader */
+      });
+      clerkSignedInRef.current = true;
+    } else if (!isSignedIn && wasSignedIn) {
+      clearClerkTokenCache();
+      setUser(null);
+      setStatus('signedOut');
+      clerkSignedInRef.current = false;
+    } else {
+      clerkSignedInRef.current = isSignedIn;
+    }
 
     const unsubscribe = authEvents.onUnauthorized(() => {
       signOut().catch(() => {});

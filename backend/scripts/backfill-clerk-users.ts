@@ -152,11 +152,24 @@ async function findUserByEmail(
   clerkClient: ReturnType<typeof createClerkClient>,
   email: string
 ) {
-  const list = await clerkClient.users.getUserList({ emailAddress: [email], limit: 1 });
-  if (!Array.isArray(list) || list.length === 0) {
-    return null;
+  try {
+    const list = await clerkClient.users.getUserList({ emailAddress: [email], limit: 1 });
+    if (!Array.isArray(list) || list.length === 0) {
+      return null;
+    }
+    return list[0];
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      const fallback = await clerkClient.users.getUserList({ limit: 100 });
+      if (Array.isArray(fallback)) {
+        return fallback.find((entry) =>
+          entry.emailAddresses?.some((addr: any) => addr.emailAddress?.toLowerCase() === email.toLowerCase())
+        ) ?? null;
+      }
+      return null;
+    }
+    throw error;
   }
-  return list[0];
 }
 
 async function syncUser(
