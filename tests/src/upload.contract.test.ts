@@ -8,11 +8,12 @@ import { applySchema, wireDbClient } from './helpers/db.js';
 
 process.env.NODE_ENV = 'test';
 
-async function seedUserAndRecipient(pool: any) {
+async function seedUserAndRecipient(pool: any): Promise<{ user: User; recipientId: number }> {
+  const googleId = 'google-upload-owner';
   const userResult = await pool.query(
-    `INSERT INTO users (email, google_id, forwarding_address, plan_secret)
-     VALUES ($1, $2, $3, $4) RETURNING *`,
-    ['upload-owner@example.com', 'google-upload-owner', 'owner-forward@example.com', 'owner-secret']
+    `INSERT INTO users (email, google_id, legacy_google_id, forwarding_address, plan_secret)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    ['upload-owner@example.com', googleId, googleId, 'owner-forward@example.com', 'owner-secret']
   );
   const userRow = userResult.rows[0];
   const recipientResult = await pool.query(
@@ -22,7 +23,19 @@ async function seedUserAndRecipient(pool: any) {
   );
   const recipientRow = recipientResult.rows[0];
   return {
-    userId: userRow.id as number,
+    user: {
+      id: userRow.id as number,
+      email: userRow.email as string,
+      googleId: userRow.google_id as string | null,
+      legacyGoogleId: userRow.legacy_google_id as string | null,
+      clerkUserId: userRow.clerk_user_id as string | null,
+      passwordResetRequired: Boolean(userRow.password_reset_required),
+      forwardingAddress: userRow.forwarding_address as string,
+      planSecret: userRow.plan_secret as string,
+      planVersion: (userRow.plan_version as number) ?? 0,
+      planUpdatedAt: userRow.plan_updated_at as Date,
+      createdAt: userRow.created_at as Date
+    },
     recipientId: recipientRow.id as number
   };
 }
@@ -43,8 +56,8 @@ test('POST /api/upload/photo skips bill creation without supporting fields', asy
   t.after(() => wiring.restore());
 
   const { pool } = wiring;
-  const { userId } = await seedUserAndRecipient(pool);
-  const testUser = { id: userId } as User;
+  const { user } = await seedUserAndRecipient(pool);
+  const testUser = user;
 
   const ocrModule = await import('../../backend/src/services/ocr.js');
   const storageModule = await import('../../backend/src/services/storage.js');
@@ -93,8 +106,8 @@ test('POST /api/upload/photo creates bill when supporting fields present', async
   t.after(() => wiring.restore());
 
   const { pool } = wiring;
-  const { userId } = await seedUserAndRecipient(pool);
-  const testUser = { id: userId } as User;
+  const { user } = await seedUserAndRecipient(pool);
+  const testUser = user;
 
   const ocrModule = await import('../../backend/src/services/ocr.js');
   const storageModule = await import('../../backend/src/services/storage.js');

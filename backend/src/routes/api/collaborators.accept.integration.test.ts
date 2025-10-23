@@ -14,6 +14,9 @@ function createTestUser(overrides: Partial<User> = {}): User {
     id: overrides.id ?? 1,
     email: overrides.email ?? 'user@example.com',
     googleId: overrides.googleId ?? `google-${overrides.id ?? 1}`,
+    legacyGoogleId: overrides.legacyGoogleId ?? overrides.googleId ?? `google-${overrides.id ?? 1}`,
+    clerkUserId: overrides.clerkUserId ?? null,
+    passwordResetRequired: overrides.passwordResetRequired ?? false,
     forwardingAddress: overrides.forwardingAddress ?? `forward+${overrides.id ?? 1}@example.com`,
     planSecret: overrides.planSecret ?? `secret-${overrides.id ?? 1}`,
     planVersion: overrides.planVersion ?? 0,
@@ -37,12 +40,22 @@ const baseSchema = `
   CREATE TABLE users (
     id SERIAL PRIMARY KEY,
     email TEXT NOT NULL,
-    google_id TEXT NOT NULL,
+    google_id TEXT UNIQUE,
+    legacy_google_id TEXT UNIQUE,
+    clerk_user_id TEXT UNIQUE,
+    password_reset_required BOOLEAN NOT NULL DEFAULT false,
     forwarding_address TEXT NOT NULL,
     plan_secret TEXT NOT NULL,
     plan_version INTEGER NOT NULL DEFAULT 0,
     plan_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE users_mfa_status (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    status TEXT NOT NULL,
+    last_transition_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    grace_expires_at TIMESTAMP
   );
 
   CREATE TABLE recipients (
@@ -107,14 +120,14 @@ test('POST /api/collaborators/accept updates collaborator and returns payload', 
   const invitee = createTestUser({ id: 11, email: 'invitee@example.com' });
 
   await pool.query(
-    `INSERT INTO users (id, email, google_id, forwarding_address, plan_secret)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [owner.id, owner.email, owner.googleId, owner.forwardingAddress, owner.planSecret]
+    `INSERT INTO users (id, email, google_id, legacy_google_id, forwarding_address, plan_secret)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [owner.id, owner.email, owner.googleId, owner.legacyGoogleId, owner.forwardingAddress, owner.planSecret]
   );
   await pool.query(
-    `INSERT INTO users (id, email, google_id, forwarding_address, plan_secret)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [invitee.id, invitee.email, invitee.googleId, invitee.forwardingAddress, invitee.planSecret]
+    `INSERT INTO users (id, email, google_id, legacy_google_id, forwarding_address, plan_secret)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [invitee.id, invitee.email, invitee.googleId, invitee.legacyGoogleId, invitee.forwardingAddress, invitee.planSecret]
   );
 
   const { rows: [recipient] } = await pool.query(
@@ -189,14 +202,14 @@ test('POST /api/collaborators/accept rejects mismatched email', async (t) => {
   const invitee = createTestUser({ id: 21, email: 'invitee@example.com' });
 
   await pool.query(
-    `INSERT INTO users (id, email, google_id, forwarding_address, plan_secret)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [owner.id, owner.email, owner.googleId, owner.forwardingAddress, owner.planSecret]
+    `INSERT INTO users (id, email, google_id, legacy_google_id, forwarding_address, plan_secret)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [owner.id, owner.email, owner.googleId, owner.legacyGoogleId, owner.forwardingAddress, owner.planSecret]
   );
   await pool.query(
-    `INSERT INTO users (id, email, google_id, forwarding_address, plan_secret)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [invitee.id, invitee.email, invitee.googleId, invitee.forwardingAddress, invitee.planSecret]
+    `INSERT INTO users (id, email, google_id, legacy_google_id, forwarding_address, plan_secret)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [invitee.id, invitee.email, invitee.googleId, invitee.legacyGoogleId, invitee.forwardingAddress, invitee.planSecret]
   );
 
   const { rows: [recipient] } = await pool.query(

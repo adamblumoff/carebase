@@ -8,12 +8,24 @@
 export interface User {
   id: number;
   email: string;
-  googleId: string;
+  googleId: string | null;
+  legacyGoogleId: string | null;
+  clerkUserId: string | null;
+  passwordResetRequired: boolean;
   forwardingAddress: string;
   planSecret: string;
   planVersion: number;
   planUpdatedAt: Date;
   createdAt: Date;
+}
+
+export type UserMfaStatusState = 'pending' | 'grace' | 'required' | 'enrolled';
+
+export interface UserMfaStatus {
+  userId: number;
+  status: UserMfaStatusState;
+  lastTransitionAt: Date | null;
+  graceExpiresAt: Date | null;
 }
 
 // ========== RECIPIENTS ==========

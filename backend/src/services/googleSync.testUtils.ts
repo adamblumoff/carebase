@@ -208,12 +208,22 @@ const GOOGLE_SYNC_TEST_SCHEMA = `
   CREATE TABLE users (
     id SERIAL PRIMARY KEY,
     email TEXT NOT NULL UNIQUE,
-    google_id TEXT NOT NULL UNIQUE,
+    google_id TEXT UNIQUE,
+    legacy_google_id TEXT UNIQUE,
+    clerk_user_id TEXT UNIQUE,
+    password_reset_required BOOLEAN NOT NULL DEFAULT false,
     forwarding_address TEXT NOT NULL UNIQUE,
     plan_secret TEXT NOT NULL,
     plan_version INTEGER NOT NULL DEFAULT 0,
     plan_updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE users_mfa_status (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    status TEXT NOT NULL,
+    last_transition_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    grace_expires_at TIMESTAMPTZ
   );
 
   CREATE TABLE recipients (

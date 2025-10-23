@@ -30,6 +30,9 @@ async function seedPlanFixture(pool: any): Promise<TestUsers> {
     id: 10,
     email: 'owner@example.com',
     googleId: 'google-owner',
+     legacyGoogleId: 'google-owner',
+     clerkUserId: null,
+     passwordResetRequired: false,
     forwardingAddress: 'owner-forward@example.com',
     planSecret: 'secret-owner',
     planVersion: 3,
@@ -41,6 +44,9 @@ async function seedPlanFixture(pool: any): Promise<TestUsers> {
     id: 11,
     email: 'collaborator@example.com',
     googleId: 'google-collaborator',
+     legacyGoogleId: 'google-collaborator',
+     clerkUserId: null,
+     passwordResetRequired: false,
     forwardingAddress: 'collab-forward@example.com',
     planSecret: 'secret-collaborator',
     planVersion: 1,
@@ -49,12 +55,15 @@ async function seedPlanFixture(pool: any): Promise<TestUsers> {
   } satisfies User;
 
   await pool.query(
-    `INSERT INTO users (id, email, google_id, forwarding_address, plan_secret, plan_version, plan_updated_at, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    `INSERT INTO users (id, email, google_id, legacy_google_id, clerk_user_id, password_reset_required, forwarding_address, plan_secret, plan_version, plan_updated_at, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
     [
       owner.id,
       owner.email,
       owner.googleId,
+      owner.legacyGoogleId,
+      owner.clerkUserId,
+      owner.passwordResetRequired,
       owner.forwardingAddress,
       owner.planSecret,
       owner.planVersion,
@@ -64,12 +73,15 @@ async function seedPlanFixture(pool: any): Promise<TestUsers> {
   );
 
   await pool.query(
-    `INSERT INTO users (id, email, google_id, forwarding_address, plan_secret, plan_version, plan_updated_at, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    `INSERT INTO users (id, email, google_id, legacy_google_id, clerk_user_id, password_reset_required, forwarding_address, plan_secret, plan_version, plan_updated_at, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
     [
       collaborator.id,
       collaborator.email,
       collaborator.googleId,
+      collaborator.legacyGoogleId,
+      collaborator.clerkUserId,
+      collaborator.passwordResetRequired,
       collaborator.forwardingAddress,
       collaborator.planSecret,
       collaborator.planVersion,

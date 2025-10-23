@@ -2,7 +2,10 @@
 CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
   email VARCHAR(255) NOT NULL UNIQUE,
-  google_id VARCHAR(255) NOT NULL UNIQUE,
+  google_id VARCHAR(255) UNIQUE,
+  legacy_google_id VARCHAR(255) UNIQUE,
+  clerk_user_id VARCHAR(255) UNIQUE,
+  password_reset_required BOOLEAN NOT NULL DEFAULT false,
   forwarding_address VARCHAR(255) NOT NULL UNIQUE,
   plan_secret VARCHAR(64) NOT NULL,
   plan_version INTEGER NOT NULL DEFAULT 0,
@@ -11,10 +14,34 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS legacy_google_id VARCHAR(255) UNIQUE;
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS clerk_user_id VARCHAR(255) UNIQUE;
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS password_reset_required BOOLEAN NOT NULL DEFAULT false;
+
+ALTER TABLE users
   ADD COLUMN IF NOT EXISTS plan_version INTEGER NOT NULL DEFAULT 0;
 
 ALTER TABLE users
   ADD COLUMN IF NOT EXISTS plan_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+ALTER TABLE users
+  ALTER COLUMN google_id DROP NOT NULL;
+
+UPDATE users
+  SET legacy_google_id = google_id
+  WHERE google_id IS NOT NULL
+    AND legacy_google_id IS DISTINCT FROM google_id;
+
+CREATE TABLE IF NOT EXISTS users_mfa_status (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  status VARCHAR(10) NOT NULL CHECK (status IN ('pending', 'grace', 'required', 'enrolled')),
+  last_transition_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  grace_expires_at TIMESTAMP
+);
 
 -- Recipients table (care recipients)
 CREATE TABLE IF NOT EXISTS recipients (

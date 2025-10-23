@@ -16,13 +16,15 @@ function nextValue(prefix: string): string {
 }
 
 async function createUser(ctx: { exec: (query: string, params?: any[]) => Promise<{ rows: any[] }> }): Promise<number> {
+  const googleId = nextValue('google');
   const { rows } = await ctx.exec(
-    `INSERT INTO users (email, google_id, forwarding_address, plan_secret)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO users (email, google_id, legacy_google_id, forwarding_address, plan_secret)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING id`,
     [
       `${nextValue('user')}@example.com`,
-      nextValue('google'),
+      googleId,
+      googleId,
       `${nextValue('forward')}@carebase.test`,
       nextValue('secret')
     ]

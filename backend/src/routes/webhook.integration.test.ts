@@ -20,12 +20,22 @@ test('inbound email webhook creates bill, bumps plan version, and emits realtime
     CREATE TABLE users (
       id SERIAL PRIMARY KEY,
       email TEXT NOT NULL,
-      google_id TEXT NOT NULL,
+      google_id TEXT UNIQUE,
+      legacy_google_id TEXT UNIQUE,
+      clerk_user_id TEXT UNIQUE,
+      password_reset_required BOOLEAN NOT NULL DEFAULT false,
       forwarding_address TEXT NOT NULL,
       plan_secret TEXT NOT NULL,
       plan_version INTEGER NOT NULL DEFAULT 0,
       plan_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE users_mfa_status (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      status TEXT NOT NULL,
+      last_transition_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      grace_expires_at TIMESTAMP
     );
 
     CREATE TABLE recipients (
@@ -147,10 +157,10 @@ test('inbound email webhook creates bill, bumps plan version, and emits realtime
   });
 
   const { rows: [user] } = await pool.query(
-    `INSERT INTO users (email, google_id, forwarding_address, plan_secret)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO users (email, google_id, legacy_google_id, forwarding_address, plan_secret)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING *`,
-    ['caregiver@example.com', 'google-123', 'user-forward@carebase.test', 'secret-token']
+    ['caregiver@example.com', 'google-123', 'google-123', 'user-forward@carebase.test', 'secret-token']
   );
 
   const { rows: [recipient] } = await pool.query(

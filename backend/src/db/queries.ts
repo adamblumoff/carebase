@@ -58,7 +58,13 @@ export {
   deleteUser,
   findUserByEmail,
   findUserByGoogleId,
-  findUserById
+  findUserByLegacyGoogleId,
+  findUserByClerkUserId,
+  findUserById,
+  setClerkUserId,
+  setPasswordResetRequired,
+  getUserMfaStatus,
+  upsertUserMfaStatus
 } from './queries/users.js';
 
 export {
