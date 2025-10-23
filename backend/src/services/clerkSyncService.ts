@@ -1,5 +1,5 @@
 import type { ClerkClient, Session } from '@clerk/backend';
-import { createClerkClient } from '@clerk/backend';
+import { createClerkClient, verifyToken } from '@clerk/backend';
 import type { UserBackfillRecord } from '../db/queries/users.js';
 import {
   getUserForClerkBackfill,
@@ -28,6 +28,12 @@ export interface ClerkSessionResult {
   sessionToken: string;
   created: boolean;
   metadataUpdated: boolean;
+}
+
+export interface ClerkTokenVerification {
+  userId: string;
+  sessionId: string | null;
+  expiresAt?: number;
 }
 
 export function getClerkClient(): ClerkClient | null {
@@ -268,4 +274,43 @@ export async function createClerkBridgeSession(userId: number): Promise<ClerkSes
     created: syncResult.created,
     metadataUpdated: syncResult.metadataUpdated
   };
+}
+
+export async function verifyClerkSessionToken(token: string): Promise<ClerkTokenVerification | null> {
+  const secretKey = process.env.CLERK_SECRET_KEY;
+  if (!secretKey) {
+    return null;
+  }
+
+  try {
+    const payload = await verifyToken(token, {
+      secretKey,
+      apiUrl: process.env.CLERK_API_URL,
+      apiVersion: process.env.CLERK_API_VERSION ?? '2021-02-01'
+    });
+
+    if (!payload) {
+      return null;
+    }
+
+    const userId = (payload as any).sub ?? (payload as any).userId ?? (payload as any).user_id;
+    if (!userId) {
+      return null;
+    }
+
+    const sessionId = (payload as any).sid ?? (payload as any).session_id ?? null;
+    const expiresAt =
+      typeof (payload as any).exp === 'number' ? ((payload as any).exp as number) * 1000 : undefined;
+
+    return {
+      userId: String(userId),
+      sessionId: sessionId ? String(sessionId) : null,
+      expiresAt
+    };
+  } catch (error) {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[ClerkSync] Clerk token verification failed:', (error as Error).message);
+    }
+    return null;
+  }
 }
