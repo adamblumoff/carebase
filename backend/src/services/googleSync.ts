@@ -13,14 +13,9 @@ import {
   updateAppointment,
   updateBill,
   markGoogleSyncPending,
-  listGoogleConnectedUserIds,
-  findGoogleSyncLinkByEvent,
   upsertGoogleSyncLink,
-  listGoogleSyncLinksForUser,
-  listAcceptedCollaboratorEmailsForOwner,
-  type GoogleCredential,
+  type GoogleCredential
 } from '../db/queries.js';
-import { getClient } from '../db/client.js';
 import { getGoogleSyncConfig, isTestEnv } from './googleSync/config.js';
 import { logError, logInfo, logWarn } from './googleSync/logger.js';
 import {
@@ -39,13 +34,9 @@ import {
 } from './googleSync/managedCalendars.js';
 import {
   ensureCalendarWatchForUser,
-  refreshExpiringGoogleWatches,
   handleGoogleWatchNotification as handleGoogleWatchNotificationInternal,
   stopCalendarWatchForUser as stopCalendarWatchForUserInternal,
-  configureWatchEnvironment,
-  setWatchScheduleCallback,
-  setWatchTestSchedulerOverride,
-  resetWatchStateForTests
+  configureWatchEnvironment
 } from './googleSync/watchers.js';
 import {
   calculateAppointmentHash,
@@ -60,11 +51,19 @@ import type {
   GoogleSyncOptions,
   SyncError,
   GoogleSyncSummary,
-  SyncRunner,
-  RetryState,
-  AuthenticatedCredential,
   GoogleEventResource
 } from './googleSync/types.js';
+import {
+  initializeGoogleSyncRuntime,
+  setSyncRunner,
+  scheduleGoogleSyncForUser,
+  startGoogleSyncPolling,
+  stopGoogleSyncPolling,
+  __setGoogleSyncRunnerForTests,
+  __resetGoogleSyncStateForTests,
+  __setGoogleSyncSchedulerForTests,
+  __setGoogleSyncLockBehaviorForTests
+} from './googleSync/runtime.js';
 import { formatDateTimeWithTimeZone } from '../utils/timezone.js';
 
 export type { GoogleSyncSummary } from './googleSync/types.js';
@@ -78,7 +77,16 @@ export {
   handleGoogleWatchNotificationInternal as handleGoogleWatchNotification,
   stopCalendarWatchForUserInternal as stopCalendarWatchForUser
 };
-const GOOGLE_SYNC_LOCK_NAMESPACE = 0x4753;
+export { pullGoogleChanges } from './googleSync/syncOperations.js';
+export {
+  scheduleGoogleSyncForUser,
+  startGoogleSyncPolling,
+  stopGoogleSyncPolling,
+  __setGoogleSyncRunnerForTests,
+  __resetGoogleSyncStateForTests,
+  __setGoogleSyncSchedulerForTests,
+  __setGoogleSyncLockBehaviorForTests
+} from './googleSync/runtime.js';
 
 const {
   lookbackDays: DEFAULT_LOOKBACK_DAYS,
@@ -95,17 +103,15 @@ const IS_TEST_ENV = isTestEnv();
 
 configureWatchEnvironment({ isTestEnv: IS_TEST_ENV, enableSyncInTest: ENABLE_SYNC_IN_TEST });
 
-const debounceTimers = new Map<number, NodeJS.Timeout>();
-const retryTimers = new Map<number, RetryState>();
-const runningSyncs = new Set<number>();
-const followUpRequested = new Set<number>();
-let pollingTimer: NodeJS.Timeout | null = null;
-let advisoryLocksSupported = true;
-let locksDisabledForTests = false;
-let lockHookForTests: ((userId: number) => boolean | Promise<boolean>) | null = null;
-let testSchedulerOverride: ((userId: number, debounceMs: number) => void) | null = null;
-
-let syncRunner: SyncRunner;
+initializeGoogleSyncRuntime({
+  debounceMs: DEFAULT_DEBOUNCE_MS,
+  retryBaseMs: DEFAULT_RETRY_BASE_MS,
+  retryMaxMs: MAX_RETRY_MS,
+  pollIntervalMs: DEFAULT_POLL_INTERVAL_MS,
+  enableSyncInTest: ENABLE_SYNC_IN_TEST,
+  enablePollingFallback: ENABLE_POLLING_FALLBACK,
+  isTestEnv: IS_TEST_ENV
+});
 
 export async function refreshManagedCalendarWatch(
   credential: GoogleCredential,
@@ -360,225 +366,7 @@ export async function syncUserWithGoogle(userId: number, options: GoogleSyncOpti
   return summary;
 }
 
-syncRunner = syncUserWithGoogle;
-
-export { pullGoogleChanges };
-
-function computeRetryDelay(userId: number): number {
-  const current = retryTimers.get(userId);
-  const attempt = (current?.attempt ?? 0) + 1;
-  const delay = Math.min(DEFAULT_RETRY_BASE_MS * 2 ** (attempt - 1), MAX_RETRY_MS);
-  return delay;
-}
-
-async function withSyncLock<T>(userId: number, action: () => Promise<T>): Promise<{ acquired: boolean; value?: T }> {
-  if (locksDisabledForTests) {
-    const value = await action();
-    return { acquired: true, value };
-  }
-
-  if (lockHookForTests) {
-    const decision = await lockHookForTests(userId);
-    if (!decision) {
-      return { acquired: false };
-    }
-    const value = await action();
-    return { acquired: true, value };
-  }
-
-  if (!advisoryLocksSupported) {
-    const value = await action();
-    return { acquired: true, value };
-  }
-
-  const client = await getClient();
-  let acquired = false;
-  let lockAttempted = false;
-  try {
-    try {
-      const result = await client.query<{ acquired: boolean }>(
-        'SELECT pg_try_advisory_lock($1::int, $2::int) AS acquired',
-        [GOOGLE_SYNC_LOCK_NAMESPACE, userId]
-      );
-      lockAttempted = true;
-      acquired = Boolean(result.rows[0]?.acquired);
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        /pg_try_advisory_lock/.test(error.message ?? '')
-      ) {
-        advisoryLocksSupported = false;
-        logWarn(
-          'Postgres advisory locks unavailable; falling back to process-local sync coordination',
-          error instanceof Error ? error.message : String(error)
-        );
-      } else {
-        throw error;
-      }
-    }
-
-    if (!lockAttempted || !advisoryLocksSupported) {
-      const value = await action();
-      return { acquired: true, value };
-    }
-
-    if (!acquired) {
-      return { acquired: false };
-    }
-
-    const value = await action();
-    return { acquired: true, value };
-  } finally {
-    if (acquired) {
-      try {
-        await client.query('SELECT pg_advisory_unlock($1::int, $2::int)', [GOOGLE_SYNC_LOCK_NAMESPACE, userId]);
-      } catch (error) {
-        logWarn(
-          'Failed to release Google sync advisory lock',
-          error instanceof Error ? error.message : String(error)
-        );
-      }
-    }
-    client.release();
-  }
-}
-
-async function performSync(userId: number): Promise<void> {
-  if (runningSyncs.has(userId)) {
-    followUpRequested.add(userId);
-    return;
-  }
-
-  runningSyncs.add(userId);
-  let lockAcquired = false;
-  let summary: GoogleSyncSummary | null = null;
-  try {
-    const result = await withSyncLock(userId, async () => {
-      lockAcquired = true;
-      const syncSummary = await syncRunner(userId, { pullRemote: true });
-      retryTimers.delete(userId);
-      return syncSummary;
-    });
-
-    if (!lockAcquired || !result.acquired) {
-      logInfo('Skipped Google sync because advisory lock is held elsewhere', { userId });
-      scheduleGoogleSyncForUser(userId, DEFAULT_DEBOUNCE_MS);
-      return;
-    }
-
-    summary = result.value ?? null;
-    if (!summary) {
-      return;
-    }
-
-    logInfo(
-      `user=${userId} pushed=${summary.pushed} pulled=${summary.pulled} deleted=${summary.deleted} errors=${summary.errors.length}`
-    );
-  } catch (error) {
-    if (!lockAcquired) {
-      logWarn(
-        `Google sync lock contention resulted in error`,
-        error instanceof Error ? error.message : String(error)
-      );
-      scheduleGoogleSyncForUser(userId, DEFAULT_DEBOUNCE_MS);
-      return;
-    }
-    const delay = computeRetryDelay(userId);
-    const message = error instanceof Error ? error.message : String(error);
-    logError(`user=${userId} sync failed (${message}). Retrying in ${delay}ms`);
-    const existing = retryTimers.get(userId);
-    if (existing?.timer) {
-      clearTimeout(existing.timer);
-    }
-    const timer = setTimeout(() => {
-      retryTimers.delete(userId);
-      void performSync(userId);
-    }, delay);
-    retryTimers.set(userId, { attempt: (existing?.attempt ?? 0) + 1, timer });
-    return;
-  } finally {
-    runningSyncs.delete(userId);
-  }
-
-  if (followUpRequested.has(userId)) {
-    followUpRequested.delete(userId);
-    scheduleGoogleSyncForUser(userId);
-  }
-}
-
-export function scheduleGoogleSyncForUser(userId: number, debounceMs: number = DEFAULT_DEBOUNCE_MS): void {
-  logInfo('Scheduling Google sync', { userId, debounceMs });
-  if (testSchedulerOverride) {
-    testSchedulerOverride(userId, debounceMs);
-    return;
-  }
-  if (IS_TEST_ENV && !ENABLE_SYNC_IN_TEST) {
-    return;
-  }
-  if (runningSyncs.has(userId)) {
-    followUpRequested.add(userId);
-    return;
-  }
-
-  const existing = debounceTimers.get(userId);
-  if (existing) {
-    clearTimeout(existing);
-  }
-
-  const retry = retryTimers.get(userId);
-  if (retry?.timer) {
-    clearTimeout(retry.timer);
-  }
-  retryTimers.delete(userId);
-
-  if (debounceMs <= 0) {
-    debounceTimers.delete(userId);
-    void performSync(userId);
-    return;
-  }
-
-  const timer = setTimeout(() => {
-    debounceTimers.delete(userId);
-    void performSync(userId);
-  }, debounceMs);
-  debounceTimers.set(userId, timer);
-}
-
-setWatchScheduleCallback(scheduleGoogleSyncForUser);
-
-export function __setGoogleSyncRunnerForTests(runner?: SyncRunner): void {
-  syncRunner = runner ?? syncUserWithGoogle;
-}
-
-export function __resetGoogleSyncStateForTests(): void {
-  testSchedulerOverride = null;
-  resetWatchStateForTests();
-  debounceTimers.forEach((timer) => clearTimeout(timer));
-  debounceTimers.clear();
-  retryTimers.forEach(({ timer }) => timer && clearTimeout(timer));
-  retryTimers.clear();
-  runningSyncs.clear();
-  followUpRequested.clear();
-  advisoryLocksSupported = true;
-  locksDisabledForTests = false;
-  lockHookForTests = null;
-  syncRunner = syncUserWithGoogle;
-}
-
-export function __setGoogleSyncSchedulerForTests(
-  scheduler: ((userId: number, debounceMs: number) => void) | null
-): void {
-  testSchedulerOverride = scheduler;
-  setWatchTestSchedulerOverride(scheduler);
-}
-
-export function __setGoogleSyncLockBehaviorForTests(options?: {
-  disableLocks?: boolean;
-  acquireHook?: (userId: number) => boolean | Promise<boolean>;
-}): void {
-  locksDisabledForTests = options?.disableLocks ?? false;
-  lockHookForTests = options?.acquireHook ?? null;
-}
+setSyncRunner(syncUserWithGoogle);
 
 export const __testing = {
   formatDateTimeWithTimeZone,
@@ -586,41 +374,3 @@ export const __testing = {
     buildAppointmentEventPayload(appointment, DEFAULT_TIME_ZONE),
   buildBillEventPayload
 };
-
-async function runGoogleSyncPolling(): Promise<void> {
-  try {
-    await refreshExpiringGoogleWatches();
-    if (!ENABLE_POLLING_FALLBACK) {
-      return;
-    }
-    const userIds = await listGoogleConnectedUserIds();
-    for (const userId of userIds) {
-      scheduleGoogleSyncForUser(userId);
-    }
-  } catch (error) {
-    logError('polling error', error instanceof Error ? error.message : error);
-  }
-}
-
-export function startGoogleSyncPolling(): void {
-  if (IS_TEST_ENV && !ENABLE_SYNC_IN_TEST) {
-    return;
-  }
-  if (pollingTimer) {
-    return;
-  }
-
-  // Kick off immediately so we don't wait for the first interval.
-  void runGoogleSyncPolling();
-
-  pollingTimer = setInterval(() => {
-    void runGoogleSyncPolling();
-  }, DEFAULT_POLL_INTERVAL_MS);
-}
-
-export function stopGoogleSyncPolling(): void {
-  if (pollingTimer) {
-    clearInterval(pollingTimer);
-    pollingTimer = null;
-  }
-}
