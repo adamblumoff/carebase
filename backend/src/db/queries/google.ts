@@ -107,6 +107,10 @@ async function ensureGoogleIntegrationSchema(): Promise<void> {
         );
         await db.query(
           `ALTER TABLE google_credentials
+             ADD COLUMN IF NOT EXISTS needs_reauth BOOLEAN NOT NULL DEFAULT false`
+        );
+        await db.query(
+          `ALTER TABLE google_credentials
              ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
         );
         await db.query(`
@@ -243,6 +247,7 @@ interface GoogleCredentialRow {
   calendar_id: string | null;
   sync_token: string | null;
   last_pulled_at: Date | null;
+  needs_reauth: boolean;
   managed_calendar_id: string | null;
   managed_calendar_summary: string | null;
   managed_calendar_state: string | null;
@@ -321,6 +326,7 @@ export interface GoogleCredential {
   calendarId: string | null;
   syncToken: string | null;
   lastPulledAt: Date | null;
+  needsReauth: boolean;
   managedCalendarId: string | null;
   managedCalendarSummary: string | null;
   managedCalendarState: string | null;
@@ -402,6 +408,7 @@ async function googleCredentialRowToCredential(row: GoogleCredentialRow): Promis
     managedCalendarVerifiedAt: row.managed_calendar_verified_at ?? null,
     managedCalendarAclRole: row.managed_calendar_acl_role ?? null,
     legacyCalendarId: row.legacy_calendar_id ?? null,
+    needsReauth: row.needs_reauth ?? false,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -459,9 +466,10 @@ export async function upsertGoogleCredential(
         id_token,
         calendar_id,
         sync_token,
-        last_pulled_at,
-        managed_calendar_id,
-        managed_calendar_summary,
+    last_pulled_at,
+    needs_reauth,
+    managed_calendar_id,
+    managed_calendar_summary,
         managed_calendar_state,
         managed_calendar_verified_at,
         managed_calendar_acl_role,
@@ -471,7 +479,7 @@ export async function upsertGoogleCredential(
      )
      VALUES (
        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-       $11, $12, $13, $14, $15, $16,
+       $11, $12, $13, $14, $15, $16, $17,
        NOW(), NOW()
      )
      ON CONFLICT (user_id)
@@ -485,6 +493,7 @@ export async function upsertGoogleCredential(
        calendar_id = EXCLUDED.calendar_id,
        sync_token = EXCLUDED.sync_token,
        last_pulled_at = EXCLUDED.last_pulled_at,
+       needs_reauth = EXCLUDED.needs_reauth,
        managed_calendar_id = EXCLUDED.managed_calendar_id,
        managed_calendar_summary = EXCLUDED.managed_calendar_summary,
        managed_calendar_state = EXCLUDED.managed_calendar_state,
@@ -504,6 +513,7 @@ export async function upsertGoogleCredential(
       data.calendarId ?? null,
       data.syncToken ?? null,
       data.lastPulledAt ?? null,
+      data.needsReauth ?? false,
       data.managedCalendarId ?? null,
       data.managedCalendarSummary ?? null,
       data.managedCalendarState ?? null,
@@ -518,6 +528,41 @@ export async function upsertGoogleCredential(
 export async function deleteGoogleCredential(userId: number): Promise<void> {
   await ensureGoogleIntegrationSchema();
   await db.query('DELETE FROM google_credentials WHERE user_id = $1', [userId]);
+}
+
+export async function setGoogleCredentialReauth(userId: number, needsReauth: boolean): Promise<void> {
+  await ensureGoogleIntegrationSchema();
+  await db.query(
+    'UPDATE google_credentials SET needs_reauth = $2, updated_at = NOW() WHERE user_id = $1',
+    [userId, needsReauth]
+  );
+}
+
+export interface GoogleCredentialUserRow {
+  userId: number;
+  email: string;
+  clerkUserId: string | null;
+  needsReauth: boolean;
+}
+
+export async function listGoogleCredentialUsers(): Promise<GoogleCredentialUserRow[]> {
+  await ensureGoogleIntegrationSchema();
+  const result = await db.query(
+    `SELECT gc.user_id AS user_id,
+            u.email AS email,
+            u.clerk_user_id AS clerk_user_id,
+            gc.needs_reauth AS needs_reauth
+       FROM google_credentials gc
+       JOIN users u ON u.id = gc.user_id
+      ORDER BY gc.user_id`
+  );
+
+  return result.rows.map((row) => ({
+    userId: row.user_id as number,
+    email: row.email as string,
+    clerkUserId: (row.clerk_user_id as string) ?? null,
+    needsReauth: Boolean(row.needs_reauth)
+  }));
 }
 
 export async function upsertGoogleSyncLink(

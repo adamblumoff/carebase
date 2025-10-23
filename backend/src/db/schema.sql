@@ -249,6 +249,7 @@ CREATE TABLE IF NOT EXISTS google_credentials (
   calendar_id TEXT,
   sync_token TEXT,
   last_pulled_at TIMESTAMP,
+  needs_reauth BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -279,6 +280,9 @@ ALTER TABLE google_credentials
 
 ALTER TABLE google_credentials
   ADD COLUMN IF NOT EXISTS last_pulled_at TIMESTAMP;
+
+ALTER TABLE google_credentials
+  ADD COLUMN IF NOT EXISTS needs_reauth BOOLEAN NOT NULL DEFAULT false;
 
 ALTER TABLE google_credentials
   ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;

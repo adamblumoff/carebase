@@ -13,6 +13,7 @@ export {
   deleteGoogleCredential,
   deleteGoogleSyncLink,
   findGoogleSyncLinkByEvent,
+  listGoogleCredentialUsers,
   getGoogleCredential,
   getGoogleIntegrationStatus,
   getGoogleSyncMetadataForItem,
@@ -34,10 +35,16 @@ export {
   markGoogleSyncPending,
   markGoogleSyncSuccess,
   queueGoogleSyncForUser,
+  setGoogleCredentialReauth,
   upsertGoogleCredential,
   upsertGoogleSyncLink
 } from './queries/google.js';
-export type { GoogleCredential, GoogleSyncLinkUpsertData, GoogleWatchChannel } from './queries/google.js';
+export type {
+  GoogleCredential,
+  GoogleCredentialUserRow,
+  GoogleSyncLinkUpsertData,
+  GoogleWatchChannel
+} from './queries/google.js';
 
 export {
   acceptCollaboratorInvite,

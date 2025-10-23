@@ -325,6 +325,7 @@ const GOOGLE_SYNC_TEST_SCHEMA = `
     calendar_id TEXT,
     sync_token TEXT,
     last_pulled_at TIMESTAMPTZ,
+    needs_reauth BOOLEAN NOT NULL DEFAULT false,
     managed_calendar_id TEXT,
     managed_calendar_summary TEXT,
     managed_calendar_state TEXT DEFAULT 'pending',

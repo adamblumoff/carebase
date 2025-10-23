@@ -12,6 +12,7 @@ export interface User {
   legacyGoogleId: string | null;
   clerkUserId: string | null;
   passwordResetRequired: boolean;
+  needsGoogleReauth?: boolean;
   forwardingAddress: string;
   planSecret: string;
   planVersion: number;

@@ -1,23 +1,41 @@
 import type { Request, Response } from 'express';
 import { verifyMobileLoginToken, issueMobileAccessToken } from '../../auth/mobileTokenService.js';
-import { findUserById } from '../../db/queries.js';
+import { findUserById, getGoogleCredential } from '../../db/queries.js';
 import { createClerkBridgeSession } from '../../services/clerkSyncService.js';
 import { incrementMetric } from '../../utils/metrics.js';
 import type { User } from '@carebase/shared';
 
-export function getSession(req: Request, res: Response): void {
+export async function getSession(req: Request, res: Response): Promise<void> {
   const user = req.user as User | undefined;
 
   if (user) {
-    res.json({
-      authenticated: true,
-      user: {
-        id: user.id,
-        email: user.email,
-        forwardingAddress: user.forwardingAddress,
-        planSecret: user.planSecret,
-      },
-    });
+    try {
+      const credential = await getGoogleCredential(user.id);
+      res.json({
+        authenticated: true,
+        user: {
+          id: user.id,
+          email: user.email,
+          forwardingAddress: user.forwardingAddress,
+          planSecret: user.planSecret,
+          passwordResetRequired: user.passwordResetRequired,
+          needsGoogleReauth: credential?.needsReauth ?? false
+        }
+      });
+    } catch (error) {
+      console.error('Session lookup failed to load Google credential:', error);
+      res.json({
+        authenticated: true,
+        user: {
+          id: user.id,
+          email: user.email,
+          forwardingAddress: user.forwardingAddress,
+          planSecret: user.planSecret,
+          passwordResetRequired: user.passwordResetRequired,
+          needsGoogleReauth: false
+        }
+      });
+    }
     return;
   }
 
@@ -34,19 +52,34 @@ export function postLogout(req: Request, res: Response): void {
   });
 }
 
-export function getUser(req: Request, res: Response): void {
+export async function getUser(req: Request, res: Response): Promise<void> {
   const user = req.user as User | undefined;
   if (!user) {
     res.status(401).json({ error: 'Not authenticated' });
     return;
   }
 
-  res.json({
-    id: user.id,
-    email: user.email,
-    forwardingAddress: user.forwardingAddress,
-    planSecret: user.planSecret,
-  });
+  try {
+    const credential = await getGoogleCredential(user.id);
+    res.json({
+      id: user.id,
+      email: user.email,
+      forwardingAddress: user.forwardingAddress,
+      planSecret: user.planSecret,
+      passwordResetRequired: user.passwordResetRequired,
+      needsGoogleReauth: credential?.needsReauth ?? false
+    });
+  } catch (error) {
+    console.error('Failed to load Google credential for session user:', error);
+    res.json({
+      id: user.id,
+      email: user.email,
+      forwardingAddress: user.forwardingAddress,
+      planSecret: user.planSecret,
+      passwordResetRequired: user.passwordResetRequired,
+      needsGoogleReauth: false
+    });
+  }
 }
 
 export async function postMobileLogin(req: Request, res: Response): Promise<void> {
@@ -70,7 +103,10 @@ export async function postMobileLogin(req: Request, res: Response): Promise<void
     }
 
     const accessToken = issueMobileAccessToken(user as User);
-    const clerkBridge = await createClerkBridgeSession(user.id);
+    const [clerkBridge, googleCredential] = await Promise.all([
+      createClerkBridgeSession(user.id),
+      getGoogleCredential(user.id)
+    ]);
 
     const responsePayload: Record<string, unknown> = {
       authenticated: true,
@@ -81,6 +117,7 @@ export async function postMobileLogin(req: Request, res: Response): Promise<void
         forwardingAddress: user.forwardingAddress,
         planSecret: user.planSecret,
         passwordResetRequired: user.passwordResetRequired,
+        needsGoogleReauth: googleCredential?.needsReauth ?? false
       },
     };
 
