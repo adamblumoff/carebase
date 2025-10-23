@@ -24,7 +24,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [status, setStatus] = useState<'loading' | 'signedOut' | 'signedIn'>('loading');
   const [user, setUser] = useState<any | null>(null);
   const signOutInProgress = useRef(false);
+  const statusRef = useRef<'loading' | 'signedOut' | 'signedIn'>(status);
   const { isLoaded, isSignedIn, signOut: clerkSignOut } = useClerkAuth();
+
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
   const loadSessionUser = useCallback(async () => {
     setStatus('loading');
@@ -59,7 +64,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   const signOut = useCallback(async () => {
-    if (status === 'signedOut' || signOutInProgress.current) {
+    if (statusRef.current === 'signedOut' || signOutInProgress.current) {
       return;
     }
     signOutInProgress.current = true;
@@ -77,7 +82,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setStatus('signedOut');
       signOutInProgress.current = false;
     }
-  }, [status, clerkSignOut]);
+  }, [clerkSignOut]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -90,20 +95,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   useEffect(() => {
-    let mounted = true;
-
     if (!isLoaded) {
-      return () => {
-        mounted = false;
-      };
-    }
-
-    if (!isSignedIn) {
-      setUser(null);
-      setStatus('signedOut');
-      return () => {
-        mounted = false;
-      };
+      return () => {};
     }
 
     loadSessionUser().catch(() => {
@@ -115,7 +108,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     return () => {
-      mounted = false;
       unsubscribe();
     };
   }, [isLoaded, isSignedIn, loadSessionUser, signOut]);

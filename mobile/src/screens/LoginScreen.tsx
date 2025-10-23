@@ -15,7 +15,6 @@ import {
   ScrollView,
   TextInput,
   TouchableOpacity,
-  Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -29,6 +28,8 @@ import { useTheme, spacing, radius, type Palette, type Shadow } from '../theme';
 import { useAuth } from '../auth/AuthContext';
 
 WebBrowser.maybeCompleteAuthSession();
+
+type SetActiveFn = (params: { session: string }) => Promise<void> | void;
 
 type MagicLinkState = {
   pending: boolean;
@@ -59,11 +60,15 @@ export default function LoginScreen() {
   const [info, setInfo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const finishSignIn = async (createdSessionId?: string | null) => {
+  const finishSignIn = async (
+    createdSessionId?: string | null,
+    activeSetter?: SetActiveFn | null
+  ) => {
     if (!createdSessionId) {
       return;
     }
-    await setActive?.({ session: createdSessionId });
+    const setter = activeSetter ?? setActive ?? clerkAuth.setActive;
+    await setter?.({ session: createdSessionId });
     await auth.signIn();
   };
 
@@ -166,7 +171,43 @@ export default function LoginScreen() {
     }
   };
 
-  const handleOAuth = async (flow: ReturnType<typeof useOAuth>) => {
+  const autoCompleteSignUp = async (
+    resource: typeof signUp | null | undefined,
+    emailAddress: string | null | undefined
+  ) => {
+    if (!resource) {
+      return null;
+    }
+
+    try {
+      const missing = resource.missingFields ?? [];
+      const updatePayload: Record<string, unknown> = {};
+
+      if (missing.includes('username')) {
+        const base = (resource.username ?? emailAddress ?? 'carebasesignup').split('@')[0];
+        const sanitized = base.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24) || 'carebaseuser';
+        updatePayload.username = sanitized;
+      }
+
+      if (missing.includes('password')) {
+        updatePayload.password = Array.from({ length: 24 }, () =>
+          'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*'[Math.floor(Math.random() * 70)]
+        ).join('');
+      }
+
+      if (Object.keys(updatePayload).length > 0) {
+        await resource.update(updatePayload);
+      }
+
+      const completion = await resource.create({ transfer: true });
+      return completion?.createdSessionId ?? resource.createdSessionId ?? null;
+    } catch (err) {
+      console.error('[Auth] Failed to auto-complete Clerk sign-up', err);
+      return null;
+    }
+  };
+
+  const handleOAuth = async (flow: ReturnType<typeof useOAuth>, provider: string) => {
     if (!clerkAuth.isLoaded) {
       return;
     }
@@ -175,21 +216,52 @@ export default function LoginScreen() {
     setInfo(null);
 
     try {
+      console.log(`[Auth] Starting ${provider} OAuth flow`);
       const result = await flow.startOAuthFlow();
+      console.log('[Auth] OAuth flow result', result);
+      if (result?.signIn?.firstFactorVerification?.error) {
+        console.log('[Auth] signIn firstFactor verification error', result.signIn.firstFactorVerification.error);
+      }
 
-      if (result?.createdSessionId) {
-        await result.setActive?.({ session: result.createdSessionId });
-        await auth.signIn();
+      if (!result) {
+        setError('We could not start the OAuth flow. Please try again.');
+        return;
+      }
+
+      const sessionId =
+        result.createdSessionId ??
+        result.signIn?.createdSessionId ??
+        result.signUp?.createdSessionId ??
+        null;
+
+      if (sessionId) {
+        await finishSignIn(sessionId, result.setActive);
         setInfo('Signed in successfully.');
         return;
       }
 
-      if (result?.signUp) {
+      if (result.signUp) {
+        const completedSession = await autoCompleteSignUp(
+          result.signUp,
+          result.signUp.emailAddress ?? result.signIn?.identifier ?? email
+        );
+        if (completedSession) {
+          await finishSignIn(completedSession, result.setActive);
+          setInfo('Signed in successfully.');
+          return;
+        }
         setInfo('Complete sign-up in the browser to finish authentication.');
-      } else {
-        setError('OAuth sign-in was cancelled.');
+        return;
       }
+
+      if (result.signIn?.status === 'needs_second_factor') {
+        setError('Additional verification required in browser.');
+        return;
+      }
+
+      setError('OAuth sign-in was cancelled or incomplete.');
     } catch (err: any) {
+      console.error('[Auth] OAuth flow error', err);
       setError(err?.errors?.[0]?.longMessage ?? 'Unable to complete OAuth sign-in.');
     } finally {
       setLoading(false);
@@ -303,21 +375,21 @@ export default function LoginScreen() {
           <View style={styles.socialButtons}>
             <TouchableOpacity
               style={[styles.socialButton, styles.googleButton]}
-              onPress={() => handleOAuth(googleOAuth)}
+              onPress={() => handleOAuth(googleOAuth, 'google')}
               disabled={loading}
             >
-              <Text style={styles.socialButtonText}>Continue with Google</Text>
+              <Text style={[styles.socialButtonText, styles.googleButtonText]}>Continue with Google</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.socialButton, styles.facebookButton]}
-              onPress={() => handleOAuth(facebookOAuth)}
+              onPress={() => handleOAuth(facebookOAuth, 'facebook')}
               disabled={loading}
             >
               <Text style={styles.socialButtonText}>Continue with Facebook</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.socialButton, styles.appleButton]}
-              onPress={() => handleOAuth(appleOAuth)}
+              onPress={() => handleOAuth(appleOAuth, 'apple')}
               disabled={loading}
             >
               <Text style={styles.socialButtonText}>Continue with Apple</Text>
@@ -347,12 +419,13 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
     },
     container: {
       flexGrow: 1,
-      justifyContent: 'center',
+      justifyContent: 'flex-start',
       paddingHorizontal: spacing(3),
-      paddingVertical: spacing(6)
+      paddingTop: spacing(8),
+      paddingBottom: spacing(6)
     },
     brandBlock: {
-      marginBottom: spacing(4)
+      marginBottom: spacing(1)
     },
     brandName: {
       fontSize: 36,
@@ -366,7 +439,7 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
       color: palette.textSecondary
     },
     card: {
-      backgroundColor: palette.surface,
+      backgroundColor: palette.canvas,
       borderRadius: radius.md,
       padding: spacing(3),
       ...shadow.card
@@ -474,6 +547,9 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
       color: '#fff',
       fontWeight: '600',
       fontSize: 15
+    },
+    googleButtonText: {
+      color: '#D14343'
     },
     infoText: {
       marginTop: spacing(2),

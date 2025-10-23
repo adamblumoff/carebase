@@ -85,16 +85,19 @@ describe('AuthProvider', () => {
     clerkState.isSignedIn = false;
     clerkSignOutMock.mockResolvedValue(undefined);
     checkSessionMock.mockReset();
+    checkSessionMock.mockResolvedValue({ authenticated: false, user: null });
     logoutMock.mockReset();
   });
 
   it('stays signedOut when Clerk reports signed out', async () => {
+    checkSessionMock.mockResolvedValue({ authenticated: false, user: null });
+
     const latest = renderAuthProvider();
 
     await waitFor(() => {
       expect(latest.current?.status).toBe('signedOut');
       expect(latest.current?.user).toBeNull();
-      expect(checkSessionMock).not.toHaveBeenCalled();
+      expect(checkSessionMock).toHaveBeenCalled();
     });
   });
 
@@ -146,11 +149,16 @@ describe('AuthProvider', () => {
 
   it('signOut calls backend + Clerk once', async () => {
     clerkState.isSignedIn = true;
-    checkSessionMock.mockResolvedValue({ authenticated: true, user: { email: 'ok@test.com' } });
+    checkSessionMock
+      .mockResolvedValueOnce({ authenticated: true, user: { email: 'ok@test.com' } })
+      .mockResolvedValue({ authenticated: false, user: null });
     logoutMock.mockResolvedValue(undefined);
 
     const latest = renderAuthProvider();
 
+    await waitFor(() => {
+      expect(checkSessionMock).toHaveBeenCalled();
+    });
     await waitFor(() => {
       expect(latest.current?.status).toBe('signedIn');
     });
@@ -170,11 +178,16 @@ describe('AuthProvider', () => {
 
   it('reacts to unauthorized events by signing out', async () => {
     clerkState.isSignedIn = true;
-    checkSessionMock.mockResolvedValue({ authenticated: true, user: { email: 'ok@test.com' } });
+    checkSessionMock
+      .mockResolvedValueOnce({ authenticated: true, user: { email: 'ok@test.com' } })
+      .mockResolvedValue({ authenticated: false, user: null });
     logoutMock.mockResolvedValue(undefined);
 
     const latest = renderAuthProvider();
 
+    await waitFor(() => {
+      expect(checkSessionMock).toHaveBeenCalled();
+    });
     await waitFor(() => {
       expect(latest.current?.status).toBe('signedIn');
     });
