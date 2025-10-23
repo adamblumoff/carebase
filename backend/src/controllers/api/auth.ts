@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { verifyMobileLoginToken, issueMobileAccessToken } from '../../auth/mobileTokenService.js';
 import { findUserById } from '../../db/queries.js';
 import { createClerkBridgeSession } from '../../services/clerkSyncService.js';
+import { incrementMetric } from '../../utils/metrics.js';
 import type { User } from '@carebase/shared';
 
 export function getSession(req: Request, res: Response): void {
@@ -94,6 +95,9 @@ export async function postMobileLogin(req: Request, res: Response): Promise<void
         clerkUserId: clerkBridge.clerkUserId,
         sessionId: clerkBridge.sessionId
       });
+      incrementMetric('auth.bridge.mobile-login', 1, { issuedSession: 'yes' });
+    } else {
+      incrementMetric('auth.bridge.mobile-login', 1, { issuedSession: 'no' });
     }
 
     res.json(responsePayload);

@@ -7,6 +7,7 @@ import {
   setClerkUserId,
   setPasswordResetRequired
 } from '../db/queries.js';
+import { incrementMetric } from '../utils/metrics.js';
 
 let cachedClient: ClerkClient | null = null;
 let warnedMissingSecret = false;
@@ -245,6 +246,9 @@ export async function syncClerkUser(userId: number): Promise<ClerkSyncResult | n
     clerkUserId: clerkUser.id,
     metadataUpdated
   });
+  incrementMetric('clerk.sync.user', 1, {
+    outcome: created ? 'created' : metadataUpdated ? 'updated' : 'no_change'
+  });
 
   return {
     clerkUserId: clerkUser.id,
@@ -286,6 +290,10 @@ export async function createClerkBridgeSession(userId: number): Promise<ClerkSes
     clerkUserId: syncResult.clerkUserId,
     sessionId: session.id,
     template: templateName ?? 'default'
+  });
+  incrementMetric('clerk.bridge.session', 1, {
+    template: templateName ?? 'default',
+    created: syncResult.created ? 'yes' : 'no'
   });
 
   return {
@@ -334,10 +342,14 @@ export async function verifyClerkSessionToken(token: string): Promise<ClerkToken
       sessionId: verification.sessionId,
       expiresAt: verification.expiresAt ?? null
     });
+    incrementMetric('clerk.token.verify', 1, {
+      hasSession: verification.sessionId ? 'yes' : 'no'
+    });
 
     return verification;
   } catch (error) {
     console.warn('[ClerkSync] Clerk token verification failed:', (error as Error).message);
+    incrementMetric('clerk.token.verify', 1, { outcome: 'error' });
     return null;
   }
 }

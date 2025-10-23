@@ -3,6 +3,7 @@ import type { User } from '@carebase/shared';
 import { verifyMobileAccessToken } from '../auth/mobileTokenService.js';
 import { findUserById, findUserByClerkUserId } from '../db/queries.js';
 import { verifyClerkSessionToken } from './clerkSyncService.js';
+import { incrementMetric } from '../utils/metrics.js';
 
 const userRoom = (userId: number) => `user:${userId}`;
 
@@ -43,6 +44,7 @@ async function authenticateSocket(socket: Socket): Promise<User | null> {
     const user = await findUserById(payload.sub);
     if (user) {
       console.log('[Realtime] Authenticated via mobile access token', { userId: user.id });
+      incrementMetric('auth.bridge.socket', 1, { via: 'mobile-token' });
       return user;
     }
   }
@@ -56,6 +58,7 @@ async function authenticateSocket(socket: Socket): Promise<User | null> {
         clerkUserId: clerkVerification.userId,
         sessionId: clerkVerification.sessionId
       });
+      incrementMetric('auth.bridge.socket', 1, { via: 'clerk-session' });
       return user;
     }
   }

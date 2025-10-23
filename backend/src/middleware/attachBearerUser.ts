@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { verifyMobileAccessToken } from '../auth/mobileTokenService.js';
 import { findUserById, findUserByClerkUserId } from '../db/queries.js';
 import { verifyClerkSessionToken } from '../services/clerkSyncService.js';
+import { incrementMetric } from '../utils/metrics.js';
 
 export async function attachBearerUser(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -26,6 +27,7 @@ export async function attachBearerUser(req: Request, res: Response, next: NextFu
           (req as any).isAuthenticated = () => true;
         }
         console.log('[Auth] Bearer token resolved via mobile access token', { userId: user.id });
+        incrementMetric('auth.bridge.bearer', 1, { via: 'mobile-token' });
         return next();
       }
     }
@@ -48,6 +50,7 @@ export async function attachBearerUser(req: Request, res: Response, next: NextFu
           clerkUserId: clerkVerification.userId,
           sessionId: clerkVerification.sessionId
         });
+        incrementMetric('auth.bridge.bearer', 1, { via: 'clerk-session' });
         return next();
       }
     }
