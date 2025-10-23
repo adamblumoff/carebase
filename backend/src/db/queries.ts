@@ -63,6 +63,7 @@ export {
   findUserById,
   setClerkUserId,
   setPasswordResetRequired,
+  getUserForClerkBackfill,
   listUsersForClerkBackfill,
   getUserMfaStatus,
   upsertUserMfaStatus

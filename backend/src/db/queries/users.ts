@@ -29,6 +29,35 @@ interface UserMfaStatusRow {
   grace_expires_at: Date | null;
 }
 
+const CLERK_USER_SELECTION = `
+  SELECT
+    u.*,
+    EXISTS (
+      SELECT 1
+      FROM recipients r
+      WHERE r.user_id = u.id
+    ) OR EXISTS (
+      SELECT 1
+      FROM care_collaborators cc
+      WHERE cc.user_id = u.id
+        AND cc.role = 'owner'
+        AND (cc.status = 'accepted' OR cc.status = 'pending')
+    ) AS is_owner,
+    EXISTS (
+      SELECT 1
+      FROM care_collaborators cc
+      WHERE cc.user_id = u.id
+        AND cc.role = 'contributor'
+        AND cc.status = 'accepted'
+    ) AS is_contributor,
+    EXISTS (
+      SELECT 1
+      FROM google_credentials gc
+      WHERE gc.user_id = u.id
+    ) AS has_google_credential
+  FROM users u
+`;
+
 export function userRowToUser(row: UserRow): User {
   return {
     id: row.id,
@@ -111,50 +140,29 @@ export interface UserBackfillRecord extends User {
   hasGoogleCredential: boolean;
 }
 
-export async function listUsersForClerkBackfill(): Promise<UserBackfillRecord[]> {
-  const result = await db.query<UserWithFlagsRow>(
-    `
-      SELECT
-        u.*,
-        EXISTS (
-          SELECT 1
-          FROM recipients r
-          WHERE r.user_id = u.id
-        ) OR EXISTS (
-          SELECT 1
-          FROM care_collaborators cc
-          WHERE cc.user_id = u.id
-            AND cc.role = 'owner'
-            AND (cc.status = 'accepted' OR cc.status = 'pending')
-        ) AS is_owner,
-        EXISTS (
-          SELECT 1
-          FROM care_collaborators cc
-          WHERE cc.user_id = u.id
-            AND cc.role = 'contributor'
-            AND cc.status = 'accepted'
-        ) AS is_contributor,
-        EXISTS (
-          SELECT 1
-          FROM google_credentials gc
-          WHERE gc.user_id = u.id
-        ) AS has_google_credential
-      FROM users u
-      ORDER BY u.id
-    `
-  );
+function mapBackfillRow(row: UserWithFlagsRow): UserBackfillRecord {
+  const user = userRowToUser(row);
+  return {
+    ...user,
+    roles: {
+      owner: Boolean(row.is_owner),
+      contributor: Boolean(row.is_contributor)
+    },
+    hasGoogleCredential: Boolean(row.has_google_credential)
+  };
+}
 
-  return result.rows.map((row) => {
-    const user = userRowToUser(row);
-    return {
-      ...user,
-      roles: {
-        owner: Boolean(row.is_owner),
-        contributor: Boolean(row.is_contributor)
-      },
-      hasGoogleCredential: Boolean(row.has_google_credential)
-    };
-  });
+export async function listUsersForClerkBackfill(): Promise<UserBackfillRecord[]> {
+  const result = await db.query<UserWithFlagsRow>(`${CLERK_USER_SELECTION}\n  ORDER BY u.id`);
+  return result.rows.map(mapBackfillRow);
+}
+
+export async function getUserForClerkBackfill(userId: number): Promise<UserBackfillRecord | undefined> {
+  const result = await db.query<UserWithFlagsRow>(`${CLERK_USER_SELECTION}\n  WHERE u.id = $1`, [userId]);
+  if (result.rows[0]) {
+    return mapBackfillRow(result.rows[0] as UserWithFlagsRow);
+  }
+  return undefined;
 }
 
 function mapMfaStatusRow(row: UserMfaStatusRow): UserMfaStatus {

@@ -17,13 +17,18 @@
 
 import '../src/env.js';
 
-import { createClerkClient } from '@clerk/backend';
+import type { ClerkClient } from '@clerk/backend';
 import type { UserBackfillRecord } from '../src/db/queries/users.js';
 import {
   listUsersForClerkBackfill,
   setClerkUserId,
   setPasswordResetRequired
 } from '../src/db/queries.js';
+import {
+  buildClerkMetadata,
+  getClerkClient,
+  mergeMetadata
+} from '../src/services/clerkSyncService.js';
 import dbClient from '../src/db/client.js';
 
 interface BackfillOptions {
@@ -121,34 +126,6 @@ Optional filters:
 `);
 }
 
-function buildMetadata(record: UserBackfillRecord): {
-  publicMetadata: Record<string, unknown>;
-  privateMetadata: Record<string, unknown>;
-} {
-  const roles = {
-    owner: record.roles.owner,
-    contributor: record.roles.contributor
-  };
-
-  const publicMetadata = {
-    carebase: {
-      roles,
-      googleConnected: record.hasGoogleCredential
-    }
-  };
-
-  const privateMetadata = {
-    carebase: {
-      localUserId: record.id,
-      legacyGoogleId: record.legacyGoogleId,
-      googleConnected: record.hasGoogleCredential,
-      passwordResetRequired: true
-    }
-  };
-
-  return { publicMetadata, privateMetadata };
-}
-
 function isNotFoundError(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) {
     return false;
@@ -182,39 +159,13 @@ async function findUserByEmail(
   return list[0];
 }
 
-function mergeMetadata(
-  existing: Record<string, unknown> | undefined,
-  next: Record<string, unknown>
-): Record<string, unknown> {
-  const target: Record<string, unknown> = { ...(existing ?? {}) };
-
-  for (const [key, value] of Object.entries(next)) {
-    if (
-      value &&
-      typeof value === 'object' &&
-      !Array.isArray(value) &&
-      !(value instanceof Date)
-    ) {
-      const existingValue = target[key];
-      target[key] = mergeMetadata(
-        typeof existingValue === 'object' && existingValue !== null ? (existingValue as Record<string, unknown>) : {},
-        value as Record<string, unknown>
-      );
-    } else {
-      target[key] = value;
-    }
-  }
-
-  return target;
-}
-
 async function syncUser(
-  clerkClient: ReturnType<typeof createClerkClient>,
+  clerkClient: ClerkClient,
   record: UserBackfillRecord,
   apply: boolean
 ): Promise<SyncResult> {
   const desiredExternalId = String(record.id);
-  const { publicMetadata, privateMetadata } = buildMetadata(record);
+  const { publicMetadata, privateMetadata } = buildClerkMetadata(record);
 
   let clerkUser = record.clerkUserId
     ? await fetchClerkUser(clerkClient, record.clerkUserId)
@@ -324,11 +275,10 @@ async function main(): Promise<void> {
     throw new Error('CLERK_SECRET_KEY must be configured');
   }
 
-  const clerkClient = createClerkClient({
-    secretKey,
-    apiUrl: process.env.CLERK_API_URL,
-    apiVersion: process.env.CLERK_API_VERSION ?? '2021-02-01'
-  });
+  const clerkClient = getClerkClient();
+  if (!clerkClient) {
+    throw new Error('Failed to initialize Clerk client. Ensure CLERK_SECRET_KEY is set.');
+  }
 
   let users = await listUsersForClerkBackfill();
 

@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { verifyMobileLoginToken, issueMobileAccessToken } from '../../auth/mobileTokenService.js';
 import { findUserById } from '../../db/queries.js';
+import { createClerkBridgeSession } from '../../services/clerkSyncService.js';
 import type { User } from '@carebase/shared';
 
 export function getSession(req: Request, res: Response): void {
@@ -68,8 +69,9 @@ export async function postMobileLogin(req: Request, res: Response): Promise<void
     }
 
     const accessToken = issueMobileAccessToken(user as User);
+    const clerkBridge = await createClerkBridgeSession(user.id);
 
-    res.json({
+    const responsePayload: Record<string, unknown> = {
       authenticated: true,
       accessToken,
       user: {
@@ -77,8 +79,19 @@ export async function postMobileLogin(req: Request, res: Response): Promise<void
         email: user.email,
         forwardingAddress: user.forwardingAddress,
         planSecret: user.planSecret,
+        passwordResetRequired: user.passwordResetRequired,
       },
-    });
+    };
+
+    if (clerkBridge) {
+      (responsePayload as any).clerk = {
+        userId: clerkBridge.clerkUserId,
+        sessionId: clerkBridge.sessionId,
+        sessionToken: clerkBridge.sessionToken,
+      };
+    }
+
+    res.json(responsePayload);
   } catch (error) {
     console.error('Mobile login exchange error:', error);
     res.status(500).json({ error: 'internal error' });
