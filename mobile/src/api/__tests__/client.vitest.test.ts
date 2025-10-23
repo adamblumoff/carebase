@@ -1,18 +1,13 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import apiClient from '../client';
 import { authEvents } from '../../auth/authEvents';
-import { getAccessToken, removeAccessToken } from '../../auth/tokenStorage';
+import { fetchClerkSessionToken } from '../../auth/clerkTokenCache';
 
-vi.mock('../../auth/tokenStorage', () => ({
-  getAccessToken: vi.fn(),
-  removeAccessToken: vi.fn(),
-  setAccessToken: vi.fn()
+vi.mock('../../auth/clerkTokenCache', () => ({
+  fetchClerkSessionToken: vi.fn()
 }));
 
-const mockedTokenStorage = {
-  getAccessToken: getAccessToken as unknown as ReturnType<typeof vi.fn>,
-  removeAccessToken: removeAccessToken as unknown as ReturnType<typeof vi.fn>
-};
+const mockedTokenFetcher = fetchClerkSessionToken as unknown as ReturnType<typeof vi.fn>;
 
 const requestHandler = apiClient.interceptors.request.handlers[0].fulfilled!;
 const responseErrorHandler = apiClient.interceptors.response.handlers[0].rejected!;
@@ -20,12 +15,11 @@ const responseErrorHandler = apiClient.interceptors.response.handlers[0].rejecte
 describe('api client interceptors', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockedTokenStorage.getAccessToken.mockResolvedValue(null);
-    mockedTokenStorage.removeAccessToken.mockResolvedValue(undefined);
+    mockedTokenFetcher.mockResolvedValue(null);
   });
 
   it('adds bearer token when stored', async () => {
-    mockedTokenStorage.getAccessToken.mockResolvedValue('token-123');
+    mockedTokenFetcher.mockResolvedValue('token-123');
 
     const config = await requestHandler({ headers: {} } as any);
 
@@ -33,7 +27,7 @@ describe('api client interceptors', () => {
   });
 
   it('skips authorization header when no token', async () => {
-    mockedTokenStorage.getAccessToken.mockResolvedValue(null);
+    mockedTokenFetcher.mockResolvedValue(null);
 
     const config = await requestHandler({ headers: {} } as any);
 
@@ -41,12 +35,12 @@ describe('api client interceptors', () => {
   });
 
   it('logs when token lookup fails', async () => {
-    mockedTokenStorage.getAccessToken.mockRejectedValue(new Error('storage failed'));
+    mockedTokenFetcher.mockRejectedValue(new Error('storage failed'));
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     await requestHandler({ headers: {} } as any);
 
-    expect(errorSpy).toHaveBeenCalledWith('[API] Failed to load access token:', expect.any(Error));
+    expect(errorSpy).toHaveBeenCalledWith('[API] Failed to resolve Clerk session token:', expect.any(Error));
     errorSpy.mockRestore();
   });
 
@@ -67,7 +61,6 @@ describe('api client interceptors', () => {
       })
     ).rejects.toMatchObject({ response: { status: 401 } });
 
-    expect(mockedTokenStorage.removeAccessToken).toHaveBeenCalled();
     expect(emitSpy).toHaveBeenCalled();
     emitSpy.mockRestore();
   });
@@ -84,7 +77,6 @@ describe('api client interceptors', () => {
       })
     ).rejects.toMatchObject({ response: { status: 401 } });
 
-    expect(mockedTokenStorage.removeAccessToken).not.toHaveBeenCalled();
     expect(emitSpy).not.toHaveBeenCalled();
     emitSpy.mockRestore();
   });

@@ -61,10 +61,10 @@
      - Bridge Clerk token retrieval via a shared module for API interceptors.
   2. Phase 5B – API client + auth services:
      - Rework Axios interceptors to fetch Clerk session tokens.
-     - Remove legacy token storage helpers and adjust tests/mocks.
      - Emit unauthorized events by calling Clerk `signOut` fallback when needed.
+     - Update API-layer tests/mocks for the new token fetcher.
   3. Phase 5C – Auth context & session bootstrap:
-     - Refactor `AuthProvider` to derive status from Clerk `useAuth` and hydrate backend session data.
+     - Remove legacy token storage helpers; refactor `AuthProvider` to derive status from Clerk `useAuth` and hydrate backend session data.
      - Ensure logout delegates to Clerk and clears collaborator/plan state as needed.
      - Update hooks/tests relying on old sign-in semantics.
   4. Phase 5D – UI flows & smoke tests:

@@ -4,7 +4,7 @@
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
 import { authEvents } from '../auth/authEvents';
-import { getAccessToken, removeAccessToken } from '../auth/tokenStorage';
+import { fetchClerkSessionToken } from '../auth/clerkTokenCache';
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -22,15 +22,15 @@ apiClient.interceptors.request.use(
     }
 
     try {
-      const accessToken = await getAccessToken();
-      if (accessToken) {
-        config.headers.Authorization = `Bearer ${accessToken}`;
+      const sessionToken = await fetchClerkSessionToken();
+      if (sessionToken) {
+        config.headers.Authorization = `Bearer ${sessionToken}`;
         if (__DEV__) {
-          console.log('[API] Added bearer token to request');
+          console.log('[API] Added Clerk session token to request');
         }
       }
     } catch (error) {
-      console.error('[API] Failed to load access token:', error);
+      console.error('[API] Failed to resolve Clerk session token:', error);
     }
 
     return config;
@@ -55,9 +55,6 @@ apiClient.interceptors.response.use(
       logger(`[API] Error: ${status}`, error.response.data);
 
       if (status === 401 && hadBearer) {
-        removeAccessToken().catch(() => {
-          // ignore cleanup errors
-        });
         authEvents.emitUnauthorized();
       }
     } else {
