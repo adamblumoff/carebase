@@ -62,6 +62,7 @@ export {
 
 export {
   createUser,
+  createUserWithEmail,
   deleteUser,
   findUserByEmail,
   findUserByGoogleId,

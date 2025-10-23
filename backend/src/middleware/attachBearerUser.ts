@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { findUserByClerkUserId } from '../db/queries.js';
-import { verifyClerkSessionToken } from '../services/clerkSyncService.js';
+import { verifyClerkSessionToken, ensureLocalUserForClerk } from '../services/clerkSyncService.js';
 import { incrementMetric } from '../utils/metrics.js';
 
 export async function attachBearerUser(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -10,7 +10,11 @@ export async function attachBearerUser(req: Request, res: Response, next: NextFu
         const authState = (req as any).auth();
         console.log('[Auth] Clerk middleware auth state', authState);
         if (authState?.userId) {
-          const user = await findUserByClerkUserId(authState.userId);
+          let user = await findUserByClerkUserId(authState.userId);
+          if (!user) {
+            await ensureLocalUserForClerk(authState.userId);
+            user = await findUserByClerkUserId(authState.userId);
+          }
           if (user) {
             (req as any).user = user;
             (req as any).clerkAuth = {
@@ -41,7 +45,11 @@ export async function attachBearerUser(req: Request, res: Response, next: NextFu
     const token = authHeader.slice(7).trim();
     const clerkVerification = await verifyClerkSessionToken(token);
     if (clerkVerification) {
-      const user = await findUserByClerkUserId(clerkVerification.userId);
+      let user = await findUserByClerkUserId(clerkVerification.userId);
+      if (!user) {
+        await ensureLocalUserForClerk(clerkVerification.userId);
+        user = await findUserByClerkUserId(clerkVerification.userId);
+      }
       if (user) {
         (req as any).user = user;
         (req as any).clerkAuth = {

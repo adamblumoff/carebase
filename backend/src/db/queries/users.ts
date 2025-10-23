@@ -95,6 +95,24 @@ export async function createUser(email: string, googleId: string): Promise<User>
   return user;
 }
 
+export async function createUserWithEmail(email: string): Promise<User> {
+  const planSecret = generateToken(32);
+  const result = await db.query(
+    `INSERT INTO users (email, forwarding_address, plan_secret)
+     VALUES ($1, '', $2)
+     RETURNING *`,
+    [email, planSecret]
+  );
+
+  const user = userRowToUser(result.rows[0] as UserRow);
+
+  const forwardingAddress = generateForwardingAddress(user.id);
+  await db.query('UPDATE users SET forwarding_address = $1 WHERE id = $2', [forwardingAddress, user.id]);
+
+  user.forwardingAddress = forwardingAddress;
+  return user;
+}
+
 export async function findUserByGoogleId(googleId: string): Promise<User | undefined> {
   const result = await db.query('SELECT * FROM users WHERE google_id = $1', [googleId]);
   return result.rows[0] ? userRowToUser(result.rows[0] as UserRow) : undefined;

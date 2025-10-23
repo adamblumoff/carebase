@@ -18,6 +18,8 @@
 import '../src/env.js';
 
 import type { ClerkClient } from '@clerk/backend';
+import type { ClerkUser } from '../src/services/clerkSyncService.js';
+import { fetchClerkUserByEmail as restFetchClerkUserByEmail, fetchClerkUserById as restFetchClerkUserById } from '../src/services/clerkRestClient.js';
 import type { UserBackfillRecord } from '../src/db/queries/users.js';
 import {
   listUsersForClerkBackfill,
@@ -137,7 +139,54 @@ function isNotFoundError(error: unknown): boolean {
   return Boolean(maybeError.errors?.some((entry) => entry.code === 'resource_not_found'));
 }
 
-async function fetchClerkUser(clerkClient: ReturnType<typeof createClerkClient>, userId: string) {
+function getClerkEmailAddresses(user: ClerkUser): Array<{ id?: string; email?: string }> {
+  const list = Array.isArray((user as any).email_addresses) ? (user as any).email_addresses : [];
+  if (list.length > 0) {
+    return list.map((entry: any) => ({ id: entry.id, email: entry.email_address ?? entry.emailAddress }));
+  }
+  const legacy = Array.isArray((user as any).emailAddresses) ? (user as any).emailAddresses : [];
+  return legacy.map((entry: any) => ({ id: entry.id, email: entry.emailAddress ?? entry.email_address }));
+}
+
+function getPrimaryEmail(user: ClerkUser): string | null {
+  const addresses = getClerkEmailAddresses(user);
+  if (addresses.length === 0) {
+    return null;
+  }
+  const primaryId = (user as any).primary_email_address_id ?? (user as any).primaryEmailAddressId;
+  if (primaryId) {
+    const match = addresses.find((entry) => entry.id === primaryId);
+    if (match?.email) {
+      return match.email.toLowerCase();
+    }
+  }
+  return addresses[0]?.email ? addresses[0].email!.toLowerCase() : null;
+}
+
+function getPublicMetadata(user: ClerkUser): Record<string, unknown> {
+  return ((user as any).public_metadata ?? (user as any).publicMetadata ?? {}) as Record<string, unknown>;
+}
+
+function getPrivateMetadata(user: ClerkUser): Record<string, unknown> {
+  return ((user as any).private_metadata ?? (user as any).privateMetadata ?? {}) as Record<string, unknown>;
+}
+
+function getExternalId(user: ClerkUser): string | null {
+  return ((user as any).external_id ?? (user as any).externalId ?? null) as string | null;
+}
+
+async function fetchClerkUser(clerkClient: ReturnType<typeof createClerkClient>, userId: string): Promise<ClerkUser | null> {
+  try {
+    const restUser = await restFetchClerkUserById(userId);
+    if (restUser) {
+      return restUser;
+    }
+  } catch (error) {
+    if (!isNotFoundError(error)) {
+      throw error;
+    }
+  }
+
   try {
     return await clerkClient.users.getUser(userId);
   } catch (error) {
@@ -152,24 +201,30 @@ async function findUserByEmail(
   clerkClient: ReturnType<typeof createClerkClient>,
   email: string
 ) {
+  const normalized = email.toLowerCase();
   try {
-    const list = await clerkClient.users.getUserList({ emailAddress: [email], limit: 1 });
-    if (!Array.isArray(list) || list.length === 0) {
-      return null;
+    const restUser = await restFetchClerkUserByEmail(normalized);
+    if (restUser) {
+      return restUser;
     }
-    return list[0];
   } catch (error) {
-    if (isNotFoundError(error)) {
-      const fallback = await clerkClient.users.getUserList({ limit: 100 });
-      if (Array.isArray(fallback)) {
-        return fallback.find((entry) =>
-          entry.emailAddresses?.some((addr: any) => addr.emailAddress?.toLowerCase() === email.toLowerCase())
-        ) ?? null;
-      }
-      return null;
+    if (!isNotFoundError(error)) {
+      throw error;
     }
-    throw error;
   }
+
+  try {
+    const list = await clerkClient.users.getUserList({ emailAddress: [normalized], limit: 1 });
+    if (Array.isArray(list) && list.length > 0) {
+      return list[0] as ClerkUser;
+    }
+  } catch (error) {
+    if (!isNotFoundError(error)) {
+      throw error;
+    }
+  }
+
+  return null;
 }
 
 async function syncUser(
@@ -223,16 +278,18 @@ async function syncUser(
   let action: SyncResult['action'] = 'skipped';
   let note = 'no changes';
 
+  const existingPublic = getPublicMetadata(clerkUser);
+  const existingPrivate = getPrivateMetadata(clerkUser);
   const metadataTarget = {
-    publicMetadata: mergeMetadata(clerkUser.publicMetadata as Record<string, unknown> | undefined, publicMetadata),
-    privateMetadata: mergeMetadata(clerkUser.privateMetadata as Record<string, unknown> | undefined, privateMetadata)
+    publicMetadata: mergeMetadata(existingPublic, publicMetadata),
+    privateMetadata: mergeMetadata(existingPrivate, privateMetadata)
   };
 
   const metadataChanged =
-    JSON.stringify(metadataTarget.publicMetadata) !== JSON.stringify(clerkUser.publicMetadata) ||
-    JSON.stringify(metadataTarget.privateMetadata) !== JSON.stringify(clerkUser.privateMetadata);
+    JSON.stringify(existingPublic) !== JSON.stringify(metadataTarget.publicMetadata) ||
+    JSON.stringify(existingPrivate) !== JSON.stringify(metadataTarget.privateMetadata);
 
-  const externalIdChanged = clerkUser.externalId !== desiredExternalId;
+  const externalIdChanged = getExternalId(clerkUser) !== desiredExternalId;
 
   if (metadataChanged || externalIdChanged) {
     if (!apply) {
