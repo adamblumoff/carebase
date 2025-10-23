@@ -6,6 +6,35 @@ import { incrementMetric } from '../utils/metrics.js';
 
 export async function attachBearerUser(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
+    if (!req.user && typeof (req as any).auth === 'function') {
+      try {
+        const authState = (req as any).auth();
+        if (authState?.userId) {
+          const user = await findUserByClerkUserId(authState.userId);
+          if (user) {
+            (req as any).user = user;
+            (req as any).clerkAuth = {
+              userId: authState.userId,
+              sessionId: authState.sessionId ?? null,
+              expiresAt: authState.sessionClaims?.exp ? authState.sessionClaims.exp * 1000 : null
+            };
+            if (typeof req.isAuthenticated === 'function') {
+              (req as any).isAuthenticated = () => true;
+            }
+            incrementMetric('auth.bridge.http', 1, { via: 'clerk-middleware' });
+            console.log('[Auth] Request authenticated via Clerk middleware', {
+              userId: user.id,
+              clerkUserId: authState.userId,
+              sessionId: authState.sessionId ?? null
+            });
+            return next();
+          }
+        }
+      } catch (error) {
+        console.warn('[Auth] Failed to resolve Clerk middleware auth state', error);
+      }
+    }
+
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
