@@ -2,13 +2,14 @@
 import './env.js';
 
 // Now import everything else
-import express, { Request, Response } from 'express';
+import express, { Request, Response, type RequestHandler } from 'express';
 import session from 'express-session';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import connectPgSimple from 'connect-pg-simple';
+import { clerkMiddleware } from '@clerk/express';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -19,6 +20,7 @@ import { registerRoutes } from './routes/registry.js';
 import { attachBearerUser } from './middleware/attachBearerUser.js';
 import { initRealtime } from './services/realtime.js';
 import { startGoogleSyncPolling } from './services/googleSync.js';
+import { getClerkClient } from './services/clerkSyncService.js';
 import { databaseSslConfig } from './db/sslConfig.js';
 
 const app = express();
@@ -59,6 +61,15 @@ const sessionMiddleware = session({
 const initializePassport = passportConfig.initialize();
 const passportSession = passportConfig.session();
 
+let clerkMiddlewareHandler: RequestHandler | null = null;
+const clerkClient = getClerkClient();
+if (clerkClient) {
+  clerkMiddlewareHandler = clerkMiddleware({
+    clerkClient,
+    debug: process.env.NODE_ENV !== 'production'
+  });
+}
+
 // Trust proxy (Railway runs behind a proxy)
 if (isProduction) {
   app.set('trust proxy', 1);
@@ -70,6 +81,9 @@ app.use(express.urlencoded({ extended: true, limit: '1mb', verify: captureRawBod
 app.use(sessionMiddleware);
 app.use(initializePassport);
 app.use(passportSession);
+if (clerkMiddlewareHandler) {
+  app.use(clerkMiddlewareHandler);
+}
 app.use(attachBearerUser);
 
 // View engine
