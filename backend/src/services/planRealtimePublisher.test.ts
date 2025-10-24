@@ -21,17 +21,6 @@ function nextTick(): Promise<void> {
   });
 }
 
-test('PlanRealtimePublisher emits plan:update immediately', () => {
-  const io = new FakeIO();
-  const publisher = new PlanRealtimePublisher(io as any);
-
-  publisher.emitPlanUpdate(42);
-
-  assert.equal(io.events.length, 1);
-  assert.equal(io.events[0]?.room, 'user:42');
-  assert.equal(io.events[0]?.event, 'plan:update');
-});
-
 test('PlanRealtimePublisher batches item deltas per user', async () => {
   const io = new FakeIO();
   const publisher = new PlanRealtimePublisher(io as any);

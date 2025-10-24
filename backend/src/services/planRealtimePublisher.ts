@@ -1,8 +1,6 @@
 import { PLAN_ITEM_DELTA_EVENT, type PlanItemDelta } from '@carebase/shared';
 import type { Server as SocketIOServer } from 'socket.io';
 
-const PLAN_UPDATE_EVENT = 'plan:update';
-
 type PendingEntry = {
   timer: NodeJS.Immediate | null;
   deltas: Map<string, PlanItemDelta>;
@@ -14,10 +12,6 @@ export class PlanRealtimePublisher {
   private readonly pending = new Map<number, PendingEntry>();
 
   constructor(private readonly io: SocketIOServer) {}
-
-  emitPlanUpdate(userId: number): void {
-    this.io.to(userRoom(userId)).emit(PLAN_UPDATE_EVENT);
-  }
 
   emitPlanItemDelta(userId: number, delta: PlanItemDelta): void {
     const identifier = delta.planItemId ?? delta.entityId;

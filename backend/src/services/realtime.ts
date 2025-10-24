@@ -8,7 +8,6 @@ import { PlanRealtimePublisher } from './planRealtimePublisher.js';
 const userRoom = (userId: number) => `user:${userId}`;
 
 export interface RealtimeEmitter {
-  emitPlanUpdate(userId: number): void;
   emitPlanItemDelta(userId: number, delta: PlanItemDelta): void;
 }
 
@@ -76,9 +75,6 @@ export function initRealtime(io: SocketIOServer): void {
   });
 
   emitter = {
-    emitPlanUpdate(userId: number) {
-      publisher.emitPlanUpdate(userId);
-    },
     emitPlanItemDelta(userId: number, delta: PlanItemDelta) {
       publisher.emitPlanItemDelta(userId, delta);
     }

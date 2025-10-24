@@ -70,7 +70,6 @@ async function touchPlanForItem(itemId: number, options?: PlanTouchOptions): Pro
     const ownerId = userRow.id as number;
     const planVersion = typeof userRow.plan_version === 'number' ? userRow.plan_version : undefined;
     const realtime = getRealtimeEmitter();
-    realtime?.emitPlanUpdate(ownerId);
     if (realtime?.emitPlanItemDelta) {
       const deltaPayload = options?.delta
         ? { ...options.delta, version: planVersion }
@@ -109,7 +108,6 @@ export async function touchPlanForUser(userId: number, options?: PlanTouchOption
       ? (result.rows[0] as { plan_version: number }).plan_version
       : undefined;
   const realtime = getRealtimeEmitter();
-  realtime?.emitPlanUpdate(userId);
   if (realtime?.emitPlanItemDelta) {
     const deltaPayload = options?.delta
       ? { ...options.delta, version: planVersion }

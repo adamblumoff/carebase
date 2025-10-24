@@ -5,7 +5,7 @@ Goal: deliver realtime updates for plan data (appointments & bills) with minimal
 ---
 
 ## Step 0 – Recon & Guardrails
-- [x] Trace current realtime flow (`backend/src/services/realtime.ts`, `planEvents` helpers, Socket.IO usage in mobile) to document what events already exist (`plan:update`) and when they fire.
+- [x] Trace current realtime flow (`backend/src/services/realtime.ts`, `planEvents` helpers, Socket.IO usage in mobile) to document the legacy `plan:update` broadcast and identify the replacement path.
 - [x] Confirm `ensureRealtimeConnected` behaviour and polling cadence so the fallback refresh keeps working.
 - [x] List every code path that mutates appointments/bills:
   - REST controllers (`backend/src/controllers/api/appointments.ts`, `bills.ts`)
@@ -14,7 +14,7 @@ Goal: deliver realtime updates for plan data (appointments & bills) with minimal
 - [x] Define the minimal delta payload we need (e.g. `{ itemType: 'appointment'|'bill', itemId, action: 'created'|'updated'|'deleted', version }`) and how to extend later for other screens.
 
 ## Step 1 – Backend Event Publisher
-- [x] Add a typed event emitter helper (e.g. `PlanRealtimePublisher`) that wraps the existing Socket.IO emitter and exposes `emitItemMutation(userId, delta)` alongside the existing `emitPlanUpdate`.
+- [x] Add a typed event emitter helper (e.g. `PlanRealtimePublisher`) that wraps the Socket.IO emitter and exposes `emitItemMutation(userId, delta)`.
 - [x] Ensure the helper deduplicates rapid-fire events (set-level throttle within the same event loop tick) to avoid flooding clients when a service writes multiple rows per operation.
 - [x] Write lightweight unit tests for the publisher to confirm emitted payloads.
 
@@ -27,7 +27,7 @@ Goal: deliver realtime updates for plan data (appointments & bills) with minimal
 ## Step 3 – Socket Payload & Types
 - [x] Define a new Socket.IO event name (e.g. `plan:item-mutated`) and payload interface in `shared/`.
 - [x] Update backend emitter to broadcast on this channel.
-- [x] Ensure the existing `plan:update` event continues to fire for backwards compatibility until we confirm all clients upgraded.
+- [x] Remove the legacy `plan:update` broadcast once all clients consume `plan:item-delta`.
 
 ## Step 4 – Mobile Client (Plan Screen)
 - [x] Update the realtime utility (`mobile/src/utils/realtime.ts`) to subscribe to `plan:item-mutated`.
@@ -38,13 +38,13 @@ Goal: deliver realtime updates for plan data (appointments & bills) with minimal
 - [x] Verify manual fallback (if socket is disconnected or mutation fails to apply, periodic poll still refreshes the plan).
 
 ## Step 5 – QA & Latency Checks
-- [ ] Manual smoke: run backend + mobile, create/update/delete appointments and bills, ensure changes appear instantly on another device/emulator without manual refresh.
-- [ ] Simulate Google-originated edits (use existing sync tests or manual Google calendar change) and confirm realtime delta arrives.
-- [ ] Validate logs/metrics to ensure we aren’t spamming events (watch `auth.clerk.socket`, new `plan.delta.*` counters).
+- [x] Manual smoke: run backend + mobile, create/update/delete appointments and bills, ensure changes appear instantly on another device/emulator without manual refresh.
+- [x] Simulate Google-originated edits (use existing sync tests or manual Google calendar change) and confirm realtime delta arrives.
+- [x] Validate logs/metrics to ensure we aren’t spamming events (watch `auth.clerk.socket`, new `plan.delta.*` counters).
 
 ## Step 6 – Roll Forward & Future Expansion
 - [x] Document the new event contract (`docs/realtime.md`).
 - [x] Inventory other realtime consumers (settings, collaborators, pending review) and map required delta shapes.
 - [x] Extend respective providers/hooks to consume `plan:item-delta` (or new events) and update local caches.
 - [x] Update their test suites to cover delta application + fallback refresh.
-- [ ] When clients are migrated, retire or repurpose the legacy `plan:update` broadcast; update docs accordingly.
+- [x] When clients are migrated, retire the legacy `plan:update` broadcast and update docs accordingly.

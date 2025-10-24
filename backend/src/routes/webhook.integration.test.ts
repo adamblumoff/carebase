@@ -173,10 +173,8 @@ test('inbound email webhook creates bill, bumps plan version, and emits realtime
   let emittedUserId: number | null = null;
   const emittedDeltas: any[] = [];
   __setRealtimeEmitterForTests({
-    emitPlanUpdate(id: number) {
+    emitPlanItemDelta(id: number, delta: unknown) {
       emittedUserId = id;
-    },
-    emitPlanItemDelta(_id: number, delta: unknown) {
       emittedDeltas.push(delta);
     }
   });

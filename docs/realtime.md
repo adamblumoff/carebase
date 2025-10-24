@@ -1,9 +1,6 @@
 # Realtime Event Contract
 
-Carebase uses Socket.IO to push plan updates to connected clients. Two events are currently published to each authenticated user room:
-
-- `plan:update` (legacy, retained for backwards compatibility): signals that `planVersion` advanced. Clients should fetch `/api/plan` or `/api/plan/version` to reconcile when running older builds.
-- `plan:item-delta` (new): carries a list of granular mutations that let clients patch their local cache without a full refresh.
+Carebase uses Socket.IO to push plan updates to connected clients. Each authenticated user room receives `plan:item-delta` events that describe the relevant mutations so clients can patch their local cache without fetching the entire plan.
 
 ## Socket Payload
 
@@ -50,13 +47,11 @@ Clients should attempt to apply deltas optimistically, but fall back to a silent
 
 ## Client Expectations
 
-1. Subscribe to `plan:item-delta` and `plan:update`.
+1. Subscribe to `plan:item-delta`.
 2. Apply incoming deltas in order, updating local `planVersion` with the highest `version` observed.
 3. When local patching fails or a `plan` delta arrives, trigger a silent refresh.
-4. Maintain existing polling (`/api/plan/version`) as a safety net for disconnected sockets.
+4. Maintain existing polling (`/api/plan/version`) as a safety net for disconnected sockets (especially if sockets drop or older builds are still in the wild).
 
 ## Future Work
 
-- Extend delta handling to collaborator/settings screens.
 - Track metrics for delta volume (`plan.delta.*`) to ensure emit rates stay healthy.
-- Once all clients rely on deltas, consider retiring or repurposing `plan:update`.

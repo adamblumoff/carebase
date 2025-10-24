@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { ensureRealtimeConnected, isRealtimeConnected, addRealtimeStatusListener } from '../realtime';
+import { ensureRealtimeConnected, isRealtimeConnected, addRealtimeStatusListener, addPlanDeltaListener } from '../realtime';
+import { PLAN_ITEM_DELTA_EVENT } from '@carebase/shared';
 import { fetchClerkSessionToken } from '../../auth/clerkTokenCache';
 
 vi.mock('../../auth/clerkTokenCache', () => ({
@@ -44,13 +45,20 @@ describe('realtime', () => {
       statuses.push(status);
     });
 
+    const deltas: any[] = [];
+    addPlanDeltaListener((delta) => {
+      deltas.push(delta);
+    });
+
     await ensureRealtimeConnected();
 
     expect(connectSpy).toHaveBeenCalledTimes(1);
     socketHandlers['connect']?.();
     expect(isRealtimeConnected()).toBe(true);
-    socketHandlers['plan:update']?.();
-    expect(mockEmitPlanChanged).toHaveBeenCalled();
+
+    socketHandlers[PLAN_ITEM_DELTA_EVENT]?.({ deltas: [{ itemType: 'plan', entityId: 0, action: 'updated' }] });
+    expect(deltas).toHaveLength(1);
+    expect(mockEmitPlanChanged).not.toHaveBeenCalled();
 
     socketHandlers['disconnect']?.('io server disconnect');
     expect(isRealtimeConnected()).toBe(false);

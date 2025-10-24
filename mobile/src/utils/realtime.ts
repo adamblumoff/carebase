@@ -66,10 +66,6 @@ async function initSocket(): Promise<void> {
     notifyStatus('disconnected');
   });
 
-  socket.on('plan:update', () => {
-    emitPlanChanged();
-  });
-
   socket.on(PLAN_ITEM_DELTA_EVENT, (payload: { deltas: PlanItemDelta[] }) => {
     if (!payload || !Array.isArray(payload.deltas)) {
       emitPlanChanged();
