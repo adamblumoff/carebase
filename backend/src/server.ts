@@ -2,7 +2,7 @@
 import './env.js';
 
 // Now import everything else
-import express, { Request, Response, type RequestHandler } from 'express';
+import express, { Request, Response, type RequestHandler, NextFunction } from 'express';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { clerkMiddleware } from '@clerk/express';
@@ -60,6 +60,16 @@ app.use(express.json({ limit: '1mb', verify: captureRawBody }));
 app.use(express.urlencoded({ extended: true, limit: '1mb', verify: captureRawBody }));
 if (clerkMiddlewareHandler) {
   app.use(clerkMiddlewareHandler);
+  app.use((err: unknown, _req: Request, _res: Response, next: NextFunction) => {
+    if (
+      err instanceof Error &&
+      err.message.includes('Handshake token verification failed')
+    ) {
+      console.warn('[Auth] Ignoring invalid Clerk handshake token');
+      return next();
+    }
+    return next(err);
+  });
 }
 app.use(attachBearerUser);
 
