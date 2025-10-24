@@ -1,6 +1,6 @@
 import type { BillPayload, BillUpdateRequest, BillStatus } from '@carebase/shared';
 import apiClient from './client';
-import { API_ENDPOINTS } from '../config';
+import { API_ENDPOINTS } from '../config/apiEndpoints';
 
 export interface UpdateBillParams {
   amount?: number | null;

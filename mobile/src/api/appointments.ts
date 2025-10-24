@@ -3,7 +3,7 @@ import type {
   AppointmentUpdateRequest,
 } from '@carebase/shared';
 import apiClient from './client';
-import { API_ENDPOINTS } from '../config';
+import { API_ENDPOINTS } from '../config/apiEndpoints';
 import { formatForPayload } from '../utils/date';
 
 export interface UpdateAppointmentParams {

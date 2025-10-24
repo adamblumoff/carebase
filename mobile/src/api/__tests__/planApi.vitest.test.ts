@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchPlan, fetchPlanVersion } from '../plan';
-import { API_ENDPOINTS } from '../../config';
+import { API_ENDPOINTS } from '../../config/apiEndpoints';
 
 const getMock = vi.fn();
 

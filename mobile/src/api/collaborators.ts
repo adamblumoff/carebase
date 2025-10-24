@@ -1,5 +1,5 @@
 import apiClient from './client';
-import { API_ENDPOINTS } from '../config';
+import { API_ENDPOINTS } from '../config/apiEndpoints';
 
 export type CollaboratorResponse = {
   id: number;

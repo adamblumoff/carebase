@@ -1,6 +1,6 @@
 import type { PendingReviewDraft, PendingReviewListResponse, BillStatus } from '@carebase/shared';
 import apiClient from './client';
-import { API_ENDPOINTS } from '../config';
+import { API_ENDPOINTS } from '../config/apiEndpoints';
 
 export interface ReviewBillPayload {
   amount?: number | null;

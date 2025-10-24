@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { uploadBillPhoto } from '../uploads';
-import { API_ENDPOINTS } from '../../config';
+import { API_ENDPOINTS } from '../../config/apiEndpoints';
 
 const postMock = vi.fn();
 

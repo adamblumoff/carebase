@@ -2,7 +2,7 @@
  * API client for making requests to the backend
  */
 import axios from 'axios';
-import { API_BASE_URL } from '../config';
+import { API_BASE_URL } from '../config/env';
 import { authEvents } from '../auth/authEvents';
 import { fetchClerkSessionToken } from '../auth/clerkTokenCache';
 

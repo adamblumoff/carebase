@@ -4,7 +4,7 @@ import {
   fetchCollaborators,
   inviteCollaborator,
 } from '../collaborators';
-import { API_ENDPOINTS } from '../../config';
+import { API_ENDPOINTS } from '../../config/apiEndpoints';
 
 const getMock = vi.fn();
 const postMock = vi.fn();

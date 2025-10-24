@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { checkSession, logout } from '../auth';
-import { API_ENDPOINTS } from '../../config';
+import { API_ENDPOINTS } from '../../config/apiEndpoints';
 
 const getMock = vi.fn();
 const postMock = vi.fn();

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { updateAppointment, deleteAppointment } from '../appointments';
-import { API_ENDPOINTS } from '../../config';
+import { API_ENDPOINTS } from '../../config/apiEndpoints';
 
 const patchMock = vi.fn();
 const deleteMock = vi.fn();

@@ -1,6 +1,6 @@
 import type { Socket } from 'socket.io-client';
 import { io as createSocket } from 'socket.io-client';
-import { API_BASE_URL } from '../config';
+import { API_BASE_URL } from '../config/env';
 import { emitPlanChanged } from './planEvents';
 import { fetchClerkSessionToken } from '../auth/clerkTokenCache';
 import type { PlanItemDelta } from '@carebase/shared';

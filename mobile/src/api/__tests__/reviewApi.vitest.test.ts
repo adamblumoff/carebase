@@ -5,7 +5,7 @@ import {
   approvePendingReview,
   rejectPendingReview,
 } from '../review';
-import { API_ENDPOINTS } from '../../config';
+import { API_ENDPOINTS } from '../../config/apiEndpoints';
 
 const getMock = vi.fn();
 const patchMock = vi.fn();

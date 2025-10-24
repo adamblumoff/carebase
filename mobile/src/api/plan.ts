@@ -1,6 +1,6 @@
 import type { PlanPayload } from '@carebase/shared';
 import apiClient from './client';
-import { API_ENDPOINTS } from '../config';
+import { API_ENDPOINTS } from '../config/apiEndpoints';
 
 export async function fetchPlan(): Promise<PlanPayload> {
   const response = await apiClient.get(API_ENDPOINTS.getPlan);
