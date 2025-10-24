@@ -4,8 +4,9 @@
 import React from 'react';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import type { Appointment, Bill } from '@carebase/shared';
 import { useTheme } from '../theme';
+import type { RootStackParamList } from './types';
+export type { RootStackParamList } from './types';
 
 // Screens
 import LoginScreen from '../screens/LoginScreen';
@@ -14,15 +15,6 @@ import AppointmentDetailScreen from '../screens/AppointmentDetailScreen';
 import BillDetailScreen from '../screens/BillDetailScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import CameraScreen from '../screens/CameraScreen';
-
-export type RootStackParamList = {
-  Login: undefined;
-  Plan: undefined;
-  AppointmentDetail: { appointment: Appointment };
-  BillDetail: { bill: Bill };
-  Settings: undefined;
-  Camera: undefined;
-};
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 

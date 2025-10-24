@@ -12,7 +12,7 @@ import {
   TextInput,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { RootStackParamList } from '../navigation/AppNavigator';
+import type { RootStackParamList } from '../navigation/types';
 import { updateAppointment, deleteAppointment } from '../api/appointments';
 import { useTheme, spacing, radius, type Palette } from '../theme';
 import { emitPlanChanged } from '../utils/planEvents';
