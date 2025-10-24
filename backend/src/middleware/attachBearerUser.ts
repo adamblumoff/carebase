@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { findUserByClerkUserId } from '../db/queries.js';
-import { ensureLocalUserForClerk, verifyClerkSessionToken } from '../services/clerkSyncService.js';
+import { ensureLocalUserForClerk } from '../services/clerkSyncService.js';
+import { verifyClerkSessionToken } from '../services/clerkAuthGateway.js';
 import { incrementMetric } from '../utils/metrics.js';
 
 type ClerkAuthState = {
