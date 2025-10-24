@@ -23,6 +23,7 @@
     "coverage": "npm run test:coverage --workspace=backend && npm run test:coverage --workspace=mobile",
     "db:migrate": "npm run db:migrate --workspace=backend",
     "lint:deps": "dependency-cruiser --config dependency-cruiser.config.cjs backend/src",
+    "configure:clerk-template": "tsx scripts/configure-clerk-template.ts",
     "num_lines": "find . \\( -path '*.ts' -o -path '*.js' -o -path '*.sql' \\) ! -path '*node_modules*' | xargs wc -l"
   },
   "keywords": [

@@ -88,6 +88,7 @@ function AppBootstrap() {
 }
 
 const TOKEN_REFRESH_INTERVAL_MS = 4 * 60 * 1000;
+const DEFAULT_CLERK_TEMPLATE = 'carebase-session';
 
 function ClerkTokenBridge(): null {
   const { getToken, isSignedIn } = useClerkAuth();
@@ -99,8 +100,8 @@ function ClerkTokenBridge(): null {
       return () => {};
     }
 
-    const options = CLERK_JWT_TEMPLATE ? { template: CLERK_JWT_TEMPLATE } : undefined;
-    setClerkTokenFetcher(() => getToken(options).catch(() => null));
+    const templateId = CLERK_JWT_TEMPLATE ?? DEFAULT_CLERK_TEMPLATE;
+    setClerkTokenFetcher(() => getToken({ template: templateId }).catch(() => null));
 
     const prime = async () => {
       await fetchClerkSessionToken();
