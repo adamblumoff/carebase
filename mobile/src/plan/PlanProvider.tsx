@@ -8,10 +8,10 @@ import React, {
   useState,
 } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { PlanPayload } from '@carebase/shared';
+import type { PlanPayload, PlanItemDelta, BillPayload, AppointmentPayload } from '@carebase/shared';
 import { fetchPlan, fetchPlanVersion } from '../api/plan';
 import { addPlanChangeListener } from '../utils/planEvents';
-import { ensureRealtimeConnected, isRealtimeConnected } from '../utils/realtime';
+import { ensureRealtimeConnected, isRealtimeConnected, addPlanDeltaListener } from '../utils/realtime';
 import { useAuth } from '../auth/AuthContext';
 
 type RefreshSource = 'initial' | 'manual' | 'poll' | 'realtime';
@@ -52,6 +52,99 @@ const normalizePlanPayload = (payload: PlanPayload): PlanPayload => ({
   appointments: Array.isArray(payload.appointments) ? payload.appointments : [],
   bills: Array.isArray(payload.bills) ? payload.bills : [],
 });
+
+type PlanDraft = PlanPayload | null;
+
+function upsertPlanWithDelta(plan: PlanDraft, delta: PlanItemDelta): PlanDraft {
+  if (!plan) {
+    return null;
+  }
+
+  const next: PlanPayload = {
+    ...plan,
+    appointments: [...plan.appointments],
+    bills: [...plan.bills]
+  };
+
+  const applyUpdatedVersion = (version?: number) => {
+    if (typeof version === 'number' && version > next.planVersion) {
+      next.planVersion = version;
+    }
+  };
+
+  applyUpdatedVersion(delta.version);
+
+  const normalizeDeltaAppointment = (data: unknown): AppointmentPayload | null => {
+    if (!data || typeof data !== 'object' || !('appointment' in (data as any))) {
+      return null;
+    }
+    const value = (data as { appointment?: AppointmentPayload }).appointment;
+    return value ? { ...value } : null;
+  };
+
+  const normalizeDeltaBill = (data: unknown): BillPayload | null => {
+    if (!data || typeof data !== 'object' || !('bill' in (data as any))) {
+      return null;
+    }
+    const value = (data as { bill?: BillPayload }).bill;
+    return value ? { ...value } : null;
+  };
+
+  try {
+    if (delta.itemType === 'appointment') {
+      const appointmentData = normalizeDeltaAppointment(delta.data);
+      const index = next.appointments.findIndex((a) => a.id === delta.entityId);
+
+      if (delta.action === 'deleted') {
+        if (index !== -1) {
+          next.appointments.splice(index, 1);
+          return next;
+        }
+        return plan;
+      }
+
+      if (!appointmentData) {
+        return plan;
+      }
+
+      if (index === -1) {
+        next.appointments.unshift(appointmentData);
+      } else {
+        next.appointments[index] = appointmentData;
+      }
+      return next;
+    }
+
+    if (delta.itemType === 'bill') {
+      const billData = normalizeDeltaBill(delta.data);
+      const index = next.bills.findIndex((b) => b.id === delta.entityId);
+
+      if (delta.action === 'deleted') {
+        if (index !== -1) {
+          next.bills.splice(index, 1);
+          return next;
+        }
+        return plan;
+      }
+
+      if (!billData) {
+        return plan;
+      }
+
+      if (index === -1) {
+        next.bills.unshift(billData);
+      } else {
+        next.bills[index] = billData;
+      }
+      return next;
+    }
+  } catch (error) {
+    console.warn('Failed to apply plan delta', error);
+    return plan;
+  }
+
+  return plan;
+}
 
 export function PlanProvider({ children }: { children: React.ReactNode }) {
   const { status: authStatus } = useAuth();
@@ -252,6 +345,22 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
       });
     });
 
+    const unsubscribeDelta = addPlanDeltaListener((delta) => {
+      latestVersionRef.current = Math.max(latestVersionRef.current, delta.version ?? latestVersionRef.current);
+
+      setPlan((prev) => {
+        const next = upsertPlanWithDelta(prev, delta);
+        if (next === prev) {
+          refresh({ source: 'realtime', silent: true }).catch(() => {
+            // ignore
+          });
+          return prev;
+        }
+
+        return next;
+      });
+    });
+
     if (process.env.NODE_ENV !== 'test') {
       ensureRealtimeConnected().catch((err) => {
         console.warn('Realtime connection failed', err);
@@ -260,8 +369,9 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       unsubscribePlan();
+      unsubscribeDelta();
     };
-  }, [authStatus, refreshIfVersionChanged]);
+  }, [authStatus, refreshIfVersionChanged, refresh]);
 
   const schedulePoll = useCallback(() => {
     if (!isSignedInRef.current) {
@@ -337,6 +447,8 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
 
   return <PlanContext.Provider value={contextValue}>{children}</PlanContext.Provider>;
 }
+
+export const __testUpsertPlanWithDelta = upsertPlanWithDelta;
 
 export function usePlan(): PlanContextValue {
   const context = useContext(PlanContext);

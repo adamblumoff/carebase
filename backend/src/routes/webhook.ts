@@ -201,10 +201,10 @@ async function processSource(source: Source): Promise<void> {
 
   // Create appointment or bill based on classification
   if (classification.type === 'appointment' && appointmentData) {
-    const appointment = await createAppointment(item.id, appointmentData);
+    const appointment = await createAppointment(item.id, appointmentData, { mutationSource: 'inbound' });
     await markGoogleSyncPending(appointment.itemId);
   } else if (classification.type === 'bill' && billData) {
-    const bill = await createBill(item.id, billData);
+    const bill = await createBill(item.id, billData, { mutationSource: 'inbound' });
     await markGoogleSyncPending(bill.itemId);
   }
 

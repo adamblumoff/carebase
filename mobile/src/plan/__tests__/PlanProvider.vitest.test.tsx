@@ -13,6 +13,7 @@ const fetchPlanVersionMock = vi.fn<[], Promise<number>>();
 const addPlanChangeListenerMock = vi.fn<(listener: Listener) => () => void>();
 const ensureRealtimeConnectedMock = vi.fn<[], Promise<void>>();
 const isRealtimeConnectedMock = vi.fn<[], boolean>();
+const addPlanDeltaListenerMock = vi.fn<(listener: (delta: unknown) => void) => () => void>();
 
 vi.mock('expo-secure-store', () => ({
   isAvailableAsync: vi.fn().mockResolvedValue(false),
@@ -34,6 +35,8 @@ vi.mock('../../utils/planEvents', () => ({
 vi.mock('../../utils/realtime', () => ({
   ensureRealtimeConnected: () => ensureRealtimeConnectedMock(),
   isRealtimeConnected: () => isRealtimeConnectedMock(),
+  addPlanDeltaListener: (listener: (delta: unknown) => void) => addPlanDeltaListenerMock(listener),
+  addRealtimeStatusListener: () => () => {},
 }));
 
 function createPlan(overrides: Partial<PlanPayload> = {}): PlanPayload {
@@ -96,6 +99,7 @@ function renderProvider(initialStatus: AuthStatus = 'signedIn') {
 
 describe('PlanProvider', () => {
   const listeners: Listener[] = [];
+  const deltaListeners: Array<(delta: unknown) => void> = [];
 
   beforeEach(async () => {
     fetchPlanMock.mockReset();
@@ -103,7 +107,9 @@ describe('PlanProvider', () => {
     ensureRealtimeConnectedMock.mockReset();
     isRealtimeConnectedMock.mockReset();
     addPlanChangeListenerMock.mockReset();
+    addPlanDeltaListenerMock.mockReset();
     listeners.length = 0;
+    deltaListeners.length = 0;
 
     addPlanChangeListenerMock.mockImplementation((listener: Listener) => {
       listeners.push(listener);
@@ -111,6 +117,16 @@ describe('PlanProvider', () => {
         const index = listeners.indexOf(listener);
         if (index >= 0) {
           listeners.splice(index, 1);
+        }
+      };
+    });
+
+    addPlanDeltaListenerMock.mockImplementation((listener: (delta: unknown) => void) => {
+      deltaListeners.push(listener);
+      return () => {
+        const index = deltaListeners.indexOf(listener);
+        if (index >= 0) {
+          deltaListeners.splice(index, 1);
         }
       };
     });
@@ -226,5 +242,35 @@ describe('PlanProvider', () => {
     });
 
     expect(fetchPlanMock).toHaveBeenCalledTimes(initialCalls + 1);
+  });
+
+  it('falls back to full refresh when delta cannot be applied', async () => {
+    const plan = createPlan();
+    fetchPlanMock.mockResolvedValue(plan);
+
+    const { latestValue } = renderProvider();
+
+    await act(async () => {
+      const result = await latestValue.current?.refresh({ source: 'manual' });
+      expect(result?.success).toBe(true);
+    });
+
+    fetchPlanMock.mockClear();
+
+    const delta = {
+      itemType: 'bill',
+      entityId: 999,
+      action: 'updated'
+    };
+
+    await act(async () => {
+      deltaListeners.forEach((listener) => listener(delta));
+    });
+
+    await waitFor(() => {
+      expect(fetchPlanMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(latestValue.current?.plan).toEqual(plan);
   });
 });

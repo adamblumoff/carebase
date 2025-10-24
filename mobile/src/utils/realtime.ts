@@ -3,11 +3,14 @@ import { io as createSocket } from 'socket.io-client';
 import { API_BASE_URL } from '../config';
 import { emitPlanChanged } from './planEvents';
 import { fetchClerkSessionToken } from '../auth/clerkTokenCache';
+import type { PlanItemDelta } from '@carebase/shared';
+import { PLAN_ITEM_DELTA_EVENT } from '@carebase/shared';
 
 let socket: Socket | null = null;
 let connecting = false;
 let connected = false;
 const statusListeners = new Set<(status: 'connected' | 'disconnected') => void>();
+const deltaListeners = new Set<(delta: PlanItemDelta) => void>();
 
 function notifyStatus(status: 'connected' | 'disconnected') {
   statusListeners.forEach((listener) => {
@@ -67,6 +70,23 @@ async function initSocket(): Promise<void> {
     emitPlanChanged();
   });
 
+  socket.on(PLAN_ITEM_DELTA_EVENT, (payload: { deltas: PlanItemDelta[] }) => {
+    if (!payload || !Array.isArray(payload.deltas)) {
+      emitPlanChanged();
+      return;
+    }
+
+    payload.deltas.forEach((delta) => {
+      deltaListeners.forEach((listener) => {
+        try {
+          listener(delta);
+        } catch (error) {
+          console.warn('[Realtime] Delta listener error', error);
+        }
+      });
+    });
+  });
+
   connecting = false;
 }
 
@@ -82,5 +102,12 @@ export function addRealtimeStatusListener(listener: (status: 'connected' | 'disc
   statusListeners.add(listener);
   return () => {
     statusListeners.delete(listener);
+  };
+}
+
+export function addPlanDeltaListener(listener: (delta: PlanItemDelta) => void): () => void {
+  deltaListeners.add(listener);
+  return () => {
+    deltaListeners.delete(listener);
   };
 }

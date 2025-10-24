@@ -33,7 +33,7 @@ const dbAny = dbClientModule.default as unknown as {
 
 const realtimeModule = await import('../services/realtime.js');
 const { __setRealtimeEmitterForTests } = realtimeModule as unknown as {
-  __setRealtimeEmitterForTests: (emitter: { emitPlanUpdate(userId: number): void } | null) => void;
+  __setRealtimeEmitterForTests: (emitter: { emitPlanUpdate(userId: number): void; emitPlanItemDelta(userId: number, delta: unknown): void } | null) => void;
 };
 
 function createSummary(): GoogleSyncSummary {
@@ -138,9 +138,13 @@ test('touchPlanForUser skips realtime and scheduler when no rows updated', async
   });
 
   let emitted = false;
+  let deltaPayload: any = null;
   __setRealtimeEmitterForTests({
     emitPlanUpdate() {
       emitted = true;
+    },
+    emitPlanItemDelta(_userId: number, delta: unknown) {
+      deltaPayload = delta;
     }
   });
 
@@ -148,6 +152,7 @@ test('touchPlanForUser skips realtime and scheduler when no rows updated', async
 
   assert.equal(scheduledUser, null);
   assert.equal(emitted, false);
+  assert.equal(deltaPayload, null);
 
   __setGoogleSyncSchedulerForTests(null);
   __setRealtimeEmitterForTests(null);
@@ -164,11 +169,22 @@ test('touchPlanForItem schedules a Google sync job when update returns owner', a
     scheduledUser = userId;
   });
 
+  let emittedDelta: any = null;
+  __setRealtimeEmitterForTests({
+    emitPlanUpdate() {},
+    emitPlanItemDelta(_userId: number, delta: unknown) {
+      emittedDelta = delta;
+    }
+  });
+
   await __testTouchPlanForItem(999);
 
   assert.equal(scheduledUser, 456);
+  assert.equal(emittedDelta?.itemType, 'plan');
+  assert.equal(emittedDelta?.action, 'updated');
 
   __setGoogleSyncSchedulerForTests(null);
+  __setRealtimeEmitterForTests(null);
   dbAny.query = originalQuery;
   __resetGoogleSyncStateForTests();
 });

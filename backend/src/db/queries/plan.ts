@@ -1,10 +1,15 @@
-import type { User } from '@carebase/shared';
+import type { PlanItemDelta, User } from '@carebase/shared';
 import { db, getRealtimeEmitter } from './shared.js';
 
 let planVersionColumnsEnsured = false;
 let planVersionEnsurePromise: Promise<void> | null = null;
 
 let scheduleGoogleSyncForUserFn: ((userId: number, debounceMs?: number) => void) | null = null;
+
+interface PlanTouchOptions {
+  queueGoogleSync?: boolean;
+  delta?: Omit<PlanItemDelta, 'version'>;
+}
 
 async function scheduleGoogleSync(userId: number): Promise<void> {
   try {
@@ -47,7 +52,7 @@ async function ensurePlanVersionColumns(): Promise<void> {
   await planVersionEnsurePromise;
 }
 
-async function touchPlanForItem(itemId: number, options?: { queueGoogleSync?: boolean }): Promise<void> {
+async function touchPlanForItem(itemId: number, options?: PlanTouchOptions): Promise<void> {
   await ensurePlanVersionColumns();
   const result = await db.query(
     `UPDATE users u
@@ -57,14 +62,26 @@ async function touchPlanForItem(itemId: number, options?: { queueGoogleSync?: bo
     JOIN items i ON i.recipient_id = r.id
      WHERE i.id = $1
        AND r.user_id = u.id
-     RETURNING u.id`,
+     RETURNING u.id, u.plan_version`,
     [itemId]
   );
   const userRow = result.rows[0];
   if (userRow?.id) {
     const ownerId = userRow.id as number;
+    const planVersion = typeof userRow.plan_version === 'number' ? userRow.plan_version : undefined;
     const realtime = getRealtimeEmitter();
     realtime?.emitPlanUpdate(ownerId);
+    if (realtime?.emitPlanItemDelta) {
+      const deltaPayload = options?.delta
+        ? { ...options.delta, version: planVersion }
+        : {
+            itemType: 'plan' as const,
+            entityId: 0,
+            action: 'updated' as const,
+            version: planVersion
+          };
+      realtime.emitPlanItemDelta(ownerId, deltaPayload);
+    }
     if (options?.queueGoogleSync !== false) {
       await scheduleGoogleSync(ownerId);
     }
@@ -74,20 +91,36 @@ async function touchPlanForItem(itemId: number, options?: { queueGoogleSync?: bo
 export const __testTouchPlanForItem = touchPlanForItem;
 export { touchPlanForItem };
 
-export async function touchPlanForUser(userId: number, options?: { queueGoogleSync?: boolean }): Promise<void> {
+export async function touchPlanForUser(userId: number, options?: PlanTouchOptions): Promise<void> {
   await ensurePlanVersionColumns();
   const result = await db.query(
     `UPDATE users
      SET plan_version = COALESCE(plan_version, 0) + 1,
          plan_updated_at = NOW()
-     WHERE id = $1`,
+     WHERE id = $1
+     RETURNING plan_version`,
     [userId]
   );
   if (result.rowCount === 0) {
     return;
   }
+  const planVersion =
+    result.rows[0] && typeof (result.rows[0] as { plan_version: number }).plan_version === 'number'
+      ? (result.rows[0] as { plan_version: number }).plan_version
+      : undefined;
   const realtime = getRealtimeEmitter();
   realtime?.emitPlanUpdate(userId);
+  if (realtime?.emitPlanItemDelta) {
+    const deltaPayload = options?.delta
+      ? { ...options.delta, version: planVersion }
+      : {
+          itemType: 'plan' as const,
+          entityId: 0,
+          action: 'updated' as const,
+          version: planVersion
+        };
+    realtime.emitPlanItemDelta(userId, deltaPayload);
+  }
   if (options?.queueGoogleSync !== false) {
     await scheduleGoogleSync(userId);
   }

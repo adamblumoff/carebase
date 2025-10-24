@@ -1,13 +1,15 @@
 import type { Server as SocketIOServer, Socket } from 'socket.io';
-import type { User } from '@carebase/shared';
+import type { User, PlanItemDelta } from '@carebase/shared';
 import { findUserByClerkUserId } from '../db/queries.js';
 import { verifyClerkSessionToken } from './clerkSyncService.js';
 import { incrementMetric } from '../utils/metrics.js';
+import { PlanRealtimePublisher } from './planRealtimePublisher.js';
 
 const userRoom = (userId: number) => `user:${userId}`;
 
 export interface RealtimeEmitter {
   emitPlanUpdate(userId: number): void;
+  emitPlanItemDelta(userId: number, delta: PlanItemDelta): void;
 }
 
 let emitter: RealtimeEmitter | null = null;
@@ -48,6 +50,8 @@ async function authenticateSocket(socket: Socket): Promise<User | null> {
 }
 
 export function initRealtime(io: SocketIOServer): void {
+  const publisher = new PlanRealtimePublisher(io);
+
   io.use(async (socket, next) => {
     try {
       const user = await authenticateSocket(socket);
@@ -73,7 +77,10 @@ export function initRealtime(io: SocketIOServer): void {
 
   emitter = {
     emitPlanUpdate(userId: number) {
-      io.to(userRoom(userId)).emit('plan:update');
+      publisher.emitPlanUpdate(userId);
+    },
+    emitPlanItemDelta(userId: number, delta: PlanItemDelta) {
+      publisher.emitPlanItemDelta(userId, delta);
     }
   };
 }

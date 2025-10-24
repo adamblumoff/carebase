@@ -324,7 +324,7 @@ export async function applyGoogleAppointmentUpdate(
       prepNote: event.description ?? appointment.prepNote ?? undefined,
       assignedCollaboratorId: appointment.assignedCollaboratorId ?? null
     },
-    { queueGoogleSync: false }
+    { queueGoogleSync: false, mutationSource: 'google' }
   );
 
   const localHash = calculateAppointmentHash(updated);
@@ -398,7 +398,7 @@ export async function applyGoogleBillUpdate(
       status: bill.status,
       assignedCollaboratorId: bill.assignedCollaboratorId ?? null
     },
-    { queueGoogleSync: false }
+    { queueGoogleSync: false, mutationSource: 'google' }
   );
 
   const localHash = calculateBillHash(updated);

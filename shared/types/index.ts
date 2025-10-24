@@ -105,6 +105,25 @@ export interface PendingReviewListResponse {
   items: PendingReviewItem[];
 }
 
+// ========== PLAN REALTIME DELTAS ==========
+
+export type PlanItemMutationAction = 'created' | 'updated' | 'deleted';
+export type PlanItemMutationSource = 'rest' | 'collaborator' | 'google' | 'inbound';
+
+export interface PlanItemDelta {
+  itemType: 'appointment' | 'bill' | 'plan';
+  entityId: number;
+  planItemId?: number;
+  action: PlanItemMutationAction;
+  version?: number;
+  source?: PlanItemMutationSource;
+  data?: Record<string, unknown>;
+}
+
+export interface PlanItemDeltaPayload {
+  deltas: PlanItemDelta[];
+}
+
 // ========== GOOGLE SYNC ==========
 
 export type GoogleSyncDirection = 'push' | 'pull';
@@ -341,3 +360,4 @@ export interface UploadPhotoResponse {
     length: number;
   };
 }
+export const PLAN_ITEM_DELTA_EVENT = 'plan:item-delta' as const;

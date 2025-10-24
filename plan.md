@@ -1,96 +1,48 @@
-# Clerk Migration Plan
+# Realtime Plan Item Updates
 
-## Phase 0 – Foundations & Access
-- Provision Clerk instances (dev/staging/prod) with required sign-in methods: email + password, magic link, Google, Facebook, Apple.
-- Enable audit logs, data residency, TOTP + SMS MFA factors in Clerk dashboard.
-- Generate and store environment variables (`CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY`, etc.) in env templates.
-- Document OAuth provider setup in Clerk (redirect URIs, scopes).
+Goal: deliver realtime updates for plan data (appointments & bills) with minimal payloads, starting with the plan screen and covering all mutation sources (local actions, collaborators, Google sync). The realtime pipeline must still fallback to periodic refresh when sockets lag or disconnect.
 
-## Phase 1 – Database & Model Prep
-- Migration 1: add `clerk_user_id TEXT UNIQUE`, `legacy_google_id TEXT`, `password_reset_required BOOLEAN DEFAULT false` to `users`. Copy existing `google_id` to `legacy_google_id` and allow `google_id` to be nullable.
-- Migration 2: create `users_mfa_status` table with MFA status enum (`pending`, `grace`, `required`, `enrolled`) and timestamps.
-- Update `backend/src/db/queries/users.ts` to expose helpers for lookup by `clerk_user_id` and manage MFA status flags.
-- ✅ Implemented in repo (2025-10-23). Requires running latest DB migration locally (`npm run db:migrate --workspace=backend`) so new columns/table exist.
+---
 
-## Phase 2 – Clerk Backfill & Flagging
-- Implement `backend/scripts/backfill-clerk-users.ts` to upsert all users into Clerk via Management API.
-- For each user: create/sync Clerk user, attach OAuth identity when `legacy_google_id` exists, set `password_reset_required` in both Clerk and local DB.
-- Mirror local roles into Clerk `publicMetadata.roles`.
-- Run script with dry-run mode in dev, then apply in staging, and finally prod during maintenance window.
-- ✅ Script scaffolded (`backend/scripts/backfill-clerk-users.ts`); dry-run by default, use `--apply` when ready. Handles role metadata + password-reset flag. OAuth identity linking still pending (will require dedicated flow once Clerk tokens are available).
-- ✅ Added `backend/scripts/mark-clerk-google-relink.ts` to flag accounts missing Clerk Google OAuth, plus `docs/clerk-google-relink.md` describing the re-link rollout plan.
+## Step 0 – Recon & Guardrails
+- [x] Trace current realtime flow (`backend/src/services/realtime.ts`, `planEvents` helpers, Socket.IO usage in mobile) to document what events already exist (`plan:update`) and when they fire.
+- [x] Confirm `ensureRealtimeConnected` behaviour and polling cadence so the fallback refresh keeps working.
+- [x] List every code path that mutates appointments/bills:
+  - REST controllers (`backend/src/controllers/api/appointments.ts`, `bills.ts`)
+  - Services invoked by collaborators (`.../services/appointmentService.ts`, etc.)
+  - Google sync push/pull pipelines (`googleSync/syncOperations.ts`)
+- [x] Define the minimal delta payload we need (e.g. `{ itemType: 'appointment'|'bill', itemId, action: 'created'|'updated'|'deleted', version }`) and how to extend later for other screens.
 
-## Phase 3 – Dual-Auth Bridge (Temporary)
-- Introduce middleware that accepts legacy sessions/mobile tokens or Clerk tokens.
-- When legacy auth is detected, create a Clerk session (`clerkClient.sessions.create`) and mark user as needing password reset.
-- Instrument metrics/logging to measure remaining legacy traffic.
-- 🔄 In progress: Backend now mints Clerk sessions during mobile login, bearer middleware + Socket.IO accept Clerk JWTs, and bridge events are logged; metrics aggregation/dashboarding still TBD.
+## Step 1 – Backend Event Publisher
+- [x] Add a typed event emitter helper (e.g. `PlanRealtimePublisher`) that wraps the existing Socket.IO emitter and exposes `emitItemMutation(userId, delta)` alongside the existing `emitPlanUpdate`.
+- [x] Ensure the helper deduplicates rapid-fire events (set-level throttle within the same event loop tick) to avoid flooding clients when a service writes multiple rows per operation.
+- [x] Write lightweight unit tests for the publisher to confirm emitted payloads.
 
-## Phase 4 – Backend Session Refactor
-- Replace Express session + Passport with Clerk middleware (`ClerkExpressWithAuth`).
-- Update controllers/services to resolve local users via `clerk_user_id` and attach to `req.user`.
-- Update Socket.IO auth to validate Clerk session JWTs.
-- Deprecate `mobileTokenService` issuance while bridge is active; keep verification until cutover.
-- ✅ Prep work: Bearer + Socket.IO already honor Clerk tokens; metrics/logging in place.
-- Next steps:
-  1. ✅ Define hard-cutover scope with product (Clerk-only auth, legacy tokens removed).
-  2. ✅ Phase 4A – Replace Express session + Passport (2025-10-23):
-     - Removed session + Passport middleware from HTTP/Socket.IO; deleted legacy `/auth` routes.
-     - Clerk middleware now stands alone; `attachBearerUser` continues to populate `req.user`.
-     - Verified env/docs trimmed of `SESSION_SECRET` + session store guidance.
-  3. ✅ Phase 4B – Remove legacy mobile token flow (2025-10-23):
-     - Deleted mobile token utilities + routes, refreshed docs/metadata, and renamed metrics to `auth.clerk.*`.
-     - REST + realtime layers now trust only Clerk tokens; env/docs shed `MOBILE_AUTH_SECRET` references.
-  4. ✅ Phase 4C – Clean up residual Passport artifacts (2025-10-23):
-     - Scrubbed env/docs of legacy `/auth/google` flows, regenerated route docs, and tightened middleware guards.
-     - `ensureAuthenticated` now checks `req.user`; web redirects replaced with 401 for consistency.
-  5. ✅ Phase 4D – Final verification (2025-10-23):
-     - Backend + contract suites passing; pg-mem schema shim updated to skip legacy migration backfill.
-     - Manual smoke test confirmed Clerk session token authenticates REST + Socket.IO against running backend.
-     - Monitoring: follow `auth.clerk.http`/`auth.clerk.socket` counters; bridge metrics removed.
+## Step 2 – Hook Up Mutation Sources
+- [x] REST handlers: after successful create/update/delete of appointments/bills, publish the relevant delta + new plan version. Reuse shared helper so both owner and collaborator routes hit it.
+- [x] Google sync: surface mutations from push/pull ops (the ones that currently schedule a plan refresh) and emit derived deltas before queueing the sync. Make sure deltas fire for both new items and deletions propagated from Google.
+- [x] Service-level guard: if we cannot compute an exact delta (e.g. bulk migration), emit a generic `planVersionBumped` event so clients can fallback to fetching.
+- [x] Extend integration tests (existing google sync + REST tests) to assert that the mocked realtime emitter receives the expected deltas.
 
-## Phase 5 – Mobile App Migration
-- Integrate Clerk Expo SDK with hosted components.
-- Wrap app in `ClerkProvider` and update API client to send Clerk session tokens.
-- Remove legacy mobile login flow and ensure SecureStore still holds app-specific secrets.
-- ✅ Phase ready: backend now Clerk-only; mobile must stop relying on legacy tokens.
-- Execution steps:
-  1. Phase 5A – Clerk provider & env wiring:
-     - Add `@clerk/clerk-expo` dependency and env keys to templates.
-     - Introduce `ClerkProvider` in `App.tsx` with publishable key + token cache helper.
-     - Bridge Clerk token retrieval via a shared module for API interceptors.
-  2. Phase 5B – API client + auth services:
-     - Rework Axios interceptors to fetch Clerk session tokens.
-     - Emit unauthorized events by calling Clerk `signOut` fallback when needed.
-     - Update API-layer tests/mocks for the new token fetcher.
-  3. Phase 5C – Auth context & session bootstrap:
-     - Refactor `AuthProvider` to derive status from Clerk `useAuth` and hydrate backend session data.
-     - Ensure logout delegates to Clerk and clears collaborator/plan state as needed.
-     - Update hooks/tests relying on old sign-in semantics.
-  4. ✅ Phase 5D – UI flows & smoke tests (2025-10-23):
-     - Removed legacy token storage, migrated API/auth tests, and rewired realtime/token consumers.
-     - Replaced `LoginScreen` with Clerk hosted sign-in component (email, magic link, password, Google, Facebook, Apple) and trimmed deep-link mobile-login flow.
-     - Added Clerk mocks to Vitest setup + shortened plan retry delay under test to keep suites fast.
-     - Run Expo Vitest suite and manual sign-in smoke test.
+## Step 3 – Socket Payload & Types
+- [x] Define a new Socket.IO event name (e.g. `plan:item-mutated`) and payload interface in `shared/`.
+- [x] Update backend emitter to broadcast on this channel.
+- [x] Ensure the existing `plan:update` event continues to fire for backwards compatibility until we confirm all clients upgraded.
 
-## Phase 6 – Web Frontend (if applicable)
-- Replace existing web auth UI with Clerk hosted sign-in/up components.
-- Ensure API calls use Clerk session tokens.
+## Step 4 – Mobile Client (Plan Screen)
+- [x] Update the realtime utility (`mobile/src/utils/realtime.ts`) to subscribe to `plan:item-mutated`.
+- [x] Thread delta events through `PlanProvider`:
+  - Apply in-memory updates to `plan` state when possible (create/update/delete).
+  - Track `latestVersion` using the delta payload; when out-of-order or missing data, trigger a `refresh({ silent: true })`.
+- [x] Add Vitest coverage for reducer-style helpers to verify local state patches, including edge cases (unknown item -> fallback refresh).
+- [x] Verify manual fallback (if socket is disconnected or mutation fails to apply, periodic poll still refreshes the plan).
 
-## Phase 7 – Google Sync & Integrations Alignment
-- Resolve Google credential ownership via `clerk_user_id` → local `user.id`.
-- Enforce MFA grace policy before allowing Google OAuth linking.
-- Confirm encryption/storage remain unchanged and cleanup cascades on user deletion.
+## Step 5 – QA & Latency Checks
+- [ ] Manual smoke: run backend + mobile, create/update/delete appointments and bills, ensure changes appear instantly on another device/emulator without manual refresh.
+- [ ] Simulate Google-originated edits (use existing sync tests or manual Google calendar change) and confirm realtime delta arrives.
+- [ ] Validate logs/metrics to ensure we aren’t spamming events (watch `auth.clerk.socket`, new `plan.delta.*` counters).
 
-## Phase 8 – Testing & Validation
-- Update backend tests to mock Clerk auth context and cover MFA grace logic.
-- Adjust contract and mobile tests to operate with Clerk tokens.
-- Manual QA checklist: login flows, password reset, MFA enrollment, Google calendar sync, realtime sockets, contributor invites.
-- ✅ Smoke test complete: Clerk session tokens authenticate REST + Socket.IO; metrics confirm `auth.bridge.http/socket` paths. Re-link script dry run flagged legacy users.
-- 📝 Next: migrate controllers to rely on Clerk context, then retire legacy sessions (Phase 4).
-
-## Phase 9 – Cutover & Cleanup
-- Schedule maintenance window; deploy backend changes, run migrations, execute backfill script.
-- Release mobile build with Clerk integration; coordinate rollout.
-- Remove bridge middleware, drop `google_id`, delete `user_sessions` table if unused, and retire legacy auth code.
-- Update documentation, env templates, and communicate MFA grace expectations.
+## Step 6 – Roll Forward & Future Expansion
+- [ ] Document the new event contract (`docs/realtime.md`).
+- [ ] Once plan screen is stable, replicate the delta handling for settings/collaborator screens (follow-up PR).
+- [ ] When ready, retire legacy `plan:update` broadcast or repurpose it as the catch-all fallback event.

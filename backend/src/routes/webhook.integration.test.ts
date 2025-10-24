@@ -171,9 +171,13 @@ test('inbound email webhook creates bill, bumps plan version, and emits realtime
   );
 
   let emittedUserId: number | null = null;
+  const emittedDeltas: any[] = [];
   __setRealtimeEmitterForTests({
     emitPlanUpdate(id: number) {
       emittedUserId = id;
+    },
+    emitPlanItemDelta(_id: number, delta: unknown) {
+      emittedDeltas.push(delta);
     }
   });
 
@@ -196,6 +200,8 @@ test('inbound email webhook creates bill, bumps plan version, and emits realtime
   assert.equal(response.status, 200);
   assert.equal(response.body.success, true);
 
+  await new Promise((resolve) => setImmediate(resolve));
+
   const { rows: userRows } = await pool.query(
     'SELECT plan_version, plan_updated_at FROM users WHERE id = $1',
     [user.id]
@@ -211,4 +217,8 @@ test('inbound email webhook creates bill, bumps plan version, and emits realtime
 
   assert.equal(bills.length, 1);
   assert.equal(emittedUserId, user.id);
+  assert.ok(emittedDeltas.length > 0);
+  const firstDelta = emittedDeltas[0] as { itemType?: string; action?: string };
+  assert.equal(firstDelta?.itemType, 'bill');
+  assert.equal(firstDelta?.action, 'created');
 });

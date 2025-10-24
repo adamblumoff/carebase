@@ -1,4 +1,4 @@
-import type { Bill, BillCreateRequest, BillStatus, BillUpdateRequest } from '@carebase/shared';
+import type { Bill, BillCreateRequest, BillStatus, BillUpdateRequest, PlanItemMutationSource } from '@carebase/shared';
 import { db } from './shared.js';
 import { generateToken } from './shared.js';
 import { ensureCollaboratorSchema } from './collaborators.js';
@@ -9,6 +9,12 @@ import {
   projectGoogleSyncMetadata
 } from './google.js';
 import { touchPlanForItem } from './plan.js';
+import { toBillPayload } from '../../utils/planPayload.js';
+
+interface BillMutationOptions {
+  queueGoogleSync?: boolean;
+  mutationSource?: PlanItemMutationSource;
+}
 
 interface BillRow {
   id: number;
@@ -65,7 +71,11 @@ export function billRowToBill(row: BillRow): Bill {
   };
 }
 
-export async function createBill(itemId: number, data: BillCreateRequest): Promise<Bill> {
+export async function createBill(
+  itemId: number,
+  data: BillCreateRequest,
+  options?: { mutationSource?: PlanItemMutationSource }
+): Promise<Bill> {
   const { statementDate, amount, dueDate, payUrl, status } = data;
   const taskKey = generateToken(16);
   const sanitizedPayUrl = sanitizePayUrl(payUrl);
@@ -76,11 +86,29 @@ export async function createBill(itemId: number, data: BillCreateRequest): Promi
     [itemId, statementDate, amount, dueDate, sanitizedPayUrl, status || 'todo', taskKey]
   );
   const bill = billRowToBill(result.rows[0] as BillRow);
-  await touchPlanForItem(bill.itemId);
+  const source = options?.mutationSource ?? 'rest';
+
+  await touchPlanForItem(bill.itemId, {
+    delta: {
+      itemType: 'bill',
+      entityId: bill.id,
+      planItemId: bill.itemId,
+      action: 'created',
+      source,
+      data: {
+        bill: toBillPayload(bill)
+      }
+    }
+  });
   return hydrateBillWithGoogleSync(bill);
 }
 
-export async function updateBillStatus(id: number, userId: number, status: BillStatus): Promise<Bill> {
+export async function updateBillStatus(
+  id: number,
+  userId: number,
+  status: BillStatus,
+  options?: { mutationSource?: PlanItemMutationSource }
+): Promise<Bill> {
   const result = await db.query(
     `UPDATE bills AS b
      SET status = $1
@@ -98,14 +126,28 @@ export async function updateBillStatus(id: number, userId: number, status: BillS
   }
 
   const bill = billRowToBill(result.rows[0] as BillRow);
-  await touchPlanForItem(bill.itemId);
+  const source = options?.mutationSource ?? 'rest';
+
+  await touchPlanForItem(bill.itemId, {
+    delta: {
+      itemType: 'bill',
+      entityId: bill.id,
+      planItemId: bill.itemId,
+      action: 'updated',
+      source,
+      data: {
+        bill: toBillPayload(bill)
+      }
+    }
+  });
   return hydrateBillWithGoogleSync(bill);
 }
 
 export async function updateBillStatusForRecipient(
   id: number,
   recipientId: number,
-  status: BillStatus
+  status: BillStatus,
+  options?: { mutationSource?: PlanItemMutationSource }
 ): Promise<Bill> {
   const result = await db.query(
     `UPDATE bills AS b
@@ -123,7 +165,20 @@ export async function updateBillStatusForRecipient(
   }
 
   const bill = billRowToBill(result.rows[0] as BillRow);
-  await touchPlanForItem(bill.itemId);
+  const source = options?.mutationSource ?? 'collaborator';
+
+  await touchPlanForItem(bill.itemId, {
+    delta: {
+      itemType: 'bill',
+      entityId: bill.id,
+      planItemId: bill.itemId,
+      action: 'updated',
+      source,
+      data: {
+        bill: toBillPayload(bill)
+      }
+    }
+  });
   return hydrateBillWithGoogleSync(bill);
 }
 
@@ -150,7 +205,7 @@ export async function updateBill(
   id: number,
   userId: number,
   data: BillUpdateRequest,
-  options?: { queueGoogleSync?: boolean }
+  options?: BillMutationOptions
 ): Promise<Bill> {
   await ensureCollaboratorSchema();
   const { statementDate, amount, dueDate, payUrl, status, assignedCollaboratorId } = data;
@@ -171,7 +226,21 @@ export async function updateBill(
     throw new Error('Bill not found');
   }
   const bill = billRowToBill(result.rows[0] as BillRow);
-  await touchPlanForItem(bill.itemId, { queueGoogleSync: options?.queueGoogleSync !== false });
+  const source = options?.mutationSource ?? 'rest';
+
+  await touchPlanForItem(bill.itemId, {
+    queueGoogleSync: options?.queueGoogleSync !== false,
+    delta: {
+      itemType: 'bill',
+      entityId: bill.id,
+      planItemId: bill.itemId,
+      action: 'updated',
+      source,
+      data: {
+        bill: toBillPayload(bill)
+      }
+    }
+  });
   return hydrateBillWithGoogleSync(bill);
 }
 
@@ -179,7 +248,7 @@ export async function updateBillForRecipient(
   id: number,
   recipientId: number,
   data: BillUpdateRequest,
-  options?: { queueGoogleSync?: boolean }
+  options?: BillMutationOptions
 ): Promise<Bill> {
   await ensureCollaboratorSchema();
   const { statementDate, amount, dueDate, payUrl, status, assignedCollaboratorId } = data;
@@ -199,7 +268,21 @@ export async function updateBillForRecipient(
     throw new Error('Bill not found');
   }
   const bill = billRowToBill(result.rows[0] as BillRow);
-  await touchPlanForItem(bill.itemId, { queueGoogleSync: options?.queueGoogleSync !== false });
+  const source = options?.mutationSource ?? 'collaborator';
+
+  await touchPlanForItem(bill.itemId, {
+    queueGoogleSync: options?.queueGoogleSync !== false,
+    delta: {
+      itemType: 'bill',
+      entityId: bill.id,
+      planItemId: bill.itemId,
+      action: 'updated',
+      source,
+      data: {
+        bill: toBillPayload(bill)
+      }
+    }
+  });
   return hydrateBillWithGoogleSync(bill);
 }
 
@@ -243,7 +326,11 @@ export async function getBillByItemId(itemId: number): Promise<Bill | undefined>
   return result.rows[0] ? billRowToBill(result.rows[0] as BillRow) : undefined;
 }
 
-export async function deleteBill(id: number, userId: number): Promise<void> {
+export async function deleteBill(
+  id: number,
+  userId: number,
+  options?: { mutationSource?: PlanItemMutationSource }
+): Promise<void> {
   const result = await db.query(
     `DELETE FROM bills b
      USING items i
@@ -251,11 +338,21 @@ export async function deleteBill(id: number, userId: number): Promise<void> {
      WHERE b.id = $1
        AND b.item_id = i.id
        AND r.user_id = $2
-     RETURNING b.item_id`,
+     RETURNING b.item_id, b.id`,
     [id, userId]
   );
   if (result.rowCount === 0) {
     throw new Error('Bill not found');
   }
-  await touchPlanForItem(result.rows[0].item_id as number);
+  const source = options?.mutationSource ?? 'rest';
+
+  await touchPlanForItem(result.rows[0].item_id as number, {
+    delta: {
+      itemType: 'bill',
+      entityId: id,
+      planItemId: result.rows[0].item_id as number,
+      action: 'deleted',
+      source
+    }
+  });
 }

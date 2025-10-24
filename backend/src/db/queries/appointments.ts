@@ -1,7 +1,8 @@
 import type {
   Appointment,
   AppointmentCreateRequest,
-  AppointmentUpdateRequest
+  AppointmentUpdateRequest,
+  PlanItemMutationSource
 } from '@carebase/shared';
 import { db } from './shared.js';
 import { generateToken } from './shared.js';
@@ -13,6 +14,12 @@ import {
   projectGoogleSyncMetadata
 } from './google.js';
 import { touchPlanForItem } from './plan.js';
+import { toAppointmentPayload } from '../../utils/planPayload.js';
+
+interface AppointmentMutationOptions {
+  queueGoogleSync?: boolean;
+  mutationSource?: PlanItemMutationSource;
+}
 import { formatInstantWithZone, getDefaultTimeZone, toUtcDateFromLocalTime } from '../../utils/timezone.js';
 
 function computeOffsetForZone(date: Date, timeZone: string): string {
@@ -66,7 +73,11 @@ export function appointmentRowToAppointment(row: AppointmentRow): Appointment {
   };
 }
 
-export async function createAppointment(itemId: number, data: AppointmentCreateRequest): Promise<Appointment> {
+export async function createAppointment(
+  itemId: number,
+  data: AppointmentCreateRequest,
+  options?: { mutationSource?: PlanItemMutationSource }
+): Promise<Appointment> {
   const { startLocal, endLocal, startTimeZone, endTimeZone, location, prepNote, summary } = data;
   const icsToken = generateToken(32);
   const defaultTimeZone = getDefaultTimeZone();
@@ -95,7 +106,20 @@ export async function createAppointment(itemId: number, data: AppointmentCreateR
     ]
   );
   const appointment = appointmentRowToAppointment(result.rows[0] as AppointmentRow);
-  await touchPlanForItem(appointment.itemId);
+  const source = options?.mutationSource ?? 'rest';
+
+  await touchPlanForItem(appointment.itemId, {
+    delta: {
+      itemType: 'appointment',
+      entityId: appointment.id,
+      planItemId: appointment.itemId,
+      action: 'created',
+      source,
+      data: {
+        appointment: toAppointmentPayload(appointment)
+      }
+    }
+  });
   return hydrateAppointmentWithGoogleSync(appointment);
 }
 
@@ -131,7 +155,7 @@ export async function updateAppointment(
   id: number,
   userId: number,
   data: AppointmentUpdateRequest,
-  options?: { queueGoogleSync?: boolean }
+  options?: AppointmentMutationOptions
 ): Promise<Appointment> {
   await ensureCollaboratorSchema();
   const {
@@ -190,7 +214,21 @@ export async function updateAppointment(
     throw new Error('Appointment not found');
   }
   const appointment = appointmentRowToAppointment(result.rows[0] as AppointmentRow);
-  await touchPlanForItem(appointment.itemId, { queueGoogleSync: options?.queueGoogleSync !== false });
+  const source = options?.mutationSource ?? 'rest';
+
+  await touchPlanForItem(appointment.itemId, {
+    queueGoogleSync: options?.queueGoogleSync !== false,
+    delta: {
+      itemType: 'appointment',
+      entityId: appointment.id,
+      planItemId: appointment.itemId,
+      action: 'updated',
+      source,
+      data: {
+        appointment: toAppointmentPayload(appointment)
+      }
+    }
+  });
   return hydrateAppointmentWithGoogleSync(appointment);
 }
 
@@ -198,7 +236,7 @@ export async function updateAppointmentForRecipient(
   id: number,
   recipientId: number,
   data: AppointmentUpdateRequest,
-  options?: { queueGoogleSync?: boolean }
+  options?: AppointmentMutationOptions
 ): Promise<Appointment> {
   await ensureCollaboratorSchema();
   const {
@@ -256,7 +294,21 @@ export async function updateAppointmentForRecipient(
     throw new Error('Appointment not found');
   }
   const appointment = appointmentRowToAppointment(result.rows[0] as AppointmentRow);
-  await touchPlanForItem(appointment.itemId, { queueGoogleSync: options?.queueGoogleSync !== false });
+  const source = options?.mutationSource ?? 'collaborator';
+
+  await touchPlanForItem(appointment.itemId, {
+    queueGoogleSync: options?.queueGoogleSync !== false,
+    delta: {
+      itemType: 'appointment',
+      entityId: appointment.id,
+      planItemId: appointment.itemId,
+      action: 'updated',
+      source,
+      data: {
+        appointment: toAppointmentPayload(appointment)
+      }
+    }
+  });
   return hydrateAppointmentWithGoogleSync(appointment);
 }
 
@@ -300,7 +352,11 @@ export async function getAppointmentByItemId(itemId: number): Promise<Appointmen
   return result.rows[0] ? appointmentRowToAppointment(result.rows[0] as AppointmentRow) : undefined;
 }
 
-export async function deleteAppointment(id: number, userId: number): Promise<void> {
+export async function deleteAppointment(
+  id: number,
+  userId: number,
+  options?: { mutationSource?: PlanItemMutationSource }
+): Promise<void> {
   const result = await db.query(
     `DELETE FROM appointments a
      USING items i
@@ -308,11 +364,21 @@ export async function deleteAppointment(id: number, userId: number): Promise<voi
      WHERE a.id = $1
        AND a.item_id = i.id
        AND r.user_id = $2
-     RETURNING a.item_id`,
+     RETURNING a.item_id, a.id`,
     [id, userId]
   );
   if (result.rowCount === 0) {
     throw new Error('Appointment not found');
   }
-  await touchPlanForItem(result.rows[0].item_id as number);
+  const source = options?.mutationSource ?? 'rest';
+
+  await touchPlanForItem(result.rows[0].item_id as number, {
+    delta: {
+      itemType: 'appointment',
+      entityId: id,
+      planItemId: result.rows[0].item_id as number,
+      action: 'deleted',
+      source
+    }
+  });
 }
