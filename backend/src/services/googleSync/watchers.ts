@@ -80,17 +80,19 @@ async function stopGoogleWatch(accessToken: string, channelId: string, resourceI
 export async function ensureCalendarWatchForUser(
   userId: number,
   accessToken: string,
-  calendarId: string
+  calendarId: string,
+  clerkUserId?: string | null
 ): Promise<GoogleWatchChannel> {
   const normalizedCalendarId = normalizeCalendarId(calendarId);
   if (isTestEnv && testSchedulerOverride) {
-    const existingTestChannel = await findGoogleWatchChannelByUser(userId, normalizedCalendarId);
+    const existingTestChannel = await findGoogleWatchChannelByUser(userId, normalizedCalendarId, clerkUserId);
     if (existingTestChannel) {
       return existingTestChannel;
     }
     return upsertGoogleWatchChannel({
       channelId: `test-${userId}-${normalizedCalendarId}`,
       userId,
+      clerkUserId: clerkUserId ?? null,
       calendarId: normalizedCalendarId,
       resourceId: `test-resource-${userId}-${normalizedCalendarId}`,
       resourceUri: null,
@@ -99,7 +101,7 @@ export async function ensureCalendarWatchForUser(
     });
   }
 
-  const existing = await findGoogleWatchChannelByUser(userId, normalizedCalendarId);
+  const existing = await findGoogleWatchChannelByUser(userId, normalizedCalendarId, clerkUserId);
   const now = Date.now();
   if (existing) {
     const expiresAtMs =
@@ -148,6 +150,7 @@ export async function ensureCalendarWatchForUser(
   return upsertGoogleWatchChannel({
     channelId,
     userId,
+    clerkUserId: clerkUserId ?? null,
     calendarId: normalizedCalendarId,
     resourceId: String(responseResourceId),
     resourceUri: response.resourceUri ?? response.resource_uri ?? null,
@@ -172,7 +175,7 @@ export async function refreshExpiringGoogleWatches(): Promise<void> {
       try {
         const { credential, accessToken } = await ensureValidAccessToken(channel.userId);
         const calendarId = normalizeCalendarId(credential.calendarId);
-        await ensureCalendarWatchForUser(channel.userId, accessToken, calendarId);
+        await ensureCalendarWatchForUser(channel.userId, accessToken, calendarId, credential.clerkUserId);
       } catch (error) {
         logWarn(
           `Failed to renew Google watch for user ${channel.userId}`,
@@ -252,6 +255,7 @@ export async function handleGoogleWatchNotification(
   await upsertGoogleWatchChannel({
     channelId: channel.channelId,
     userId: channel.userId,
+    clerkUserId: channel.clerkUserId,
     calendarId: channel.calendarId,
     resourceId: channel.resourceId,
     resourceUri: resourceUri ?? channel.resourceUri ?? undefined,
@@ -272,20 +276,22 @@ export async function handleGoogleWatchNotification(
 }
 
 export async function stopCalendarWatchForUser(userId: number): Promise<void> {
-  const channels = await listGoogleWatchChannelsByUser(userId);
-  if (channels.length === 0) {
-    return;
-  }
-
   let accessToken: string | null = null;
+  let clerkUserId: string | null = null;
   try {
     const authenticated = await ensureValidAccessToken(userId);
     accessToken = authenticated.accessToken;
+    clerkUserId = authenticated.credential.clerkUserId ?? null;
   } catch (error) {
     logWarn(
       `Unable to fetch Google credentials when stopping watch for user ${userId}`,
       error instanceof Error ? error.message : String(error)
     );
+  }
+
+  const channels = await listGoogleWatchChannelsByUser(userId, clerkUserId);
+  if (channels.length === 0) {
+    return;
   }
 
   for (const channel of channels) {

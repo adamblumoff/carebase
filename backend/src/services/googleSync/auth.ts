@@ -170,7 +170,7 @@ export async function ensureValidAccessToken(userId: number): Promise<Authentica
     managedCalendarVerifiedAt: credential.managedCalendarVerifiedAt ?? null,
     managedCalendarAclRole: credential.managedCalendarAclRole ?? null,
     legacyCalendarId: credential.legacyCalendarId ?? null
-  });
+  }, { clerkUserId: credential.clerkUserId });
 
   return { credential: updated, accessToken: updated.accessToken };
 }

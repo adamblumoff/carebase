@@ -162,7 +162,7 @@ export async function ensureManagedCalendarForUser(
     managedCalendarVerifiedAt: credential.managedCalendarVerifiedAt ?? null,
     managedCalendarAclRole: credential.managedCalendarAclRole ?? null,
     legacyCalendarId
-  });
+  }, { clerkUserId: credential.clerkUserId });
 
   credential.calendarId = updated.calendarId;
   credential.managedCalendarId = updated.managedCalendarId;
@@ -353,7 +353,7 @@ export async function ensureManagedCalendarAclForUser(
     managedCalendarVerifiedAt: verifiedAtNext,
     managedCalendarAclRole: role,
     legacyCalendarId: credential.legacyCalendarId ?? null
-  });
+  }, { clerkUserId: credential.clerkUserId });
 
   credential.managedCalendarId = updated.managedCalendarId;
   credential.managedCalendarSummary = updated.managedCalendarSummary;

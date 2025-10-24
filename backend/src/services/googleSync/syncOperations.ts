@@ -302,7 +302,7 @@ export async function pullGoogleChanges(
         managedCalendarVerifiedAt: credential.managedCalendarVerifiedAt ?? null,
         managedCalendarAclRole: credential.managedCalendarAclRole ?? null,
         legacyCalendarId: credential.legacyCalendarId ?? null
-      });
+      }, { clerkUserId: credential.clerkUserId });
 
       if (!retrying) {
         await pullGoogleChanges(
@@ -337,7 +337,7 @@ export async function pullGoogleChanges(
       managedCalendarVerifiedAt: credential.managedCalendarVerifiedAt ?? null,
       managedCalendarAclRole: credential.managedCalendarAclRole ?? null,
       legacyCalendarId: credential.legacyCalendarId ?? null
-    });
+    }, { clerkUserId: credential.clerkUserId });
     logInfo(`Updated sync token for user ${credential.userId}`, {
       calendarId,
       nextSyncToken: latestSyncToken,
@@ -367,6 +367,6 @@ export async function pullGoogleChanges(
       managedCalendarVerifiedAt: credential.managedCalendarVerifiedAt ?? null,
       managedCalendarAclRole: credential.managedCalendarAclRole ?? null,
       legacyCalendarId: credential.legacyCalendarId ?? null
-    });
+    }, { clerkUserId: credential.clerkUserId });
   }
 }

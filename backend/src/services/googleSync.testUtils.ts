@@ -316,6 +316,7 @@ const GOOGLE_SYNC_TEST_SCHEMA = `
 
   CREATE TABLE google_credentials (
     user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    clerk_user_id TEXT,
     access_token TEXT NOT NULL,
     refresh_token TEXT NOT NULL,
     scope TEXT[],
@@ -339,6 +340,7 @@ const GOOGLE_SYNC_TEST_SCHEMA = `
   CREATE TABLE google_watch_channels (
     channel_id TEXT PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    clerk_user_id TEXT,
     calendar_id TEXT,
     resource_id TEXT NOT NULL,
     resource_uri TEXT,
@@ -352,4 +354,5 @@ const GOOGLE_SYNC_TEST_SCHEMA = `
   CREATE INDEX idx_google_sync_links_event ON google_sync_links(event_id);
   CREATE INDEX idx_google_sync_links_calendar ON google_sync_links(calendar_id);
   CREATE INDEX idx_google_credentials_expires_at ON google_credentials(expires_at);
+  CREATE INDEX idx_google_credentials_clerk_user ON google_credentials(clerk_user_id);
 `;

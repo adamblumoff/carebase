@@ -7,6 +7,7 @@ import {
   deleteGoogleCredential,
   findUserById,
   getGoogleIntegrationStatus,
+  getUserMfaStatus,
   queueGoogleSyncForUser,
   upsertGoogleCredential
 } from '../db/queries.js';
@@ -29,6 +30,16 @@ const GOOGLE_SCOPES = [
   'profile',
   'https://www.googleapis.com/auth/calendar.events'
 ];
+
+async function assertMfaEnrolled(user: User): Promise<void> {
+  const status = await getUserMfaStatus(user.id);
+  if (!status || status.status !== 'enrolled') {
+    throw new ValidationError({
+      code: 'mfa_required',
+      message: 'Multi-factor authentication must be enrolled before connecting Google Calendar.'
+    });
+  }
+}
 
 function normalizeScope(input: string | string[] | undefined): string[] {
   if (!input) return [];
@@ -61,6 +72,7 @@ function getServerRedirectUri(): string {
 }
 
 export async function startGoogleIntegration(user: User): Promise<{ authUrl: string; redirectUri: string }> {
+  await assertMfaEnrolled(user);
   const clientId = getOAuthClientId();
   const statePayload = {
     userId: user.id,
@@ -113,6 +125,14 @@ export async function handleGoogleCallback(params: {
     return { redirect: 'carebase://integrations/google?status=error&code=unknown_user' };
   }
 
+  try {
+    await assertMfaEnrolled(user);
+  } catch (error) {
+    const validation = error instanceof ValidationError ? error : null;
+    const code = validation?.code ?? 'mfa_required';
+    return { redirect: `carebase://integrations/google?status=error&code=${encodeURIComponent(code)}` };
+  }
+
   const redirectUri = getServerRedirectUri();
   const exchange = await exchangeGoogleAuthorizationCodeServer(code, redirectUri);
   const expiresAt = exchange.expiresIn ? new Date(Date.now() + exchange.expiresIn * 1000) : null;
@@ -127,7 +147,7 @@ export async function handleGoogleCallback(params: {
     calendarId: null,
     syncToken: null,
     lastPulledAt: null
-  });
+  }, { clerkUserId: user.clerkUserId });
 
   const managed = await ensureManagedCalendarForUser(credential, exchange.accessToken);
   const migrationSummary = await migrateEventsToManagedCalendar(credential, exchange.accessToken, managed.calendarId);
@@ -160,6 +180,7 @@ export async function connectGoogleIntegration(
     redirectUri?: string;
   }
 ): Promise<{ connected: true; summary: GoogleSyncSummary }> {
+  await assertMfaEnrolled(user);
   let accessToken = payload.accessToken ?? null;
   let refreshToken = payload.refreshToken ?? null;
   let scope = normalizeScope(payload.scope);
@@ -205,7 +226,7 @@ export async function connectGoogleIntegration(
     calendarId,
     syncToken: null,
     lastPulledAt: null
-  });
+  }, { clerkUserId: user.clerkUserId });
 
   const managed = await ensureManagedCalendarForUser(credential, accessToken);
   const migrationSummary = await migrateEventsToManagedCalendar(credential, accessToken, managed.calendarId);

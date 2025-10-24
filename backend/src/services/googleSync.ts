@@ -136,7 +136,7 @@ export async function refreshManagedCalendarWatch(
   }
 
   try {
-    await ensureCalendarWatchForUser(credential.userId, accessToken, normalizedTarget);
+    await ensureCalendarWatchForUser(credential.userId, accessToken, normalizedTarget, credential.clerkUserId);
   } catch (error) {
     logWarn('Failed to ensure Google watch for managed calendar', {
       userId: credential.userId,
@@ -186,7 +186,7 @@ export async function syncUserWithGoogle(userId: number, options: GoogleSyncOpti
 
   if (options.pullRemote !== false) {
     try {
-      await ensureCalendarWatchForUser(userId, accessToken, calendarId);
+      await ensureCalendarWatchForUser(userId, accessToken, calendarId, credential.clerkUserId);
     } catch (error) {
       logWarn(
         `Failed to ensure Google watch for user ${userId}`,
@@ -212,7 +212,7 @@ export async function syncUserWithGoogle(userId: number, options: GoogleSyncOpti
       managedCalendarVerifiedAt: credential.managedCalendarVerifiedAt ?? null,
       managedCalendarAclRole: credential.managedCalendarAclRole ?? null,
       legacyCalendarId: credential.legacyCalendarId ?? null
-    });
+    }, { clerkUserId: credential.clerkUserId });
   }
 
   if (options.forceFull) {
@@ -241,7 +241,7 @@ export async function syncUserWithGoogle(userId: number, options: GoogleSyncOpti
       managedCalendarVerifiedAt: credential.managedCalendarVerifiedAt ?? null,
       managedCalendarAclRole: credential.managedCalendarAclRole ?? null,
       legacyCalendarId: credential.legacyCalendarId ?? null
-    });
+    }, { clerkUserId: credential.clerkUserId });
     credential.syncToken = 'local-seed';
   }
 

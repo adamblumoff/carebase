@@ -240,6 +240,7 @@ CREATE INDEX IF NOT EXISTS idx_google_sync_links_calendar ON google_sync_links(c
 -- Google OAuth credentials table
 CREATE TABLE IF NOT EXISTS google_credentials (
   user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  clerk_user_id VARCHAR(255),
   access_token TEXT NOT NULL,
   refresh_token TEXT NOT NULL,
   scope TEXT[],
@@ -253,6 +254,11 @@ CREATE TABLE IF NOT EXISTS google_credentials (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE google_credentials
+  ADD COLUMN IF NOT EXISTS clerk_user_id VARCHAR(255);
+
+CREATE INDEX IF NOT EXISTS idx_google_credentials_clerk_user ON google_credentials(clerk_user_id);
 
 ALTER TABLE google_credentials
   ADD COLUMN IF NOT EXISTS access_token TEXT;

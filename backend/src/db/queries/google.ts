@@ -54,6 +54,7 @@ async function ensureGoogleIntegrationSchema(): Promise<void> {
         await db.query(`
           CREATE TABLE IF NOT EXISTS google_credentials (
             user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            clerk_user_id VARCHAR(255),
             access_token TEXT NOT NULL,
             refresh_token TEXT NOT NULL,
             scope TEXT[],
@@ -74,6 +75,9 @@ async function ensureGoogleIntegrationSchema(): Promise<void> {
           `CREATE INDEX IF NOT EXISTS idx_google_credentials_expires_at ON google_credentials(expires_at)`
         );
         await db.query(
+          `CREATE INDEX IF NOT EXISTS idx_google_credentials_clerk_user ON google_credentials(clerk_user_id)`
+        );
+        await db.query(
           `ALTER TABLE google_sync_links
              ADD COLUMN IF NOT EXISTS sync_status VARCHAR(20) NOT NULL DEFAULT 'idle' CHECK (sync_status IN ('idle', 'pending', 'error'))`
         );
@@ -92,6 +96,10 @@ async function ensureGoogleIntegrationSchema(): Promise<void> {
         await db.query(
           `ALTER TABLE google_credentials
              ADD COLUMN IF NOT EXISTS id_token TEXT`
+        );
+        await db.query(
+          `ALTER TABLE google_credentials
+             ADD COLUMN IF NOT EXISTS clerk_user_id VARCHAR(255)`
         );
         await db.query(
           `ALTER TABLE google_credentials
@@ -117,6 +125,7 @@ async function ensureGoogleIntegrationSchema(): Promise<void> {
           CREATE TABLE IF NOT EXISTS google_watch_channels (
             channel_id TEXT PRIMARY KEY,
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            clerk_user_id VARCHAR(255),
             calendar_id TEXT,
             resource_id TEXT NOT NULL,
             resource_uri TEXT,
@@ -134,6 +143,10 @@ async function ensureGoogleIntegrationSchema(): Promise<void> {
         );
         await db.query(
           `CREATE INDEX IF NOT EXISTS idx_google_watch_channels_expiration ON google_watch_channels(expiration)`
+        );
+        await db.query(
+          `ALTER TABLE google_watch_channels
+             ADD COLUMN IF NOT EXISTS clerk_user_id VARCHAR(255)`
         );
       } catch (error) {
         console.error('Failed to ensure Google integration schema:', error);
@@ -173,6 +186,7 @@ export const GOOGLE_SYNC_PROJECTION = `
 interface GoogleWatchChannelRow {
   channel_id: string;
   user_id: number;
+  clerk_user_id: string | null;
   calendar_id: string | null;
   resource_id: string;
   resource_uri: string | null;
@@ -185,6 +199,7 @@ interface GoogleWatchChannelRow {
 export interface GoogleWatchChannel {
   channelId: string;
   userId: number;
+  clerkUserId: string | null;
   calendarId: string | null;
   resourceId: string;
   resourceUri: string | null;
@@ -210,6 +225,7 @@ function watchRowToChannel(row: GoogleWatchChannelRow): GoogleWatchChannel {
   return {
     channelId: row.channel_id,
     userId: row.user_id,
+    clerkUserId: row.clerk_user_id ?? null,
     calendarId: row.calendar_id ?? null,
     resourceId: row.resource_id,
     resourceUri: row.resource_uri ?? null,
@@ -238,6 +254,7 @@ interface GoogleSyncLinkRow {
 
 interface GoogleCredentialRow {
   user_id: number;
+  clerk_user_id: string | null;
   access_token: string;
   refresh_token: string;
   scope: string[] | null;
@@ -317,6 +334,7 @@ export function projectGoogleSyncMetadata(
 
 export interface GoogleCredential {
   userId: number;
+  clerkUserId: string | null;
   accessToken: string;
   refreshToken: string;
   scope: string[];
@@ -351,6 +369,16 @@ export interface GoogleSyncLinkUpsertData {
 
 async function googleCredentialRowToCredential(row: GoogleCredentialRow): Promise<GoogleCredential> {
   const updates: Array<{ column: keyof GoogleCredentialRow; value: string | null }> = [];
+
+  let clerkUserId = row.clerk_user_id ?? null;
+  if (!clerkUserId) {
+    const lookup = await db.query('SELECT clerk_user_id FROM users WHERE id = $1', [row.user_id]);
+    const discovered = (lookup.rows[0]?.clerk_user_id as string | null) ?? null;
+    if (discovered) {
+      clerkUserId = discovered;
+      updates.push({ column: 'clerk_user_id', value: discovered });
+    }
+  }
 
   const resolveToken = (value: string | null, column: keyof GoogleCredentialRow): string | null => {
     if (!value) {
@@ -393,6 +421,7 @@ async function googleCredentialRowToCredential(row: GoogleCredentialRow): Promis
 
   return {
     userId: row.user_id,
+    clerkUserId,
     accessToken,
     refreshToken,
     scope: row.scope ?? [],
@@ -426,6 +455,24 @@ export async function getGoogleCredential(userId: number): Promise<GoogleCredent
   return googleCredentialRowToCredential(result.rows[0] as GoogleCredentialRow);
 }
 
+export async function getGoogleCredentialByClerkUserId(clerkUserId: string): Promise<GoogleCredential | null> {
+  await ensureGoogleIntegrationSchema();
+  const direct = await db.query(
+    'SELECT * FROM google_credentials WHERE clerk_user_id = $1 LIMIT 1',
+    [clerkUserId]
+  );
+  if (direct.rows.length > 0) {
+    return googleCredentialRowToCredential(direct.rows[0] as GoogleCredentialRow);
+  }
+
+  const fallback = await db.query('SELECT id FROM users WHERE clerk_user_id = $1 LIMIT 1', [clerkUserId]);
+  if (fallback.rows.length === 0) {
+    return null;
+  }
+
+  return getGoogleCredential(Number(fallback.rows[0].id));
+}
+
 export async function upsertGoogleCredential(
   userId: number,
   data: {
@@ -438,13 +485,15 @@ export async function upsertGoogleCredential(
     calendarId?: string | null;
     syncToken?: string | null;
     lastPulledAt?: Date | null;
+    needsReauth?: boolean;
     managedCalendarId?: string | null;
     managedCalendarSummary?: string | null;
     managedCalendarState?: string | null;
     managedCalendarVerifiedAt?: Date | null;
     managedCalendarAclRole?: string | null;
     legacyCalendarId?: string | null;
-  }
+  },
+  options: { clerkUserId?: string | null } = {}
 ): Promise<GoogleCredential> {
   await ensureGoogleIntegrationSchema();
   const encryptedAccessToken = encryptSecret(data.accessToken);
@@ -455,9 +504,20 @@ export async function upsertGoogleCredential(
     throw new Error('Failed to encrypt Google OAuth credentials');
   }
 
+  let clerkUserId = options.clerkUserId ?? null;
+  if (!clerkUserId) {
+    const lookup = await db.query('SELECT clerk_user_id FROM users WHERE id = $1', [userId]);
+    clerkUserId = (lookup.rows[0]?.clerk_user_id as string | null) ?? null;
+  }
+
+  if (!clerkUserId) {
+    console.warn('upsertGoogleCredential missing clerk_user_id; proceeding with null', { userId });
+  }
+
   const result = await db.query(
     `INSERT INTO google_credentials (
         user_id,
+        clerk_user_id,
         access_token,
         refresh_token,
         scope,
@@ -479,11 +539,12 @@ export async function upsertGoogleCredential(
      )
      VALUES (
        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-       $11, $12, $13, $14, $15, $16, $17,
+       $11, $12, $13, $14, $15, $16, $17, $18,
        NOW(), NOW()
      )
      ON CONFLICT (user_id)
      DO UPDATE SET
+       clerk_user_id = EXCLUDED.clerk_user_id,
        access_token = EXCLUDED.access_token,
        refresh_token = EXCLUDED.refresh_token,
        scope = EXCLUDED.scope,
@@ -504,6 +565,7 @@ export async function upsertGoogleCredential(
     RETURNING *`,
     [
       userId,
+      clerkUserId,
       encryptedAccessToken,
       encryptedRefreshToken,
       data.scope,
@@ -536,6 +598,14 @@ export async function setGoogleCredentialReauth(userId: number, needsReauth: boo
     'UPDATE google_credentials SET needs_reauth = $2, updated_at = NOW() WHERE user_id = $1',
     [userId, needsReauth]
   );
+}
+
+export async function setGoogleCredentialClerkUserId(userId: number, clerkUserId: string): Promise<void> {
+  await ensureGoogleIntegrationSchema();
+  await db.query('UPDATE google_credentials SET clerk_user_id = $2, updated_at = NOW() WHERE user_id = $1', [
+    userId,
+    clerkUserId
+  ]);
 }
 
 export interface GoogleCredentialUserRow {
@@ -725,7 +795,8 @@ export async function markGoogleSyncPending(itemId: number, localHash?: string |
   const ownerUserId = ownerRow.user_id as number;
   const credential = await getGoogleCredential(ownerUserId);
   if (!credential) {
-    await deleteGoogleSyncLink(itemId);
+    // No active Google credential; leave sync link untouched so legacy data can be rehydrated once
+    // the user reconnects. Older tests rely on preserving the link in this scenario.
     return null;
   }
 
@@ -779,6 +850,7 @@ export async function deleteGoogleSyncLink(itemId: number): Promise<void> {
 export async function upsertGoogleWatchChannel(channel: {
   channelId: string;
   userId: number;
+  clerkUserId?: string | null;
   calendarId: string | null;
   resourceId: string;
   resourceUri?: string | null;
@@ -786,12 +858,19 @@ export async function upsertGoogleWatchChannel(channel: {
   channelToken?: string | null;
 }): Promise<GoogleWatchChannel> {
   await ensureGoogleIntegrationSchema();
+  let clerkUserId = channel.clerkUserId ?? null;
+  if (!clerkUserId) {
+    const lookup = await db.query('SELECT clerk_user_id FROM users WHERE id = $1', [channel.userId]);
+    clerkUserId = (lookup.rows[0]?.clerk_user_id as string | null) ?? null;
+  }
+
   const result = await db.query(
-    `INSERT INTO google_watch_channels (channel_id, user_id, calendar_id, resource_id, resource_uri, expiration, channel_token, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+    `INSERT INTO google_watch_channels (channel_id, user_id, clerk_user_id, calendar_id, resource_id, resource_uri, expiration, channel_token, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
      ON CONFLICT (channel_id)
      DO UPDATE SET
        user_id = EXCLUDED.user_id,
+       clerk_user_id = EXCLUDED.clerk_user_id,
        calendar_id = EXCLUDED.calendar_id,
        resource_id = EXCLUDED.resource_id,
        resource_uri = EXCLUDED.resource_uri,
@@ -802,6 +881,7 @@ export async function upsertGoogleWatchChannel(channel: {
     [
       channel.channelId,
       channel.userId,
+      clerkUserId,
       channel.calendarId,
       channel.resourceId,
       channel.resourceUri ?? null,
@@ -826,15 +906,18 @@ export async function findGoogleWatchChannelByResource(resourceId: string): Prom
 
 export async function findGoogleWatchChannelByUser(
   userId: number,
-  calendarId: string | null
+  calendarId: string | null,
+  clerkUserId?: string | null
 ): Promise<GoogleWatchChannel | null> {
   await ensureGoogleIntegrationSchema();
   const result = await db.query(
     `SELECT * FROM google_watch_channels
-     WHERE user_id = $1 AND ((calendar_id IS NULL AND $2::text IS NULL) OR calendar_id = $2)
+     WHERE
+       (user_id = $1 OR ($3::text IS NOT NULL AND clerk_user_id = $3))
+       AND ((calendar_id IS NULL AND $2::text IS NULL) OR calendar_id = $2)
      ORDER BY updated_at DESC
      LIMIT 1`,
-    [userId, calendarId ?? null]
+    [userId, calendarId ?? null, clerkUserId ?? null]
   );
   return result.rows[0] ? watchRowToChannel(result.rows[0] as GoogleWatchChannelRow) : null;
 }
@@ -860,14 +943,38 @@ export async function listExpiringGoogleWatchChannels(threshold: Date): Promise<
   return result.rows.map((row) => watchRowToChannel(row as GoogleWatchChannelRow));
 }
 
-export async function listGoogleWatchChannelsByUser(userId: number): Promise<GoogleWatchChannel[]> {
+export async function listGoogleWatchChannelsByUser(
+  userId: number,
+  clerkUserId?: string | null
+): Promise<GoogleWatchChannel[]> {
   await ensureGoogleIntegrationSchema();
-  const result = await db.query('SELECT * FROM google_watch_channels WHERE user_id = $1', [userId]);
+  const result = await db.query(
+    `SELECT *
+       FROM google_watch_channels
+      WHERE user_id = $1
+         OR ($2::text IS NOT NULL AND clerk_user_id = $2)`,
+    [userId, clerkUserId ?? null]
+  );
   return result.rows.map((row) => watchRowToChannel(row as GoogleWatchChannelRow));
+}
+
+export async function setGoogleWatchChannelsClerkUserId(
+  userId: number,
+  clerkUserId: string
+): Promise<void> {
+  await ensureGoogleIntegrationSchema();
+  await db.query(
+    `UPDATE google_watch_channels
+        SET clerk_user_id = $2, updated_at = NOW()
+      WHERE user_id = $1 OR clerk_user_id = $2`,
+    [userId, clerkUserId]
+  );
 }
 
 export async function clearGoogleSyncForUser(userId: number): Promise<void> {
   await ensureGoogleIntegrationSchema();
+  const clerkLookup = await db.query('SELECT clerk_user_id FROM users WHERE id = $1', [userId]);
+  const clerkUserId = (clerkLookup.rows[0]?.clerk_user_id as string | null) ?? null;
   await db.query(
     `DELETE FROM google_sync_links gsl
      USING items i
@@ -877,6 +984,9 @@ export async function clearGoogleSyncForUser(userId: number): Promise<void> {
     [userId]
   );
   await db.query('DELETE FROM google_watch_channels WHERE user_id = $1', [userId]);
+  if (clerkUserId) {
+    await db.query('DELETE FROM google_watch_channels WHERE clerk_user_id = $1', [clerkUserId]);
+  }
 }
 
 export async function getItemOwnerUserId(itemId: number): Promise<number | null> {
