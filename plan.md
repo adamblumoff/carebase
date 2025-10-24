@@ -43,6 +43,6 @@ Goal: deliver realtime updates for plan data (appointments & bills) with minimal
 - [ ] Validate logs/metrics to ensure we aren’t spamming events (watch `auth.clerk.socket`, new `plan.delta.*` counters).
 
 ## Step 6 – Roll Forward & Future Expansion
-- [ ] Document the new event contract (`docs/realtime.md`).
+- [x] Document the new event contract (`docs/realtime.md`).
 - [ ] Once plan screen is stable, replicate the delta handling for settings/collaborator screens (follow-up PR).
 - [ ] When ready, retire legacy `plan:update` broadcast or repurpose it as the catch-all fallback event.
