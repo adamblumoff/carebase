@@ -27,10 +27,10 @@ Reduce perceived and measured latency during login flows and post-mutation refre
 - [x] Instrument cache hits/misses (`clerk.token.cache|hit/miss`) and add focused unit tests covering expiry and error paths.
 
 ## Phase 4 – JWKS Prefetch & Resilience
-- [ ] Introduce startup prefetch of Clerk JWKS (await a single fetch during boot, with <1 s timeout) so the first authenticated request does not block.
-- [ ] Schedule periodic background refresh (e.g., every 15 min) with exponential backoff on failure.
-- [ ] Reduce JWKS HTTP timeout to 2 s and add retry once before falling back to cached keys; log metrics for reload failures.
-- [ ] Extend tests to simulate stale JWKS and ensure the system falls back gracefully without hanging the request.
+- [x] Introduce startup prefetch of Clerk JWKS (await a single fetch during boot, with <1 s timeout) so the first authenticated request does not block.
+- [x] Schedule periodic background refresh (e.g., every 15 min) with exponential backoff on failure.
+- [x] Reduce JWKS HTTP timeout to 2 s and add retry once before falling back to cached keys; log metrics for reload failures.
+- [x] Extend tests to simulate stale JWKS and ensure the system falls back gracefully without hanging the request.
 
 ## Phase 5 – Clerk REST Fallback Tuning
 - [ ] Wrap `clerkClient.sessions.verifySession` call with a 2 s AbortController timeout.

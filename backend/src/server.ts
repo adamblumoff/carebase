@@ -13,6 +13,7 @@ import { attachBearerUser } from './middleware/attachBearerUser.js';
 import { initRealtime } from './services/realtime.js';
 import { startGoogleSyncPolling } from './services/googleSync.js';
 import { getClerkClient } from './services/clerkSyncService.js';
+import { configureClerkJwks } from './services/clerkJwksManager.js';
 
 const app = express();
 const server = createServer(app);
@@ -32,6 +33,15 @@ if (clerkClient) {
     clerkClient,
     debug: process.env.NODE_ENV !== 'production',
     jwtKey: process.env.CLERK_JWT_TEMPLATE_NAME ?? undefined
+  });
+  configureClerkJwks({
+    issuer: process.env.CLERK_JWKS_ISSUER ?? null,
+    refreshIntervalMs: process.env.CLERK_JWKS_REFRESH_INTERVAL_MS
+      ? Number.parseInt(process.env.CLERK_JWKS_REFRESH_INTERVAL_MS, 10)
+      : undefined,
+    prefetchTimeoutMs: process.env.CLERK_JWKS_PREFETCH_TIMEOUT_MS
+      ? Number.parseInt(process.env.CLERK_JWKS_PREFETCH_TIMEOUT_MS, 10)
+      : undefined
   });
 }
 

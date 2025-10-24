@@ -1,7 +1,7 @@
 import type { ClerkClient } from '@clerk/backend';
 import { createClerkClient } from '@clerk/backend';
 import jwt from 'jsonwebtoken';
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { jwtVerify } from 'jose';
 import type { UserBackfillRecord, User } from '../db/queries/users.js';
 import {
   createUserWithEmail,
@@ -27,7 +27,7 @@ import {
 
 let cachedClient: ClerkClient | null = null;
 let warnedMissingSecret = false;
-let cachedJwks: ReturnType<typeof createRemoteJWKSet> | null = null;
+import { getClerkJwksVerifier } from './clerkJwksManager.js';
 
 function logClerk(message: string, meta?: Record<string, unknown>): void {
   if (meta) {
@@ -404,11 +404,8 @@ export async function verifyClerkSessionToken(token: string): Promise<ClerkToken
   const sessionId = decoded.sid;
 
   try {
-    if (!cachedJwks) {
-      const issuerUrl = new URL(decoded.iss);
-      cachedJwks = createRemoteJWKSet(new URL('/.well-known/jwks.json', issuerUrl));
-    }
-    const { payload } = await jwtVerify(token, cachedJwks, {
+    const verifier = await getClerkJwksVerifier(decoded.iss);
+    const { payload } = await jwtVerify(token, verifier, {
       issuer: decoded.iss
     });
 
