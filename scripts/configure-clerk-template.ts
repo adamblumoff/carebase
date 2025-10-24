@@ -4,8 +4,8 @@ import process from 'node:process';
 import url from 'node:url';
 import { config as loadEnv } from 'dotenv';
 
-const DEFAULT_IDENTIFIER = process.env.CLERK_JWT_TEMPLATE_NAME ?? 'carebase-session';
-const DEFAULT_NAME = 'Carebase session token';
+const DEFAULT_IDENTIFIER = process.env.CLERK_JWT_TEMPLATE_NAME ?? 'carebase-backend';
+const DEFAULT_NAME = 'carebase-backend';
 const TOKEN_LIFETIME_SECONDS = 30 * 60; // 30 minutes
 
 function loadDotEnv(): void {
@@ -114,7 +114,7 @@ main().catch((error) => {
   const status = (error as { status?: number }).status;
   if (status === 404 || status === 422) {
     console.error(
-      'Clerk API did not accept the automated template configuration. Please create or update the "carebase-session" template manually via the Clerk dashboard with a 30 minute token lifetime and `session_id` claim.'
+      'Clerk API did not accept the automated template configuration. Please create or update the "carebase-backend" template manually via the Clerk dashboard with a 30 minute token lifetime and `session_id` claim.'
     );
   } else {
     console.error('Failed to configure Clerk JWT template:', error);

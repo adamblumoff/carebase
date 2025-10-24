@@ -32,7 +32,7 @@ Dependency-cruiser enforces the boundary between `backend/src/db/**` and most of
 - `clerkSyncService` focuses on synchronization, metadata shaping, and backfill logic.
 - Realtime socket auth uses the gateway to verify tokens without re-importing sync service internals.
 - Run `npm run configure:clerk-template` after updating Clerk keys to ensure the session-based JWT
-  template (`carebase-session`) exists with a 30 minute lifetime. Both backend and mobile default to
+  template (`carebase-backend`) exists with a 30 minute lifetime. Both backend and mobile default to
   this template via `CLERK_JWT_TEMPLATE_NAME` / `EXPO_PUBLIC_CLERK_JWT_TEMPLATE`.
 
 Keep this document up to date when adjusting boundaries or adding new cross-cutting helpers.

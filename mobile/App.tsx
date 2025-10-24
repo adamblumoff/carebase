@@ -88,7 +88,7 @@ function AppBootstrap() {
 }
 
 const TOKEN_REFRESH_INTERVAL_MS = 4 * 60 * 1000;
-const DEFAULT_CLERK_TEMPLATE = 'carebase-session';
+const DEFAULT_CLERK_TEMPLATE = 'carebase-backend';
 
 function ClerkTokenBridge(): null {
   const { getToken, isSignedIn } = useClerkAuth();
