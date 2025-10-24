@@ -2,10 +2,12 @@ import React from 'react';
 import { render, waitFor, act } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CollaboratorProvider, useCollaborators } from '../CollaboratorProvider';
+import type { PlanItemDelta } from '@carebase/shared';
 
 const fetchCollaboratorsMock = vi.fn();
 const inviteCollaboratorMock = vi.fn();
 const acceptInviteMock = vi.fn();
+const deltaListeners: Array<(delta: PlanItemDelta) => void> = [];
 
 const authState: { status: 'loading' | 'signedOut' | 'signedIn'; user: { id: number } | null } = {
   status: 'signedIn',
@@ -24,6 +26,18 @@ vi.mock('../../api/collaborators', () => ({
   acceptCollaboratorInvite: (token: string) => acceptInviteMock(token),
 }));
 
+vi.mock('../../utils/realtime', () => ({
+  addPlanDeltaListener: (listener: (delta: PlanItemDelta) => void) => {
+    deltaListeners.push(listener);
+    return () => {
+      const idx = deltaListeners.indexOf(listener);
+      if (idx >= 0) {
+        deltaListeners.splice(idx, 1);
+      }
+    };
+  },
+}));
+
 function Consumer({ onValue }: { onValue: (value: ReturnType<typeof useCollaborators>) => void }) {
   const ctx = useCollaborators();
   onValue(ctx);
@@ -37,6 +51,7 @@ beforeEach(() => {
   authState.user = { id: 1 };
   useAuthMock.mockImplementation(() => authState);
   fetchCollaboratorsMock.mockResolvedValue([]);
+  deltaListeners.length = 0;
 });
 
   it('loads and sorts collaborators on mount', async () => {
@@ -178,6 +193,34 @@ beforeEach(() => {
     await waitFor(() => {
       const latest = spy.mock.calls[spy.mock.calls.length - 1][0];
       expect(latest.error).toBe('Unable to load collaborators.');
+    });
+  });
+
+  it('refreshes collaborators when plan delta indicates collaborator update', async () => {
+    const spy = vi.fn();
+    fetchCollaboratorsMock.mockResolvedValueOnce([{ id: 1, email: 'amy@test.com' }]);
+    fetchCollaboratorsMock.mockResolvedValueOnce([{ id: 1, email: 'amy@test.com' }, { id: 2, email: 'zoe@test.com' }]);
+
+    render(
+      <CollaboratorProvider>
+        <Consumer onValue={spy} />
+      </CollaboratorProvider>
+    );
+
+    await waitFor(() => {
+      expect(fetchCollaboratorsMock).toHaveBeenCalledTimes(1);
+    });
+
+    await act(async () => {
+      deltaListeners.forEach((listener) =>
+        listener({ itemType: 'plan', entityId: 1, action: 'updated', version: 2, data: { section: 'collaborators' } } as PlanItemDelta)
+      );
+    });
+
+    await waitFor(() => {
+      expect(fetchCollaboratorsMock).toHaveBeenCalledTimes(2);
+      const latest = spy.mock.calls[spy.mock.calls.length - 1][0];
+      expect(latest.collaborators).toHaveLength(2);
     });
   });
 });

@@ -44,5 +44,7 @@ Goal: deliver realtime updates for plan data (appointments & bills) with minimal
 
 ## Step 6 – Roll Forward & Future Expansion
 - [x] Document the new event contract (`docs/realtime.md`).
-- [ ] Once plan screen is stable, replicate the delta handling for settings/collaborator screens (follow-up PR).
-- [ ] When ready, retire legacy `plan:update` broadcast or repurpose it as the catch-all fallback event.
+- [x] Inventory other realtime consumers (settings, collaborators, pending review) and map required delta shapes.
+- [x] Extend respective providers/hooks to consume `plan:item-delta` (or new events) and update local caches.
+- [x] Update their test suites to cover delta application + fallback refresh.
+- [ ] When clients are migrated, retire or repurpose the legacy `plan:update` broadcast; update docs accordingly.

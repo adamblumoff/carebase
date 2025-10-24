@@ -7,6 +7,8 @@ import {
   listCollaborators,
   resolveRecipientContextForUser,
   findCollaboratorByToken,
+  touchPlanForUser,
+  findRecipientById
 } from '../../db/queries.js';
 import { sendCollaboratorInviteEmail } from '../../services/email.js';
 
@@ -110,6 +112,17 @@ router.post('/', async (req: Request, res: Response) => {
       });
     }
 
+    await touchPlanForUser(recipient.userId, {
+      queueGoogleSync: false,
+      delta: {
+        itemType: 'plan',
+        entityId: recipient.id,
+        action: 'updated',
+        source: 'rest',
+        data: { section: 'collaborators' }
+      }
+    });
+
     res.status(201).json({ collaborator, resent });
   } catch (error) {
     console.error('Create collaborator invite error:', error);
@@ -141,6 +154,20 @@ router.post('/accept', async (req: Request, res: Response) => {
     if (!collaborator) {
       res.status(404).json({ error: 'Invite not found' });
       return;
+    }
+
+    const recipient = await findRecipientById(collaborator.recipientId);
+    if (recipient) {
+      await touchPlanForUser(recipient.userId, {
+        queueGoogleSync: false,
+        delta: {
+          itemType: 'plan',
+          entityId: recipient.id,
+          action: 'updated',
+          source: 'rest',
+          data: { section: 'collaborators' }
+        }
+      });
     }
 
     res.json({ collaborator });

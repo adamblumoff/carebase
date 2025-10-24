@@ -9,6 +9,8 @@ import {
   type ReviewBillPayload
 } from '../api/review';
 import { addPlanChangeListener, emitPlanChanged } from '../utils/planEvents';
+import { addPlanDeltaListener } from '../utils/realtime';
+import type { PlanItemDelta } from '@carebase/shared';
 
 interface PendingReviewState {
   items: PendingReviewItem[];
@@ -38,6 +40,7 @@ export function usePendingReviews(): PendingReviewActions {
     error: null,
   });
   const fetchPromiseRef = useRef<Promise<void> | null>(null);
+  const deltaRefreshScheduledRef = useRef(false);
 
   const load = useCallback(
     async ({ silent = false }: { silent?: boolean } = {}) => {
@@ -98,6 +101,38 @@ export function usePendingReviews(): PendingReviewActions {
       load({ silent: true }).catch(() => {});
     });
     return unsubscribe;
+  }, [load, status]);
+
+  useEffect(() => {
+    if (status !== 'signedIn') {
+      return undefined;
+    }
+
+    const scheduleRefresh = () => {
+      if (deltaRefreshScheduledRef.current) {
+        return;
+      }
+      deltaRefreshScheduledRef.current = true;
+      Promise.resolve().then(() => {
+        deltaRefreshScheduledRef.current = false;
+        load({ silent: true }).catch(() => {});
+      });
+    };
+
+    const unsubscribeDelta = addPlanDeltaListener((delta: PlanItemDelta) => {
+      if (delta.itemType === 'bill' || delta.itemType === 'appointment') {
+        scheduleRefresh();
+      } else if (delta.itemType === 'plan') {
+        const section = (delta.data as { section?: string } | undefined)?.section;
+        if (!section || section === 'pending-reviews') {
+          scheduleRefresh();
+        }
+      }
+    });
+
+    return () => {
+      unsubscribeDelta();
+    };
   }, [load, status]);
 
   const refresh = useCallback(

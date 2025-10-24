@@ -14,13 +14,15 @@ import {
   inviteCollaborator as apiInviteCollaborator,
   type CollaboratorResponse,
 } from '../api/collaborators';
+import { addPlanDeltaListener } from '../utils/realtime';
+import type { PlanItemDelta } from '@carebase/shared';
 
 interface CollaboratorContextValue {
   collaborators: CollaboratorResponse[];
   loading: boolean;
   error: string | null;
   canInvite: boolean;
-  refresh: () => Promise<void>;
+  refresh: (options?: { silent?: boolean }) => Promise<void>;
   invite: (email: string) => Promise<CollaboratorResponse>;
   acceptInviteToken: (token: string) => Promise<CollaboratorResponse | null>;
 }
@@ -44,32 +46,48 @@ export function CollaboratorProvider({ children }: { children: React.ReactNode }
     setCanInvite(true);
   }, []);
 
-  const loadCollaborators = useCallback(async () => {
-    if (auth.status !== 'signedIn') {
-      if (auth.status === 'signedOut') {
-        resetState();
+  const loadCollaborators = useCallback(
+    async ({ silent = false }: { silent?: boolean } = {}) => {
+      if (auth.status !== 'signedIn') {
+        if (auth.status === 'signedOut') {
+          resetState();
+        }
+        return;
       }
-      return;
-    }
 
-    setLoading(true);
-    try {
-      const data = await fetchCollaborators();
-      setCollaborators(sortCollaborators(data));
-      setError(null);
-      setCanInvite(true);
-    } catch (err: any) {
-      const statusCode = err?.response?.status;
-      if (statusCode === 403) {
-        setCanInvite(false);
-        setError('Only the plan owner can manage collaborators.');
-      } else {
-        setError('Unable to load collaborators.');
+      if (loadPromiseRef.current) {
+        await loadPromiseRef.current;
+        return;
       }
-    } finally {
-      setLoading(false);
-    }
-  }, [auth.status, resetState]);
+
+      const promise = (async () => {
+        if (!silent) {
+          setLoading(true);
+        }
+        try {
+          const data = await fetchCollaborators();
+          setCollaborators(sortCollaborators(data));
+          setError(null);
+          setCanInvite(true);
+        } catch (err: any) {
+          const statusCode = err?.response?.status;
+          if (statusCode === 403) {
+            setCanInvite(false);
+            setError('Only the plan owner can manage collaborators.');
+          } else {
+            setError('Unable to load collaborators.');
+          }
+        } finally {
+          loadPromiseRef.current = null;
+          setLoading(false);
+        }
+      })();
+
+      loadPromiseRef.current = promise;
+      await promise;
+    },
+    [auth.status, resetState]
+  );
 
   useEffect(() => {
     let active = true;
@@ -82,7 +100,7 @@ export function CollaboratorProvider({ children }: { children: React.ReactNode }
       return;
     }
 
-    loadPromiseRef.current = loadCollaborators().catch(() => {
+    loadCollaborators().catch(() => {
       // errors handled in loadCollaborators
     });
 
@@ -94,15 +112,18 @@ export function CollaboratorProvider({ children }: { children: React.ReactNode }
     };
   }, [auth.status, auth.user?.id, loadCollaborators, resetState]);
 
-  const refresh = useCallback(async () => {
-    if (auth.status !== 'signedIn') {
-      if (auth.status === 'signedOut') {
-        resetState();
+  const refresh = useCallback(
+    async ({ silent = false }: { silent?: boolean } = {}) => {
+      if (auth.status !== 'signedIn') {
+        if (auth.status === 'signedOut') {
+          resetState();
+        }
+        return;
       }
-      return;
-    }
-    await loadCollaborators();
-  }, [auth.status, loadCollaborators, resetState]);
+      await loadCollaborators({ silent });
+    },
+    [auth.status, loadCollaborators, resetState]
+  );
 
   const invite = useCallback(
     async (email: string) => {
@@ -115,15 +136,48 @@ export function CollaboratorProvider({ children }: { children: React.ReactNode }
     []
   );
 
-  const acceptInviteToken = useCallback(async (token: string) => {
-    try {
-      const collaborator = await acceptCollaboratorInvite(token);
-      await refresh();
-      return collaborator;
-    } catch (err) {
-      throw err;
+  const acceptInviteToken = useCallback(
+    async (token: string) => {
+      try {
+        const collaborator = await acceptCollaboratorInvite(token);
+        await refresh();
+        return collaborator;
+      } catch (err) {
+        throw err;
+      }
+    },
+    [refresh]
+  );
+
+  useEffect(() => {
+    if (auth.status !== 'signedIn') {
+      return undefined;
     }
-  }, [refresh]);
+
+    let refreshScheduled = false;
+    const scheduleRefresh = () => {
+      if (refreshScheduled) return;
+      refreshScheduled = true;
+      Promise.resolve().then(() => {
+        refreshScheduled = false;
+        loadCollaborators({ silent: true }).catch(() => {});
+      });
+    };
+
+    const unsubscribeDelta = addPlanDeltaListener((delta: PlanItemDelta) => {
+      if (delta.itemType !== 'plan') {
+        return;
+      }
+      const section = (delta.data as { section?: string } | undefined)?.section;
+      if (!section || section === 'collaborators') {
+        scheduleRefresh();
+      }
+    });
+
+    return () => {
+      unsubscribeDelta();
+    };
+  }, [auth.status, loadCollaborators]);
 
   const value = useMemo<CollaboratorContextValue>(
     () => ({

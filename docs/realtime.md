@@ -18,6 +18,7 @@ interface PlanItemDelta {
   data?: {
     appointment?: AppointmentPayload;
     bill?: BillPayload;
+    section?: 'collaborators' | 'pending-reviews' | string;
   };
 }
 
@@ -32,7 +33,7 @@ interface PlanItemDeltaPayload {
 - `action`: CRUD indicator. Always `updated` for `plan` deltas.
 - `version`: latest `users.plan_version` at emit time (use to order deltas).
 - `source`: hints at the origin (`rest`, `collaborator`, `google`, `inbound`).
-- `data`: normalized payload when available (`toAppointmentPayload`/`toBillPayload`).
+- `data`: normalized payload when available (`toAppointmentPayload`/`toBillPayload`). When `itemType` is `plan`, `data.section` may indicate which feature (e.g. `collaborators`) should refresh.
 
 Clients should attempt to apply deltas optimistically, but fall back to a silent refresh (`/api/plan`) when:
 
