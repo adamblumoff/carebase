@@ -5,6 +5,11 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.vitest.test.ts'],
     globals: true,
+    setupFiles: ['./vitest.setup.ts'],
+    testTimeout: 30000,
+    hookTimeout: 30000,
+    maxConcurrency: 1,
+    reporters: ['default'],
     coverage: {
       reporter: ['text', 'json-summary'],
       include: ['src/**/*.ts'],
