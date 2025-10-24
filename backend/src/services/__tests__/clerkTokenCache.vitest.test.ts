@@ -24,16 +24,20 @@ describe('clerkTokenCache', () => {
     expect(getClerkTokenCacheEntry('missing')).toBeNull();
   });
 
-  it('stores and retrieves entries', () => {
+  it('stores and retrieves entries when expiration is sufficiently in the future', () => {
     const now = 1_000_000;
     mockNow(now);
-    setClerkTokenCacheEntry('token', { userId: 'user_1', sessionId: 'sess_1', expiresAt: now + 10_000 });
+    setClerkTokenCacheEntry('token', {
+      userId: 'user_1',
+      sessionId: 'sess_1',
+      expiresAt: now + 120_000
+    });
 
     const entry = getClerkTokenCacheEntry('token');
     expect(entry).toEqual({
       userId: 'user_1',
       sessionId: 'sess_1',
-      expiresAt: now + 10_000,
+      expiresAt: now + 120_000,
       cachedAt: now
     });
   });
@@ -48,17 +52,17 @@ describe('clerkTokenCache', () => {
     expect(getClerkTokenCacheStats().size).toBe(0);
   });
 
-  it('retains entries without expiresAt', () => {
+  it('applies default TTL when expiresAt not provided', () => {
     const now = 2_000_000;
     mockNow(now);
-    setClerkTokenCacheEntry('token', { userId: 'user_2', sessionId: null, expiresAt: null });
+    setClerkTokenCacheEntry('token', { userId: 'user_2', sessionId: null });
 
     mockNow(now + 10_000);
     const entry = getClerkTokenCacheEntry('token');
     expect(entry).toEqual({
       userId: 'user_2',
       sessionId: null,
-      expiresAt: null,
+      expiresAt: now + 300_000,
       cachedAt: now
     });
     expect(getClerkTokenCacheStats().size).toBe(1);
@@ -84,37 +88,42 @@ describe('clerkTokenCache', () => {
     expect(getClerkTokenCacheStats().size).toBe(0);
   });
 
-  it('limits cache size by evicting oldest entry', () => {
-    process.env.CLERK_TOKEN_CACHE_SIZE = '2';
+  it('evicts the oldest entry when cache exceeds max size', () => {
     const now = 1_000_000;
     mockNow(now);
-    setClerkTokenCacheEntry('a', { userId: 'user_a', sessionId: null });
-    setClerkTokenCacheEntry('b', { userId: 'user_b', sessionId: null });
-    setClerkTokenCacheEntry('c', { userId: 'user_c', sessionId: null });
+    for (let i = 0; i < 500; i += 1) {
+      setClerkTokenCacheEntry(`token-${i}`, { userId: `user_${i}`, sessionId: null, expiresAt: now + 600_000 });
+    }
 
-    expect(getClerkTokenCacheEntry('a')).toBeNull();
-    expect(getClerkTokenCacheEntry('b')).not.toBeNull();
-    expect(getClerkTokenCacheEntry('c')).not.toBeNull();
-    delete process.env.CLERK_TOKEN_CACHE_SIZE;
+    setClerkTokenCacheEntry('token-overflow', {
+      userId: 'user_overflow',
+      sessionId: null,
+      expiresAt: now + 600_000
+    });
+
+    expect(getClerkTokenCacheEntry('token-0')).toBeNull();
+    expect(getClerkTokenCacheEntry('token-overflow')).not.toBeNull();
+    expect(getClerkTokenCacheStats().size).toBe(500);
   });
 
-  it('treats recently read entry as most-recent for eviction', () => {
-    process.env.CLERK_TOKEN_CACHE_SIZE = '2';
+  it('refreshes LRU order when entry is read', () => {
     const now = 3_000_000;
     mockNow(now);
-    setClerkTokenCacheEntry('a', { userId: 'user_a', sessionId: null });
-    setClerkTokenCacheEntry('b', { userId: 'user_b', sessionId: null });
+    for (let i = 0; i < 500; i += 1) {
+      setClerkTokenCacheEntry(`token-${i}`, { userId: `user_${i}`, sessionId: null, expiresAt: now + 600_000 });
+    }
 
-    // Touch "a" so it becomes most recent
-    expect(getClerkTokenCacheEntry('a')).not.toBeNull();
+    expect(getClerkTokenCacheEntry('token-0')).not.toBeNull();
 
-    // Advance time slightly to ensure cachedAt differs
     mockNow(now + 1_000);
-    setClerkTokenCacheEntry('c', { userId: 'user_c', sessionId: null });
+    setClerkTokenCacheEntry('token-overflow', {
+      userId: 'user_overflow',
+      sessionId: null,
+      expiresAt: now + 600_000
+    });
 
-    expect(getClerkTokenCacheEntry('a')).not.toBeNull();
-    expect(getClerkTokenCacheEntry('c')).not.toBeNull();
-    expect(getClerkTokenCacheEntry('b')).toBeNull();
-    delete process.env.CLERK_TOKEN_CACHE_SIZE;
+    expect(getClerkTokenCacheEntry('token-1')).toBeNull();
+    expect(getClerkTokenCacheEntry('token-0')).not.toBeNull();
+    expect(getClerkTokenCacheEntry('token-overflow')).not.toBeNull();
   });
 });
