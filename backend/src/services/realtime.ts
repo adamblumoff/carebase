@@ -1,7 +1,7 @@
 import type { Server as SocketIOServer, Socket } from 'socket.io';
 import type { User, PlanItemDelta } from '@carebase/shared';
 import { findUserByClerkUserId } from '../db/queries.js';
-import { verifyClerkSessionToken } from './clerkSyncService.js';
+import { verifyClerkSessionToken } from './clerkAuthGateway.js';
 import { incrementMetric } from '../utils/metrics.js';
 import { PlanRealtimePublisher } from './planRealtimePublisher.js';
 

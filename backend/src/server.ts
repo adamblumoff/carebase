@@ -12,7 +12,7 @@ import { registerRoutes } from './routes/registry.js';
 import { attachBearerUser } from './middleware/attachBearerUser.js';
 import { initRealtime } from './services/realtime.js';
 import { startGoogleSyncPolling } from './services/googleSync.js';
-import { getClerkClient } from './services/clerkSyncService.js';
+import { getClerkClient } from './services/clerkAuthGateway.js';
 import { configureClerkJwks } from './services/clerkJwksManager.js';
 import { bootstrapDatabase } from './db/bootstrap.js';
 
