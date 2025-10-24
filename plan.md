@@ -14,12 +14,12 @@ Reduce perceived and measured latency during login flows and post-mutation refre
 - [x] Add temporary script (`scripts/dev/measure-auth-latency.ts`) if needed to re-run benchmarks quickly.
 
 ## Phase 2 – Restore Middleware Fast Path
-- [ ] Update `backend/src/server.ts` to enable Clerk Express handshake (`enableHandshake: true`) and adjust configuration for dev env if needed.
-- [ ] Enhance `attachBearerUser` to:
+- [x] Update `backend/src/server.ts` to enable Clerk Express handshake (`enableHandshake: true`) and adjust configuration for dev env if needed.
+- [x] Enhance `attachBearerUser` to:
   - Trust populated `req.auth()` without invoking `verifyClerkSessionToken`.
   - Fall back only when handshake data is unavailable.
-- [ ] Add unit/integration coverage ensuring requests authenticated via middleware no longer call `verifyClerkSessionToken` (spy on helper in tests).
-- [ ] Re-run baseline scenarios to confirm immediate improvement; log results in a new `docs/auth-latency.md` section.
+- [x] Add unit/integration coverage ensuring requests authenticated via middleware no longer call `verifyClerkSessionToken` (spy on helper in tests).
+- [x] Re-run baseline scenarios to confirm immediate improvement; log results in a new `docs/auth-latency.md` section. *(Result: latency unchanged; handshake still returning `isAuthenticated: false`.)*
 
 ## Phase 3 – Token Verification Cache
 - [ ] Implement in-memory cache module (`backend/src/services/clerkTokenCache.ts`) storing `{sessionId, userId, expiresAt}` keyed by token (bounded size, 5 min max TTL, purge on expiry).

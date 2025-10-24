@@ -31,7 +31,6 @@ if (clerkClient) {
   clerkMiddlewareHandler = clerkMiddleware({
     clerkClient,
     debug: process.env.NODE_ENV !== 'production',
-    enableHandshake: false,
     jwtKey: process.env.CLERK_JWT_TEMPLATE_NAME ?? undefined
   });
 }
