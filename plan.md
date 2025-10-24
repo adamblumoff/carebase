@@ -43,10 +43,10 @@ Reduce perceived and measured latency during login flows and post-mutation refre
 - [x] Add regression tests verifying schema bootstrap doesn’t rerun after first success.
 
 ## Phase 7 – Validation & Rollout
-- [ ] Re-run baseline measurements from Phase 1; compare timings and metrics, target ≥60% drop in per-request auth overhead.
-- [ ] Update `docs/auth-latency.md` with before/after numbers and lessons learned.
-- [ ] Share findings in `AGENTS.md` (short summary + required env vars) for future agents.
-- [ ] Leave follow-up TODOs (if any) in backlog and close plan.
+- [x] Re-run baseline measurements from Phase 1; compare timings and metrics, target ≥60% drop in per-request auth overhead. *(Achieved >99% reduction after JWT TTL fix.)*
+- [x] Update `docs/auth-latency.md` with before/after numbers and lessons learned.
+- [x] Share findings in `AGENTS.md` (short summary + required env vars) for future agents.
+- [x] Leave follow-up TODOs (if any) in backlog and close plan. *(No additional TODOs identified.)*
 
 ## Guardrails
 - Never disable Clerk verification entirely; all shortcuts must keep signature validation (JWT / cache) intact.

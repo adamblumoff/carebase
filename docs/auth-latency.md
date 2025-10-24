@@ -34,6 +34,23 @@ Captured immediately after enabling Clerk middleware handshake and updating `att
 
 **Observation:** No consistent latency improvement yet—the middleware still logs `isAuthenticated: false` and the bearer fallback fires, so Phase 3/4 work (verification caching + JWKS prefetch) remains necessary.
 
+## Phase 7 Snapshot (Long-lived Clerk JWT template)
+
+Captured after increasing the Clerk JWT template TTL and pointing the mobile app/tooling at the template (`carebase-backend`). Latency finally reflects cache hits (values in milliseconds).
+
+| Flow | Step | Run 1 | Run 2 | Run 3 | Avg |
+| --- | --- | --- | --- | --- | --- |
+| login-bootstrap | `/api/auth/session` | 108.6 | 16.5 | 6.1 | 43.8 |
+|  | `/api/plan` | 51.7 | 17.5 | 8.9 | 26.0 |
+|  | `/api/plan/version` | 33.2 | 7.2 | 5.4 | 15.3 |
+|  | `/api/collaborators` | 6.1 | 8.6 | 5.6 | 6.8 |
+|  | `/api/review/pending` | 6.8 | 6.1 | 5.6 | 6.2 |
+|  | `/api/integrations/google/status` | 9.3 | 8.6 | 5.9 | 8.0 |
+| plan-refresh | `/api/plan` | 7.0 | 6.9 | 4.4 | 6.1 |
+|  | `/api/plan/version` | 3.3 | 4.5 | 4.0 | 3.9 |
+
+**Observation:** Once the JWT TTL exceeds one minute, the first request seeds the verification cache and every subsequent call stays under ~50 ms. The backend no longer hits Clerk on every request, eliminating the multi-second stall seen in earlier phases.
+
 ## Observations
 
 - All endpoints consistently take **3.2–4.0 seconds** despite being simple reads, confirming that request time is dominated by Clerk verification overhead.
