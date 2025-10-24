@@ -8,7 +8,7 @@ vi.mock('../client.js', () => ({
   }
 }));
 
-vi.mock('../../services/realtime.js', () => ({
+vi.mock('../../realtime/emitter.js', () => ({
   getRealtimeEmitter: () => null
 }));
 

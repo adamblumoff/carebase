@@ -24,7 +24,7 @@ This document captures the approach for tightening backend boundaries and simpli
 | Item | Details |
 | --- | --- |
 | **Goal** | Keep `db/` layer focused on persistence while letting services orchestrate realtime side-effects. |
-| **Actions** |<ul><li>Introduce `backend/src/services/realtimeEmitter.ts` (or similar) exposing `setRealtimeEmitter()` / `getRealtimeEmitter()`.</li><li>Move emitter state out of `db/queries/shared.ts` and adjust imports accordingly (`services/realtime.ts` remains owner).</li><li>Refactor query modules that relied on implicit emitters to either receive the emitter via parameters or call the accessor.</li><li>Update integration tests to mock the emitter through the new module.</li></ul>|
+| **Actions** |<ul><li>Introduce `backend/src/realtime/emitter.ts` exposing `setRealtimeEmitter()` / `getRealtimeEmitter()`.</li><li>Move emitter state out of `db/queries/shared.ts` and adjust imports accordingly (`services/realtime.ts` remains owner).</li><li>Refactor query modules that relied on implicit emitters to either receive the emitter via parameters or call the accessor.</li><li>Update integration tests to mock the emitter through the new module.</li></ul>|
 | **Risks / Mitigations** | Widespread import updates—batch them carefully; verify there are no circular imports by running dep analysis (`dependency-cruiser` script). |
 
 ### 3. Add Dependency Guardrails
@@ -81,4 +81,3 @@ This document captures the approach for tightening backend boundaries and simpli
 - Should the auth gateway expose additional helpers (e.g., metadata builders) or remain minimal?
 - Do we need a feature flag for gradually adopting the new config modules on mobile?
 - Would adding an ADR (Architecture Decision Record) help track this shift for future contributors?
-

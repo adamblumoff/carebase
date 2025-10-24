@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import db from '../client.js';
-import { getRealtimeEmitter } from '../../services/realtime.js';
+import { getRealtimeEmitter } from '../../realtime/emitter.js';
 
 export { db, getRealtimeEmitter };
 

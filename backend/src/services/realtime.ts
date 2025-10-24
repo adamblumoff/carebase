@@ -4,14 +4,14 @@ import { findUserByClerkUserId } from '../db/queries.js';
 import { verifyClerkSessionToken } from './clerkAuthGateway.js';
 import { incrementMetric } from '../utils/metrics.js';
 import { PlanRealtimePublisher } from './planRealtimePublisher.js';
+import {
+  setRealtimeEmitter
+} from '../realtime/emitter.js';
+
+export { getRealtimeEmitter, __setRealtimeEmitterForTests } from '../realtime/emitter.js';
+import type { RealtimeEmitter } from '../realtime/emitter.js';
 
 const userRoom = (userId: number) => `user:${userId}`;
-
-export interface RealtimeEmitter {
-  emitPlanItemDelta(userId: number, delta: PlanItemDelta): void;
-}
-
-let emitter: RealtimeEmitter | null = null;
 
 async function authenticateSocket(socket: Socket): Promise<User | null> {
   const req = socket.request as any;
@@ -74,17 +74,10 @@ export function initRealtime(io: SocketIOServer): void {
     });
   });
 
-  emitter = {
+  const emitter: RealtimeEmitter = {
     emitPlanItemDelta(userId: number, delta: PlanItemDelta) {
       publisher.emitPlanItemDelta(userId, delta);
     }
   };
-}
-
-export function getRealtimeEmitter(): RealtimeEmitter | null {
-  return emitter;
-}
-
-export function __setRealtimeEmitterForTests(testEmitter: RealtimeEmitter | null): void {
-  emitter = testEmitter;
+  setRealtimeEmitter(emitter);
 }
