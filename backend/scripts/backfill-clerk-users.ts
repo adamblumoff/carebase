@@ -24,7 +24,9 @@ import type { UserBackfillRecord } from '../src/db/queries/users.js';
 import {
   listUsersForClerkBackfill,
   setClerkUserId,
-  setPasswordResetRequired
+  setPasswordResetRequired,
+  setGoogleCredentialClerkUserId,
+  setGoogleWatchChannelsClerkUserId
 } from '../src/db/queries.js';
 import {
   buildClerkMetadata,
@@ -266,6 +268,10 @@ async function syncUser(
 
     await setClerkUserId(record.id, created.id);
     await setPasswordResetRequired(record.id, true);
+    if (record.hasGoogleCredential) {
+      await setGoogleCredentialClerkUserId(record.id, created.id);
+      await setGoogleWatchChannelsClerkUserId(record.id, created.id);
+    }
 
     return {
       action: 'created',
@@ -326,9 +332,17 @@ async function syncUser(
     if (!record.clerkUserId || record.clerkUserId !== clerkUser.id) {
       await setClerkUserId(record.id, clerkUser.id);
     }
+    if (record.hasGoogleCredential) {
+      await setGoogleCredentialClerkUserId(record.id, clerkUser.id);
+      await setGoogleWatchChannelsClerkUserId(record.id, clerkUser.id);
+    }
   } else if (!record.clerkUserId) {
     // Dry-run: indicate we'd link the ID.
     note += ' | would set clerk_user_id';
+  }
+
+  if (!apply && record.hasGoogleCredential) {
+    note += ' | would relink Google credential ownership';
   }
 
   return {
