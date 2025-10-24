@@ -82,6 +82,31 @@ beforeEach(() => {
 });
 
 describe('updateAppointmentAsOwner', () => {
+  it('preserves local times when summary changes only', async () => {
+    const user = createUser();
+    const recipient = createRecipient({ userId: user.id });
+    const appointment = createAppointment({
+      startLocal: new Date('2024-10-01T15:00:00Z'),
+      endLocal: new Date('2024-10-01T16:00:00Z'),
+      startTimeZone: 'America/Chicago',
+      endTimeZone: 'America/Chicago'
+    });
+
+    queriesMock.getAppointmentById.mockResolvedValueOnce(appointment);
+    queriesMock.resolveRecipientContextForUser.mockResolvedValueOnce({ recipient, collaborator: null });
+    queriesMock.updateAppointment.mockImplementationOnce(async (_id, _user, updates) =>
+      createAppointment({ ...appointment, ...updates })
+    );
+
+    await updateAppointmentAsOwner(user, appointment.id, { summary: 'Updated summary' });
+
+    const [, , updatePayload] = queriesMock.updateAppointment.mock.calls[0] as [number, number, any];
+    expect(updatePayload.startLocal).toBe('2024-10-01T10:00:00');
+    expect(updatePayload.endLocal).toBe('2024-10-01T11:00:00');
+    expect(updatePayload.startTimeZone).toBe('America/Chicago');
+    expect(updatePayload.endTimeZone).toBe('America/Chicago');
+  });
+
   it('preserves collaborator when no change requested', async () => {
     const user = createUser();
     const recipient = createRecipient({ userId: user.id });
@@ -139,6 +164,48 @@ describe('updateAppointmentAsCollaborator', () => {
     queriesMock.resolveRecipientContextForUser.mockResolvedValueOnce({ recipient, collaborator: null });
 
     await expect(updateAppointmentAsCollaborator(user, 1, 'note')).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it('preserves local times when collaborator updates prep note', async () => {
+    const collaboratorUser = createUser({ id: 500, email: 'collab@example.com' });
+    const recipient = createRecipient({ userId: 42 });
+    const collaborator: Collaborator = {
+      id: 700,
+      recipientId: recipient.id,
+      userId: collaboratorUser.id,
+      email: collaboratorUser.email,
+      role: 'contributor',
+      status: 'accepted',
+      inviteToken: 'token',
+      invitedBy: 42,
+      invitedAt: new Date(),
+      acceptedAt: new Date()
+    };
+    const appointment = createAppointment({
+      startLocal: new Date('2024-10-01T15:00:00Z'),
+      endLocal: new Date('2024-10-01T16:00:00Z'),
+      startTimeZone: 'America/Chicago',
+      endTimeZone: 'America/Chicago',
+      prepNote: 'old note'
+    });
+
+    queriesMock.resolveRecipientContextForUser.mockResolvedValueOnce({ recipient, collaborator });
+    queriesMock.getAppointmentByIdForRecipient.mockResolvedValueOnce(appointment);
+    queriesMock.updateAppointmentForRecipient.mockResolvedValueOnce(
+      createAppointment({ ...appointment, prepNote: 'Bring forms' })
+    );
+
+    await updateAppointmentAsCollaborator(collaboratorUser, appointment.id, 'Bring forms');
+
+    const [, , updatePayload] = queriesMock.updateAppointmentForRecipient.mock.calls[0] as [
+      number,
+      number,
+      any
+    ];
+    expect(updatePayload.startLocal).toBe('2024-10-01T10:00:00');
+    expect(updatePayload.endLocal).toBe('2024-10-01T11:00:00');
+    expect(updatePayload.startTimeZone).toBe('America/Chicago');
+    expect(updatePayload.endTimeZone).toBe('America/Chicago');
   });
 
   it('updates prep note and queues sync for collaborators', async () => {

@@ -9,8 +9,7 @@ import {
   resolveRecipientContextForUser,
   markGoogleSyncPending
 } from '../db/queries.js';
-import { formatForPayload } from '../utils/dateFormatting.js';
-import { getDefaultTimeZone } from '../utils/timezone.js';
+import { getDefaultTimeZone, formatDateTimeWithTimeZone } from '../utils/timezone.js';
 import { ForbiddenError, NotFoundError } from '../utils/errors.js';
 
 interface AppointmentContext {
@@ -47,6 +46,12 @@ export async function fetchAppointmentForUser(user: User, appointmentId: number)
 
 function normalizeDate(value: string | Date): Date {
   return value instanceof Date ? value : new Date(value);
+}
+
+function formatLocalDateTimeForZone(value: string | Date, timeZone: string): string {
+  const date = normalizeDate(value);
+  const { local } = formatDateTimeWithTimeZone(date, timeZone);
+  return local;
 }
 
 export async function updateAppointmentAsOwner(
@@ -95,8 +100,8 @@ export async function updateAppointmentAsOwner(
 
   const updated = await updateAppointment(appointmentId, user.id, {
     summary: updates.summary ?? appointment.summary,
-    startLocal: updates.startLocal ?? formatForPayload(normalizeDate(appointment.startLocal)),
-    endLocal: updates.endLocal ?? formatForPayload(normalizeDate(appointment.endLocal)),
+    startLocal: updates.startLocal ?? formatLocalDateTimeForZone(appointment.startLocal, nextStartTimeZone),
+    endLocal: updates.endLocal ?? formatLocalDateTimeForZone(appointment.endLocal, nextEndTimeZone),
     startTimeZone: nextStartTimeZone,
     endTimeZone: nextEndTimeZone,
     location: updates.location ?? appointment.location ?? undefined,
@@ -123,12 +128,15 @@ export async function updateAppointmentAsCollaborator(
     throw new NotFoundError('Appointment not found');
   }
 
+  const startTimeZone = existing.startTimeZone ?? getDefaultTimeZone();
+  const endTimeZone = existing.endTimeZone ?? existing.startTimeZone ?? getDefaultTimeZone();
+
   const updated = await updateAppointmentForRecipient(appointmentId, context.recipientId, {
     summary: existing.summary,
-    startLocal: formatForPayload(normalizeDate(existing.startLocal)),
-    endLocal: formatForPayload(normalizeDate(existing.endLocal)),
-    startTimeZone: existing.startTimeZone ?? getDefaultTimeZone(),
-    endTimeZone: existing.endTimeZone ?? existing.startTimeZone ?? getDefaultTimeZone(),
+    startLocal: formatLocalDateTimeForZone(existing.startLocal, startTimeZone),
+    endLocal: formatLocalDateTimeForZone(existing.endLocal, endTimeZone),
+    startTimeZone,
+    endTimeZone,
     location: existing.location ?? undefined,
     prepNote,
     assignedCollaboratorId: existing.assignedCollaboratorId ?? null
