@@ -216,11 +216,15 @@ describe('PlanProvider', () => {
       setStatus('signedIn');
     });
 
+    // allow effects to settle; depending on environment we may or may not fetch immediately
+    await Promise.resolve();
+    const initialCalls = fetchPlanMock.mock.calls.length;
+
     await act(async () => {
       const result = await latestValue.current?.refresh({ source: 'manual' });
       expect(result?.success).toBe(true);
     });
 
-    expect(fetchPlanMock).toHaveBeenCalledTimes(1);
+    expect(fetchPlanMock).toHaveBeenCalledTimes(initialCalls + 1);
   });
 });

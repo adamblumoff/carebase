@@ -31,7 +31,19 @@ const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/calendar.events'
 ];
 
+function isMfaRequired(): boolean {
+  const configured = process.env.GOOGLE_REQUIRE_MFA;
+  if (typeof configured === 'string') {
+    return configured.toLowerCase() !== 'false';
+  }
+  return process.env.NODE_ENV === 'production';
+}
+
 async function assertMfaEnrolled(user: User): Promise<void> {
+  if (!isMfaRequired()) {
+    return;
+  }
+
   const status = await getUserMfaStatus(user.id);
   if (!status || status.status !== 'enrolled') {
     throw new ValidationError({

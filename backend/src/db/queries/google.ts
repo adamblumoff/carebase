@@ -72,24 +72,6 @@ async function ensureGoogleIntegrationSchema(): Promise<void> {
           `CREATE INDEX IF NOT EXISTS idx_google_sync_links_calendar ON google_sync_links(calendar_id)`
         );
         await db.query(
-          `CREATE INDEX IF NOT EXISTS idx_google_credentials_expires_at ON google_credentials(expires_at)`
-        );
-        await db.query(
-          `CREATE INDEX IF NOT EXISTS idx_google_credentials_clerk_user ON google_credentials(clerk_user_id)`
-        );
-        await db.query(
-          `ALTER TABLE google_sync_links
-             ADD COLUMN IF NOT EXISTS sync_status VARCHAR(20) NOT NULL DEFAULT 'idle' CHECK (sync_status IN ('idle', 'pending', 'error'))`
-        );
-        await db.query(
-          `ALTER TABLE google_sync_links
-             ADD COLUMN IF NOT EXISTS last_error TEXT`
-        );
-        await db.query(
-          `ALTER TABLE google_sync_links
-             ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
-        );
-        await db.query(
           `ALTER TABLE google_credentials
              ADD COLUMN IF NOT EXISTS token_type VARCHAR(50)`
         );
@@ -120,6 +102,25 @@ async function ensureGoogleIntegrationSchema(): Promise<void> {
         await db.query(
           `ALTER TABLE google_credentials
              ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
+        );
+
+        await db.query(
+          `ALTER TABLE google_sync_links
+             ADD COLUMN IF NOT EXISTS sync_status VARCHAR(20) NOT NULL DEFAULT 'idle' CHECK (sync_status IN ('idle', 'pending', 'error'))`
+        );
+        await db.query(
+          `ALTER TABLE google_sync_links
+             ADD COLUMN IF NOT EXISTS last_error TEXT`
+        );
+        await db.query(
+          `ALTER TABLE google_sync_links
+             ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
+        );
+        await db.query(
+          `CREATE INDEX IF NOT EXISTS idx_google_credentials_expires_at ON google_credentials(expires_at)`
+        );
+        await db.query(
+          `CREATE INDEX IF NOT EXISTS idx_google_credentials_clerk_user ON google_credentials(clerk_user_id)`
         );
         await db.query(`
           CREATE TABLE IF NOT EXISTS google_watch_channels (
