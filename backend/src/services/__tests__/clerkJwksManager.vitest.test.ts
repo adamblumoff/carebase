@@ -70,6 +70,56 @@ describe('clerkJwksManager', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('throws when JWKS payload is malformed', async () => {
+    const badResponse = new Response(JSON.stringify({ nope: true }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const fetchMock = vi.fn(async () => badResponse);
+    global.fetch = fetchMock as any;
+
+    await expect(getClerkJwksVerifier('https://invalid.com')).rejects.toThrow('Invalid JWKS payload');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('shares in-flight JWKS loads between concurrent requests', async () => {
+    mockFetchWithSuccess();
+
+    await Promise.all([
+      getClerkJwksVerifier('https://inflight.com'),
+      getClerkJwksVerifier('https://inflight.com')
+    ]);
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('warns but does not throw when prefetch times out', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const abortableFetch = vi.fn((_: URL, init?: RequestInit) => {
+      return new Promise((_, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          const abortError = new Error('Aborted');
+          abortError.name = 'AbortError';
+          reject(abortError);
+        });
+      });
+    });
+
+    global.fetch = abortableFetch as any;
+
+    const promise = prefetchClerkJwks('https://timeout.com', 50);
+    await vi.advanceTimersByTimeAsync(50);
+    await promise;
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[ClerkSync] Failed to prefetch Clerk JWKS',
+      expect.objectContaining({ issuer: 'https://timeout.com' })
+    );
+    expect(abortableFetch).toHaveBeenCalledTimes(1);
+
+    warnSpy.mockRestore();
+  });
+
   it('applies exponential backoff on refresh failure', async () => {
     const success = new Response(JSON.stringify(mockJwks), {
       status: 200,
