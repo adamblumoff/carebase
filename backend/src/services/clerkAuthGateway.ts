@@ -67,9 +67,15 @@ export async function verifyClerkSessionToken(token: string): Promise<ClerkToken
     incrementMetric('clerk.token.cache', 1, { outcome: 'miss' });
   }
 
-  let decoded: { sid?: string; exp?: number; sub?: string; iss?: string } | null = null;
+  let decoded: {
+    sid?: string;
+    session_id?: string;
+    exp?: number;
+    sub?: string;
+    iss?: string;
+  } | null = null;
   try {
-    decoded = jwt.decode(token, { json: true }) as { sid?: string; exp?: number; sub?: string; iss?: string } | null;
+    decoded = jwt.decode(token, { json: true }) as typeof decoded;
     console.log('[ClerkSync] Decoded token payload', decoded);
   } catch (error) {
     console.warn('[ClerkSync] Failed to decode Clerk session token:', (error as Error).message);
@@ -77,12 +83,15 @@ export async function verifyClerkSessionToken(token: string): Promise<ClerkToken
     return null;
   }
 
-  if (!decoded?.sid || !decoded?.iss) {
+  const decodedSessionId =
+    decoded?.sid ?? (decoded as { session_id?: string } | null)?.session_id ?? null;
+
+  if (!decodedSessionId || !decoded?.iss) {
     incrementMetric('clerk.token.verify', 1, { outcome: 'missing_sid' });
     return null;
   }
 
-  const sessionId = decoded.sid;
+  const sessionId = decodedSessionId;
 
   try {
     const verifier = await getClerkJwksVerifier(decoded.iss);
@@ -90,7 +99,8 @@ export async function verifyClerkSessionToken(token: string): Promise<ClerkToken
       issuer: decoded.iss
     });
 
-    const payloadSessionId = (payload as any).sid ?? null;
+    const payloadSessionId =
+      (payload as any).sid ?? (payload as any).session_id ?? null;
     const expiresAt = typeof (payload as any).exp === 'number' ? ((payload as any).exp as number) * 1000 : undefined;
 
     logClerk('Verified Clerk token via JWKS', {
@@ -181,14 +191,15 @@ export async function verifyClerkSessionToken(token: string): Promise<ClerkToken
   if (decoded?.sub) {
     incrementMetric('clerk.token.verify', 1, { outcome: 'error' });
     console.warn('[ClerkSync] Falling back to decoded token payload (verification skipped)');
+    const fallbackSessionId = decoded.sid ?? decoded.session_id ?? null;
     setClerkTokenCacheEntry(token, {
       userId: String(decoded.sub),
-      sessionId: decoded.sid ? String(decoded.sid) : null,
+      sessionId: fallbackSessionId ? String(fallbackSessionId) : null,
       expiresAt: decoded.exp ? decoded.exp * 1000 : undefined
     });
     return {
       userId: String(decoded.sub),
-      sessionId: decoded.sid ? String(decoded.sid) : null,
+      sessionId: fallbackSessionId ? String(fallbackSessionId) : null,
       expiresAt: decoded.exp ? decoded.exp * 1000 : undefined
     };
   }
