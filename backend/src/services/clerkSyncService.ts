@@ -19,6 +19,11 @@ import {
   fetchClerkUserById as restFetchClerkUserById,
   listClerkUsers as restListClerkUsers
 } from './clerkRestClient.js';
+import {
+  getClerkTokenCacheEntry,
+  setClerkTokenCacheEntry,
+  deleteClerkTokenCacheEntry
+} from './clerkTokenCache.js';
 
 let cachedClient: ClerkClient | null = null;
 let warnedMissingSecret = false;
@@ -369,6 +374,18 @@ export async function verifyClerkSessionToken(token: string): Promise<ClerkToken
     return null;
   }
 
+  const cached = getClerkTokenCacheEntry(token);
+  if (cached) {
+    incrementMetric('clerk.token.cache', 1, { outcome: 'hit' });
+    return {
+      userId: cached.userId,
+      sessionId: cached.sessionId,
+      expiresAt: cached.expiresAt ?? undefined
+    };
+  } else {
+    incrementMetric('clerk.token.cache', 1, { outcome: 'miss' });
+  }
+
   let decoded: { sid?: string; exp?: number; sub?: string; iss?: string } | null = null;
   try {
     decoded = jwt.decode(token, { json: true }) as { sid?: string; exp?: number; sub?: string; iss?: string } | null;
@@ -409,6 +426,14 @@ export async function verifyClerkSessionToken(token: string): Promise<ClerkToken
       via: 'jwks'
     });
 
+    if (payload.sub) {
+      setClerkTokenCacheEntry(token, {
+        userId: String(payload.sub),
+        sessionId: payloadSessionId ? String(payloadSessionId) : null,
+        expiresAt
+      });
+    }
+
     return {
       userId: String(payload.sub),
       sessionId: payloadSessionId ? String(payloadSessionId) : null,
@@ -419,6 +444,7 @@ export async function verifyClerkSessionToken(token: string): Promise<ClerkToken
     if (process.env.NODE_ENV !== 'production') {
       console.warn('[ClerkSync] JWKS verification error details:', error);
     }
+    deleteClerkTokenCacheEntry(token);
     incrementMetric('clerk.token.verify', 1, { outcome: 'jwks_error' });
   }
 
@@ -437,6 +463,12 @@ export async function verifyClerkSessionToken(token: string): Promise<ClerkToken
       via: 'api'
     });
 
+    setClerkTokenCacheEntry(token, {
+      userId: session.userId,
+      sessionId: session.id,
+      expiresAt
+    });
+
     return {
       userId: session.userId,
       sessionId: session.id,
@@ -449,11 +481,17 @@ export async function verifyClerkSessionToken(token: string): Promise<ClerkToken
       incrementMetric('clerk.token.verify', 1, { outcome: 'error' });
       return null;
     }
+    deleteClerkTokenCacheEntry(token);
   }
 
   if (decoded?.sub) {
     incrementMetric('clerk.token.verify', 1, { outcome: 'error' });
     console.warn('[ClerkSync] Falling back to decoded token payload (verification skipped)');
+    setClerkTokenCacheEntry(token, {
+      userId: String(decoded.sub),
+      sessionId: decoded.sid ? String(decoded.sid) : null,
+      expiresAt: decoded.exp ? decoded.exp * 1000 : undefined
+    });
     return {
       userId: String(decoded.sub),
       sessionId: decoded.sid ? String(decoded.sid) : null,

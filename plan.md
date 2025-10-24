@@ -22,9 +22,9 @@ Reduce perceived and measured latency during login flows and post-mutation refre
 - [x] Re-run baseline scenarios to confirm immediate improvement; log results in a new `docs/auth-latency.md` section. *(Result: latency unchanged; handshake still returning `isAuthenticated: false`.)*
 
 ## Phase 3 – Token Verification Cache
-- [ ] Implement in-memory cache module (`backend/src/services/clerkTokenCache.ts`) storing `{sessionId, userId, expiresAt}` keyed by token (bounded size, 5 min max TTL, purge on expiry).
-- [ ] Update `verifyClerkSessionToken` to consult cache before performing JWKS/API calls; cache successful results and decoded fallbacks.
-- [ ] Instrument cache hits/misses (`clerk.token.cache|hit/miss`) and add focused unit tests covering expiry and error paths.
+- [x] Implement in-memory cache module (`backend/src/services/clerkTokenCache.ts`) storing `{sessionId, userId, expiresAt}` keyed by token (bounded size, 5 min max TTL, purge on expiry).
+- [x] Update `verifyClerkSessionToken` to consult cache before performing JWKS/API calls; cache successful results and decoded fallbacks.
+- [x] Instrument cache hits/misses (`clerk.token.cache|hit/miss`) and add focused unit tests covering expiry and error paths.
 
 ## Phase 4 – JWKS Prefetch & Resilience
 - [ ] Introduce startup prefetch of Clerk JWKS (await a single fetch during boot, with <1 s timeout) so the first authenticated request does not block.
