@@ -1,50 +1,54 @@
-# Realtime Plan Item Updates
+# Clerk Latency Remediation Plan
 
-Goal: deliver realtime updates for plan data (appointments & bills) with minimal payloads, starting with the plan screen and covering all mutation sources (local actions, collaborators, Google sync). The realtime pipeline must still fallback to periodic refresh when sockets lag or disconnect.
+## Goal
+Reduce perceived and measured latency during login flows and post-mutation refreshes by ensuring Bearer authentication no longer blocks on external Clerk calls for every request. Target <350 ms backend processing time for authenticated endpoints under normal network conditions.
 
 ---
 
-## Step 0 – Recon & Guardrails
-- [x] Trace current realtime flow (`backend/src/services/realtime.ts`, `planEvents` helpers, Socket.IO usage in mobile) to document the legacy `plan:update` broadcast and identify the replacement path.
-- [x] Confirm `ensureRealtimeConnected` behaviour and polling cadence so the fallback refresh keeps working.
-- [x] List every code path that mutates appointments/bills:
-  - REST controllers (`backend/src/controllers/api/appointments.ts`, `bills.ts`)
-  - Services invoked by collaborators (`.../services/appointmentService.ts`, etc.)
-  - Google sync push/pull pipelines (`googleSync/syncOperations.ts`)
-- [x] Define the minimal delta payload we need (e.g. `{ itemType: 'appointment'|'bill', itemId, action: 'created'|'updated'|'deleted', version }`) and how to extend later for other screens.
+## Phase 1 – Baseline & Safety Net
+- [x] Record current timings (mobile dev build against local backend). Capture:
+  - Cold login (app launch → plan visible)
+  - Appointment PATCH round-trip
+  - `/api/auth/session` latency from backend logs
+- [x] Snapshot current metrics counters (`clerk.token.verify`, `auth.clerk.http`) for comparison. *(No flush logged; baseline noted as “no counters emitted” in docs/auth-latency.md.)*
+- [x] Add temporary script (`scripts/dev/measure-auth-latency.ts`) if needed to re-run benchmarks quickly.
 
-## Step 1 – Backend Event Publisher
-- [x] Add a typed event emitter helper (e.g. `PlanRealtimePublisher`) that wraps the Socket.IO emitter and exposes `emitItemMutation(userId, delta)`.
-- [x] Ensure the helper deduplicates rapid-fire events (set-level throttle within the same event loop tick) to avoid flooding clients when a service writes multiple rows per operation.
-- [x] Write lightweight unit tests for the publisher to confirm emitted payloads.
+## Phase 2 – Restore Middleware Fast Path
+- [ ] Update `backend/src/server.ts` to enable Clerk Express handshake (`enableHandshake: true`) and adjust configuration for dev env if needed.
+- [ ] Enhance `attachBearerUser` to:
+  - Trust populated `req.auth()` without invoking `verifyClerkSessionToken`.
+  - Fall back only when handshake data is unavailable.
+- [ ] Add unit/integration coverage ensuring requests authenticated via middleware no longer call `verifyClerkSessionToken` (spy on helper in tests).
+- [ ] Re-run baseline scenarios to confirm immediate improvement; log results in a new `docs/auth-latency.md` section.
 
-## Step 2 – Hook Up Mutation Sources
-- [x] REST handlers: after successful create/update/delete of appointments/bills, publish the relevant delta + new plan version. Reuse shared helper so both owner and collaborator routes hit it.
-- [x] Google sync: surface mutations from push/pull ops (the ones that currently schedule a plan refresh) and emit derived deltas before queueing the sync. Make sure deltas fire for both new items and deletions propagated from Google.
-- [x] Service-level guard: if we cannot compute an exact delta (e.g. bulk migration), emit a generic `planVersionBumped` event so clients can fallback to fetching.
-- [x] Extend integration tests (existing google sync + REST tests) to assert that the mocked realtime emitter receives the expected deltas.
+## Phase 3 – Token Verification Cache
+- [ ] Implement in-memory cache module (`backend/src/services/clerkTokenCache.ts`) storing `{sessionId, userId, expiresAt}` keyed by token (bounded size, 5 min max TTL, purge on expiry).
+- [ ] Update `verifyClerkSessionToken` to consult cache before performing JWKS/API calls; cache successful results and decoded fallbacks.
+- [ ] Instrument cache hits/misses (`clerk.token.cache|hit/miss`) and add focused unit tests covering expiry and error paths.
 
-## Step 3 – Socket Payload & Types
-- [x] Define a new Socket.IO event name (e.g. `plan:item-mutated`) and payload interface in `shared/`.
-- [x] Update backend emitter to broadcast on this channel.
-- [x] Remove the legacy `plan:update` broadcast once all clients consume `plan:item-delta`.
+## Phase 4 – JWKS Prefetch & Resilience
+- [ ] Introduce startup prefetch of Clerk JWKS (await a single fetch during boot, with <1 s timeout) so the first authenticated request does not block.
+- [ ] Schedule periodic background refresh (e.g., every 15 min) with exponential backoff on failure.
+- [ ] Reduce JWKS HTTP timeout to 2 s and add retry once before falling back to cached keys; log metrics for reload failures.
+- [ ] Extend tests to simulate stale JWKS and ensure the system falls back gracefully without hanging the request.
 
-## Step 4 – Mobile Client (Plan Screen)
-- [x] Update the realtime utility (`mobile/src/utils/realtime.ts`) to subscribe to `plan:item-mutated`.
-- [x] Thread delta events through `PlanProvider`:
-  - Apply in-memory updates to `plan` state when possible (create/update/delete).
-  - Track `latestVersion` using the delta payload; when out-of-order or missing data, trigger a `refresh({ silent: true })`.
-- [x] Add Vitest coverage for reducer-style helpers to verify local state patches, including edge cases (unknown item -> fallback refresh).
-- [x] Verify manual fallback (if socket is disconnected or mutation fails to apply, periodic poll still refreshes the plan).
+## Phase 5 – Clerk REST Fallback Tuning
+- [ ] Wrap `clerkClient.sessions.verifySession` call with a 2 s AbortController timeout.
+- [ ] If timeout/error occurs, rely on decoded payload when signature already verified, and emit metric `clerk.token.verify|outcome=timeout`.
+- [ ] Document behavior in `docs/auth.md` so operators know we may temporarily accept decoded claims under degraded Clerk conditions.
 
-## Step 5 – QA & Latency Checks
-- [x] Manual smoke: run backend + mobile, create/update/delete appointments and bills, ensure changes appear instantly on another device/emulator without manual refresh.
-- [x] Simulate Google-originated edits (use existing sync tests or manual Google calendar change) and confirm realtime delta arrives.
-- [x] Validate logs/metrics to ensure we aren’t spamming events (watch `auth.clerk.socket`, new `plan.delta.*` counters).
+## Phase 6 – Remove Repeated Heavy Work
+- [ ] Audit `ensureGoogleIntegrationSchema` to make sure it is only invoked once per process (confirm guard flags or introduce a global promise).
+- [ ] Check other per-request guards (e.g., Google watch/channel checks) for redundant DB/crypto work; note findings.
+- [ ] Add regression tests verifying schema bootstrap doesn’t rerun after first success.
 
-## Step 6 – Roll Forward & Future Expansion
-- [x] Document the new event contract (`docs/realtime.md`).
-- [x] Inventory other realtime consumers (settings, collaborators, pending review) and map required delta shapes.
-- [x] Extend respective providers/hooks to consume `plan:item-delta` (or new events) and update local caches.
-- [x] Update their test suites to cover delta application + fallback refresh.
-- [x] When clients are migrated, retire the legacy `plan:update` broadcast and update docs accordingly.
+## Phase 7 – Validation & Rollout
+- [ ] Re-run baseline measurements from Phase 1; compare timings and metrics, target ≥60% drop in per-request auth overhead.
+- [ ] Update `docs/auth-latency.md` with before/after numbers and lessons learned.
+- [ ] Share findings in `AGENTS.md` (short summary + required env vars) for future agents.
+- [ ] Leave follow-up TODOs (if any) in backlog and close plan.
+
+## Guardrails
+- Never disable Clerk verification entirely; all shortcuts must keep signature validation (JWT / cache) intact.
+- Cache must respect token expiry and clear entries on sign-out or manual revoke.
+- All changes require `npm run test:backend` and `npm run test --workspace=mobile` before commit.
