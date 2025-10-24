@@ -38,9 +38,9 @@ Reduce perceived and measured latency during login flows and post-mutation refre
 - [x] Document behavior in `docs/clerk-setup.md` so operators know we may temporarily accept decoded claims under degraded Clerk conditions.
 
 ## Phase 6 – Remove Repeated Heavy Work
-- [ ] Audit `ensureGoogleIntegrationSchema` to make sure it is only invoked once per process (confirm guard flags or introduce a global promise).
-- [ ] Check other per-request guards (e.g., Google watch/channel checks) for redundant DB/crypto work; note findings.
-- [ ] Add regression tests verifying schema bootstrap doesn’t rerun after first success.
+- [x] Audit `ensureGoogleIntegrationSchema` to make sure it is only invoked once per process (confirm guard flags or introduce a global promise).
+- [x] Check other per-request guards (e.g., Google watch/channel checks) for redundant DB/crypto work; note findings *(Collaborator schema and Google schema now primed during server bootstrap; no additional per-request work identified beyond unavoidable ticket scheduling).*.
+- [x] Add regression tests verifying schema bootstrap doesn’t rerun after first success.
 
 ## Phase 7 – Validation & Rollout
 - [ ] Re-run baseline measurements from Phase 1; compare timings and metrics, target ≥60% drop in per-request auth overhead.

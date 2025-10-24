@@ -293,3 +293,8 @@ export async function listAcceptedCollaboratorEmailsForOwner(userId: number): Pr
 }
 
 export { ensureCollaboratorSchema };
+
+export function __resetCollaboratorSchemaForTests(): void {
+  collaboratorSchemaEnsured = false;
+  collaboratorEnsurePromise = null;
+}

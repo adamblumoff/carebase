@@ -14,6 +14,7 @@ import { initRealtime } from './services/realtime.js';
 import { startGoogleSyncPolling } from './services/googleSync.js';
 import { getClerkClient } from './services/clerkSyncService.js';
 import { configureClerkJwks } from './services/clerkJwksManager.js';
+import { bootstrapDatabase } from './db/bootstrap.js';
 
 const app = express();
 const server = createServer(app);
@@ -44,6 +45,10 @@ if (clerkClient) {
       : undefined
   });
 }
+
+await bootstrapDatabase().catch((error) => {
+  console.error('[Bootstrap] Database bootstrap failed', error);
+});
 
 // Trust proxy (Railway runs behind a proxy)
 if (isProduction) {
