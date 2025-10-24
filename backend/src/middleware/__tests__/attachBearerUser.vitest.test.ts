@@ -1,6 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import type { NextFunction, Request, Response } from 'express';
-import { attachBearerUser } from '../attachBearerUser.js';
 
 const findUserByClerkUserId = vi.fn();
 const ensureLocalUserForClerk = vi.fn();
@@ -11,9 +10,14 @@ vi.mock('../../db/queries.js', () => ({
 }));
 
 vi.mock('../../services/clerkSyncService.js', () => ({
-  ensureLocalUserForClerk,
+  ensureLocalUserForClerk
+}));
+
+vi.mock('../../services/clerkAuthGateway.js', () => ({
   verifyClerkSessionToken
 }));
+
+const { attachBearerUser } = await import('../attachBearerUser.js');
 
 describe('attachBearerUser', () => {
   beforeEach(() => {

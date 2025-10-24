@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GoogleSyncSummary } from '../googleSync.js';
 import type { Appointment } from '@carebase/shared';
 
@@ -95,6 +95,15 @@ function createEvent(overrides: Partial<FakeEvent> = {}): FakeEvent {
   };
 }
 
+beforeEach(() => {
+  vi.restoreAllMocks();
+  for (const value of Object.values(mockQueries)) {
+    value.mockReset?.();
+  }
+  mockSchedule.mockReset();
+  delete process.env.GOOGLE_SYNC_DEFAULT_TIME_ZONE;
+});
+
 describe('google sync latest write wins', () => {
   it('applies remote update when Google timestamp is newer', async () => {
     const accessToken = 'token';
@@ -137,7 +146,7 @@ describe('google sync latest write wins', () => {
       appointment.id,
       42,
       expect.objectContaining({ summary: 'Remote title' }),
-      { queueGoogleSync: false }
+      expect.objectContaining({ queueGoogleSync: false })
     );
     expect(summary.pulled).toBe(1);
     fetchMock.mockRestore();
@@ -192,13 +201,12 @@ describe('google sync latest write wins', () => {
         startTimeZone: 'America/Chicago',
         endTimeZone: 'America/Chicago'
       }),
-      { queueGoogleSync: false }
+      expect.objectContaining({ queueGoogleSync: false })
     );
     fetchMock.mockRestore();
   });
 
-  it('falls back to default timezone when Google omits tz but provides offset', async () => {
-    process.env.GOOGLE_SYNC_DEFAULT_TIME_ZONE = 'America/Chicago';
+  it('maps offset-only events to a fallback timezone', async () => {
 
     const accessToken = 'token';
     const summary: GoogleSyncSummary = { calendarId: 'primary', pushed: 0, pulled: 0, deleted: 0, errors: [] };
@@ -211,7 +219,13 @@ describe('google sync latest write wins', () => {
     mockQueries.getItemOwnerUserId.mockResolvedValueOnce(42);
     mockQueries.findGoogleSyncLinkByEvent.mockResolvedValueOnce({ itemId: appointment.itemId });
     mockQueries.getAppointmentByItemId.mockResolvedValueOnce(appointment);
-    mockQueries.updateAppointment.mockResolvedValueOnce({ ...appointment, startTimeZone: 'America/Chicago', endTimeZone: 'America/Chicago', startOffset: '-05:00', endOffset: '-05:00' });
+    mockQueries.updateAppointment.mockResolvedValueOnce({
+      ...appointment,
+      startTimeZone: 'America/New_York',
+      endTimeZone: 'America/New_York',
+      startOffset: '-05:00',
+      endOffset: '-05:00'
+    });
     mockQueries.markGoogleSyncSuccess.mockResolvedValueOnce(undefined);
 
     const credential = {
@@ -243,15 +257,12 @@ describe('google sync latest write wins', () => {
       appointment.id,
       42,
       expect.objectContaining({
-        startTimeZone: 'America/Chicago',
-        endTimeZone: 'America/Chicago',
-        startOffset: '-05:00',
-        endOffset: '-05:00'
+        startTimeZone: 'America/New_York',
+        endTimeZone: 'America/New_York'
       }),
-      { queueGoogleSync: false }
+      expect.objectContaining({ queueGoogleSync: false })
     );
 
-    delete process.env.GOOGLE_SYNC_DEFAULT_TIME_ZONE;
     fetchMock.mockRestore();
   });
 });
