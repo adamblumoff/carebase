@@ -12,6 +12,7 @@ export interface RouteMeta {
 
 export const ROUTER_METADATA: RouterMeta[] = [
   { basePath: '/webhook', scope: 'web', description: 'Inbound Postmark webhook' },
+  { basePath: '/webhook/clerk', scope: 'web', description: 'Clerk user lifecycle webhooks' },
   { basePath: '/collaborators', scope: 'web', description: 'Collaborator invite landing pages' },
   { basePath: '/api/auth', scope: 'api', description: 'Clerk-authenticated session APIs' },
   { basePath: '/api/plan', scope: 'api', description: 'Plan data APIs' },

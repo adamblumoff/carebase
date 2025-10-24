@@ -27,6 +27,7 @@ This document covers the one-time provisioning work required before the Clerk mi
   - `mobile/.env.development.local` / `.example`
   - `mobile/.env.production.local` / `.example`
 - If the backend will validate JWTs with a custom template, create the template and note its name (default `carebase-backend`).
+- Generate a signed webhook secret (`CLERK_WEBHOOK_SECRET`) for user lifecycle events and add it to backend env files (development/staging/production). The server uses this secret to verify requests on `/webhook/clerk`.
 
 ## 4. Hosted UI URLs
 - Copy the hosted sign-in and sign-up URLs from Clerk and place them in the env files if the defaults differ per environment.

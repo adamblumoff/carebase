@@ -1,5 +1,6 @@
 import type { Express, Router } from 'express';
 import webhookRoutes from './webhook.js';
+import clerkWebhookRoutes from './webhook.clerk.js';
 import collaboratorsWebRoutes from './collaborators.js';
 
 import apiAuthRoutes from './api/auth.js';
@@ -23,6 +24,7 @@ export interface RouteDefinition extends RouteMeta {}
 
 const routerLookup: Record<string, Router> = {
   '/webhook': webhookRoutes,
+  '/webhook/clerk': clerkWebhookRoutes,
   '/collaborators': collaboratorsWebRoutes,
   '/api/auth': apiAuthRoutes,
   '/api/plan': apiPlanRoutes,
