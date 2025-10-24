@@ -446,37 +446,53 @@ export async function verifyClerkSessionToken(token: string): Promise<ClerkToken
   }
 
   try {
-    const session = await clerkClient.sessions.verifySession(sessionId, token);
-    const expiresAt = session.expireAt ? new Date(session.expireAt).getTime() : decoded.exp ? decoded.exp * 1000 : undefined;
+    const controller = new AbortController();
+    const timeoutMs = Number.parseInt(process.env.CLERK_SESSION_VERIFY_TIMEOUT_MS ?? '2000', 10);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-    logClerk('Verified Clerk session via API', {
-      clerkUserId: session.userId,
-      sessionId: session.id,
-      expiresAt: expiresAt ?? null
-    });
+    try {
+      const session = await clerkClient.sessions.verifySession(sessionId, token, {
+        signal: controller.signal
+      } as any);
 
-    incrementMetric('clerk.token.verify', 1, {
-      hasSession: 'yes',
-      via: 'api'
-    });
+      const expiresAt = session.expireAt ? new Date(session.expireAt).getTime() : decoded.exp ? decoded.exp * 1000 : undefined;
 
-    setClerkTokenCacheEntry(token, {
-      userId: session.userId,
-      sessionId: session.id,
-      expiresAt
-    });
+      logClerk('Verified Clerk session via API', {
+        clerkUserId: session.userId,
+        sessionId: session.id,
+        expiresAt: expiresAt ?? null
+      });
 
-    return {
-      userId: session.userId,
-      sessionId: session.id,
-      expiresAt
-    };
+      incrementMetric('clerk.token.verify', 1, {
+        hasSession: 'yes',
+        via: 'api'
+      });
+
+      setClerkTokenCacheEntry(token, {
+        userId: session.userId,
+        sessionId: session.id,
+        expiresAt
+      });
+
+      return {
+        userId: session.userId,
+        sessionId: session.id,
+        expiresAt
+      };
+    } finally {
+      clearTimeout(timer);
+    }
   } catch (error) {
-    const status = (error as { status?: number }).status;
-    console.warn('[ClerkSync] Clerk session verify via API failed:', (error as Error).message);
-    if (status !== 404 && status !== 403) {
-      incrementMetric('clerk.token.verify', 1, { outcome: 'error' });
-      return null;
+    if ((error as Error).name === 'AbortError') {
+      console.warn('[ClerkSync] Clerk session verify via API timed out after', process.env.CLERK_SESSION_VERIFY_TIMEOUT_MS ?? '2000', 'ms');
+      incrementMetric('clerk.token.verify', 1, { outcome: 'timeout' });
+    } else {
+      const status = (error as { status?: number }).status;
+      console.warn('[ClerkSync] Clerk session verify via API failed:', (error as Error).message);
+      if (status !== 404 && status !== 403) {
+        incrementMetric('clerk.token.verify', 1, { outcome: 'error' });
+        return null;
+      }
     }
     deleteClerkTokenCacheEntry(token);
   }

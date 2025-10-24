@@ -37,6 +37,13 @@ This document covers the one-time provisioning work required before the Clerk mi
 - Generate API keys with `User management` permissions for backfill scripts.
 - Store them securely (1Password) and populate the `CLERK_SECRET_KEY` env variable when running the backfill.
 
-## 6. Track Decisions
+## 6. Runtime Performance Settings
+- Add the JWKS configuration vars to each backend environment:
+  - `CLERK_JWKS_ISSUER` — base URL of the Clerk instance (e.g. `https://feasible-kiwi-29.clerk.accounts.dev`).
+  - `CLERK_JWKS_REFRESH_INTERVAL_MS` — refresh cadence (default 900000). Leave unset to use the default.
+  - `CLERK_JWKS_PREFETCH_TIMEOUT_MS` — startup fetch timeout (default 1000).
+- Optionally tune `CLERK_SESSION_VERIFY_TIMEOUT_MS` (defaults to 2000). When Clerk’s verify endpoint exceeds this budget the backend falls back to the already-decoded session claims and records the timeout metric `clerk.token.verify|outcome=timeout`.
+
+## 7. Track Decisions
 - Document MFA grace period policy (owners must enroll before grace period expires; contributors optional).
 - Maintain a list of any deviations from this checklist in `docs/security.md`.

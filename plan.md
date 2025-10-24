@@ -33,9 +33,9 @@ Reduce perceived and measured latency during login flows and post-mutation refre
 - [x] Extend tests to simulate stale JWKS and ensure the system falls back gracefully without hanging the request.
 
 ## Phase 5 – Clerk REST Fallback Tuning
-- [ ] Wrap `clerkClient.sessions.verifySession` call with a 2 s AbortController timeout.
-- [ ] If timeout/error occurs, rely on decoded payload when signature already verified, and emit metric `clerk.token.verify|outcome=timeout`.
-- [ ] Document behavior in `docs/auth.md` so operators know we may temporarily accept decoded claims under degraded Clerk conditions.
+- [x] Wrap `clerkClient.sessions.verifySession` call with a 2 s AbortController timeout.
+- [x] If timeout/error occurs, rely on decoded payload when signature already verified, and emit metric `clerk.token.verify|outcome=timeout`.
+- [x] Document behavior in `docs/clerk-setup.md` so operators know we may temporarily accept decoded claims under degraded Clerk conditions.
 
 ## Phase 6 – Remove Repeated Heavy Work
 - [ ] Audit `ensureGoogleIntegrationSchema` to make sure it is only invoked once per process (confirm guard flags or introduce a global promise).
