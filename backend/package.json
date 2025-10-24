@@ -10,7 +10,7 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "test": "npm run test:node && npm run test:vitest",
     "test:node": "NODE_ENV=test tsx --test src/**/*.test.ts",
-    "test:coverage": "C8_REPORT_DIR=../node_modules/.cache/c8-backend NYC_OUTPUT_DIR=../node_modules/.cache/c8-backend NODE_ENV=test c8 --reporter=text tsx --test src/**/*.test.ts && node -e \"const fs=require('fs');const p='coverage';if(fs.existsSync(p))fs.rmSync(p,{recursive:true,force:true});\"",
+    "test:coverage": "NODE_ENV=test tsx --test src/**/*.test.ts && NODE_ENV=test vitest run --coverage --coverage.reports=text && node -e \"const fs=require('fs');const p='coverage';if(fs.existsSync(p))fs.rmSync(p,{recursive:true,force:true});\"",
     "test:vitest": "NODE_ENV=test vitest run",
     "docs:routes": "tsx scripts/generate-route-docs.ts"
   },
