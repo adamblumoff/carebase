@@ -1,0 +1,12 @@
+{
+  "extends": "./backend/tsconfig.json",
+  "include": [
+    "backend/src/**/*",
+    "backend/scripts/**/*",
+    "backend/preload-env.js"
+  ],
+  "exclude": [
+    "node_modules",
+    "backend/dist"
+  ]
+}

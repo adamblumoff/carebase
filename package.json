@@ -22,6 +22,7 @@
     "test:contracts": "npm run test --prefix tests",
     "coverage": "npm run test:coverage --workspace=backend && npm run test:coverage --workspace=mobile",
     "db:migrate": "npm run db:migrate --workspace=backend",
+    "lint:deps": "dependency-cruiser --config dependency-cruiser.config.cjs backend/src",
     "num_lines": "find . \\( -path '*.ts' -o -path '*.js' -o -path '*.sql' \\) ! -path '*node_modules*' | xargs wc -l"
   },
   "keywords": [
@@ -37,7 +38,8 @@
     "react-dom": "19.1.0"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "dependency-cruiser": "^17.1.0"
   },
   "engines": {
     "node": ">=20.19.4"
