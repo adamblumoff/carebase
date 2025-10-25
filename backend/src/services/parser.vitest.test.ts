@@ -7,7 +7,7 @@ describe('parser service', () => {
   it('classifies appointment emails correctly', () => {
     const appointmentText = `
       Your appointment is scheduled for:
-      Date: Monday, October 14, 2025
+      Date: Monday, October 14, 2030
       Time: 2:30 PM
       Location: Valley Medical Center
     `;
@@ -23,7 +23,7 @@ describe('parser service', () => {
       Medical Bill - Account Statement
 
       Amount Due: $145.50
-      Due Date: October 25, 2025
+      Due Date: October 25, 2030
 
       Pay online at: https://billing.example.com/pay
     `;
@@ -74,7 +74,7 @@ describe('parser service', () => {
     const conciseBill = `
       STATEMENT
       Amount Due $75.00
-      Pay by 11/05/2025
+      Pay by 11/05/2030
       Account Number 12345
       Pay online at https://example.org/pay
     `;
@@ -89,7 +89,7 @@ describe('parser service', () => {
   it('extracts appointment data correctly', () => {
     const text = `
       Your appointment is scheduled for:
-      Date: Monday, October 14, 2025
+      Date: Monday, October 14, 2030
       Time: 2:30 PM
       Location: Valley Medical Center, 123 Main St
       Please arrive 15 minutes early
@@ -116,10 +116,10 @@ describe('parser service', () => {
     const text = `
       Medical Bill
 
-      Statement Date: 10/1/2025
+      Statement Date: 10/1/2030
       Amount Due: $145.50
       Pay by:
-      10/25/2025
+      10/25/2030
 
       Pay online: https://billing.example.com/pay?account=12345
     `;
@@ -132,7 +132,7 @@ describe('parser service', () => {
       bill.payUrl && bill.payUrl.includes('billing.example.com'),
       'Should extract payment URL'
     );
-    assert.strictEqual(bill.dueDate, '2025-10-25', 'Should parse due date');
+    assert.strictEqual(bill.dueDate, '2030-10-25', 'Should parse due date');
     assert.strictEqual(bill.status, 'todo');
   });
 
@@ -188,7 +188,7 @@ describe('parser service', () => {
       subject: 'Appointment Reminder - Dr. Smith',
       shortExcerpt: `
         Your appointment is scheduled for:
-        Date: Monday, October 14, 2025
+        Date: Monday, October 14, 2030
         Time: 2:30 PM
         Location: Valley Medical Center
       `,
@@ -214,7 +214,7 @@ describe('parser service', () => {
       subject: 'Medical Bill Statement',
       shortExcerpt: `
         Amount Due: $145.50
-        Due Date: October 25, 2025
+        Due Date: October 25, 2030
         Pay online at: https://billing.example.com/pay
       `,
       storageKey: null,

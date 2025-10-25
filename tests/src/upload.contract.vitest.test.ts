@@ -129,7 +129,7 @@ test('POST /api/upload/photo creates bill when supporting fields present', async
     .mockResolvedValue(`
       MEDICAL BILL STATEMENT
       Amount Due: $240.50
-      Pay by 10/25/2025
+      Pay by 10/25/2030
       Visit https://billing.example.com/pay
     `);
   const storeFileMock = vi.spyOn(storageModule, 'storeFile').mockResolvedValue('file-key');
@@ -160,7 +160,7 @@ test('POST /api/upload/photo creates bill when supporting fields present', async
   assert.equal(response.body.bill.amount, 240.5);
   assert.equal(response.body.bill.status, 'todo');
   assert.equal(response.body.extracted.amount, 240.5);
-  assert.equal(response.body.extracted.dueDate, '2025-10-25');
+  assert.equal(response.body.extracted.dueDate, '2030-10-25');
   assert.equal(response.body.classification.detectedType, 'bill');
   assert.equal(response.body.item.reviewStatus, 'auto');
 
