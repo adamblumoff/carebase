@@ -42,6 +42,9 @@ const {
   updateBillStatus,
   updateBillStatusForRecipient,
   getUpcomingBills,
+  getBillById,
+  getBillByIdForRecipient,
+  getBillByItemId,
   deleteBill
 } = await import('../bills.js');
 
@@ -160,5 +163,19 @@ describe('bill queries', () => {
     expect(planMocks.touchPlanForItem).toHaveBeenCalledWith(300, expect.objectContaining({
       delta: expect.objectContaining({ action: 'deleted' })
     }));
+  });
+
+  it('fetches bills by id and item selectors', async () => {
+    dbMocks.query.mockResolvedValueOnce({ rows: [baseRow], rowCount: 1 });
+    const byId = await getBillById(10, 42);
+    expect(byId?.id).toBe(10);
+
+    dbMocks.query.mockResolvedValueOnce({ rows: [baseRow], rowCount: 1 });
+    const byRecipient = await getBillByIdForRecipient(10, 84);
+    expect(byRecipient?.itemId).toBe(300);
+
+    dbMocks.query.mockResolvedValueOnce({ rows: [baseRow], rowCount: 1 });
+    const byItem = await getBillByItemId(300);
+    expect(byItem?.status).toBe('todo');
   });
 });

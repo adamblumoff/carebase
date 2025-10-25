@@ -103,6 +103,14 @@ describe('server bootstrap', () => {
     const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     await import('../server.js');
+    const expressModule = await import('express');
+    const verify = (expressModule.default.json as vi.Mock).mock.calls[0][0].verify as (
+      req: any,
+      res: any,
+      buffer: Buffer
+    ) => void;
+    const req = {};
+    verify(req, {}, Buffer.from('payload'));
 
     expect(registerRoutes).toHaveBeenCalledWith(appMock);
     expect(appMock.get).toHaveBeenCalledWith('/', expect.any(Function));
@@ -116,5 +124,6 @@ describe('server bootstrap', () => {
     expect(startGoogleSyncPolling).toHaveBeenCalled();
     expect(listenSpy).toHaveBeenCalledWith(3000, '0.0.0.0', expect.any(Function));
     expect(consoleLog).toHaveBeenCalledWith('Server running on http://localhost:3000');
+    expect((req as any).rawBody).toBe('payload');
   });
 });

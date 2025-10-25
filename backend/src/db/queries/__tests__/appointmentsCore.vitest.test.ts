@@ -46,7 +46,12 @@ const {
   createAppointment,
   updateAppointment,
   updateAppointmentForRecipient,
-  deleteAppointment
+  deleteAppointment,
+  findAppointmentByIcsToken,
+  getUpcomingAppointments,
+  getAppointmentById,
+  getAppointmentByIdForRecipient,
+  getAppointmentByItemId
 } = await import('../appointments.js');
 
 const baseRow = {
@@ -155,5 +160,28 @@ describe('appointment queries', () => {
     expect(planMocks.touchPlanForItem).toHaveBeenCalledWith(200, expect.objectContaining({
       delta: expect.objectContaining({ action: 'deleted', entityId: 5 })
     }));
+  });
+
+  it('retrieves appointments by various selectors', async () => {
+    dbMocks.query.mockResolvedValueOnce({ rows: [baseRow], rowCount: 1 });
+    const byToken = await findAppointmentByIcsToken('ics-token');
+    expect(googleMocks.ensureGoogleIntegrationSchema).toHaveBeenCalled();
+    expect(byToken?.id).toBe(1);
+
+    dbMocks.query.mockResolvedValueOnce({ rows: [baseRow], rowCount: 1 });
+    const upcoming = await getUpcomingAppointments(10, new Date('2025-10-01'), new Date('2025-11-01'));
+    expect(upcoming).toHaveLength(1);
+
+    dbMocks.query.mockResolvedValueOnce({ rows: [baseRow], rowCount: 1 });
+    const byId = await getAppointmentById(1, 42);
+    expect(byId?.itemId).toBe(200);
+
+    dbMocks.query.mockResolvedValueOnce({ rows: [baseRow], rowCount: 1 });
+    const byRecipient = await getAppointmentByIdForRecipient(1, 55);
+    expect(byRecipient?.id).toBe(1);
+
+    dbMocks.query.mockResolvedValueOnce({ rows: [baseRow], rowCount: 1 });
+    const byItem = await getAppointmentByItemId(200);
+    expect(byItem?.id).toBe(1);
   });
 });
