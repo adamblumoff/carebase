@@ -27,7 +27,10 @@ npm run test:backend
 npm run test --workspace=mobile
 npm run test --workspace=shared
 npm run test:contracts
+npm run coverage
 ```
+
+All test targets now run on Vitest; legacy `tsx --test` harnesses have been removed.
 
 ## Environment Profiles
 Backend reads `.env.<env>` + `.env.<env>.local`, where `<env>` defaults to `development`. Handy helpers:
