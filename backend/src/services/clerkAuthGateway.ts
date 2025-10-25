@@ -76,7 +76,6 @@ export async function verifyClerkSessionToken(token: string): Promise<ClerkToken
   } | null = null;
   try {
     decoded = jwt.decode(token, { json: true }) as typeof decoded;
-    console.log('[ClerkSync] Decoded token payload', decoded);
   } catch (error) {
     console.warn('[ClerkSync] Failed to decode Clerk session token:', (error as Error).message);
     incrementMetric('clerk.token.verify', 1, { outcome: 'decode_error' });
@@ -180,28 +179,10 @@ export async function verifyClerkSessionToken(token: string): Promise<ClerkToken
     } else {
       const status = (error as { status?: number }).status;
       console.warn('[ClerkSync] Clerk session verify via API failed:', (error as Error).message);
-      if (status !== 404 && status !== 403) {
-        incrementMetric('clerk.token.verify', 1, { outcome: 'error' });
-        return null;
-      }
+      const outcome = status === 404 || status === 403 ? 'not_found' : 'error';
+      incrementMetric('clerk.token.verify', 1, { outcome });
     }
     deleteClerkTokenCacheEntry(token);
-  }
-
-  if (decoded?.sub) {
-    incrementMetric('clerk.token.verify', 1, { outcome: 'error' });
-    console.warn('[ClerkSync] Falling back to decoded token payload (verification skipped)');
-    const fallbackSessionId = decoded.sid ?? decoded.session_id ?? null;
-    setClerkTokenCacheEntry(token, {
-      userId: String(decoded.sub),
-      sessionId: fallbackSessionId ? String(fallbackSessionId) : null,
-      expiresAt: decoded.exp ? decoded.exp * 1000 : undefined
-    });
-    return {
-      userId: String(decoded.sub),
-      sessionId: fallbackSessionId ? String(fallbackSessionId) : null,
-      expiresAt: decoded.exp ? decoded.exp * 1000 : undefined
-    };
   }
 
   return null;

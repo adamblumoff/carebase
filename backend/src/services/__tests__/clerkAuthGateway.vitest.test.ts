@@ -219,7 +219,7 @@ describe('clerkAuthGateway', () => {
     warnSpy.mockRestore();
   });
 
-  it('tracks Clerk API timeouts and falls back to decoded payload', async () => {
+  it('returns null when Clerk API verification times out', async () => {
     const fakeClient = {
       sessions: {
         verifySession: vi.fn((_: string, __: string, options: { signal: AbortSignal }) => {
@@ -250,16 +250,16 @@ describe('clerkAuthGateway', () => {
     const result = await promise;
     vi.useRealTimers();
 
-    expect(result).toEqual({ userId: 'user_1', sessionId: 'timeout', expiresAt: undefined });
+    expect(result).toBeNull();
     expect(deleteClerkTokenCacheEntryMock).toHaveBeenCalledWith('timeout-token');
     expect(incrementMetricMock).toHaveBeenCalledWith('clerk.token.verify', 1, { outcome: 'timeout' });
-    expect(incrementMetricMock).toHaveBeenCalledWith('clerk.token.verify', 1, { outcome: 'error' });
+    expect(setClerkTokenCacheEntryMock).not.toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalledWith('[ClerkSync] Clerk session verify via API timed out after', '10', 'ms');
 
     warnSpy.mockRestore();
   });
 
-  it('falls back to decoded payload when API returns 404', async () => {
+  it('returns null when Clerk API responds with 404', async () => {
     const error: any = new Error('not found');
     error.status = 404;
     const fakeClient = {
@@ -278,13 +278,9 @@ describe('clerkAuthGateway', () => {
     const { verifyClerkSessionToken } = await loadGateway();
 
     const result = await verifyClerkSessionToken('404-token');
-    expect(result).toEqual({ userId: 'user_404', sessionId: 'sid_404', expiresAt: 99_000 });
-    expect(setClerkTokenCacheEntryMock).toHaveBeenCalledWith('404-token', {
-      userId: 'user_404',
-      sessionId: 'sid_404',
-      expiresAt: 99_000
-    });
-    expect(incrementMetricMock).toHaveBeenCalledWith('clerk.token.verify', 1, { outcome: 'error' });
+    expect(result).toBeNull();
+    expect(setClerkTokenCacheEntryMock).not.toHaveBeenCalled();
+    expect(incrementMetricMock).toHaveBeenCalledWith('clerk.token.verify', 1, { outcome: 'not_found' });
     expect(deleteClerkTokenCacheEntryMock).toHaveBeenCalledWith('404-token');
 
     warnSpy.mockRestore();
