@@ -1,10 +1,11 @@
-import { test, mock } from 'node:test';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import express from 'express';
 import request from 'supertest';
 import type { User } from '@carebase/shared';
 import uploadRouter from '../../backend/src/routes/api/upload.js';
 import { applySchema, wireDbClient } from './helpers/db.js';
+import backendDbClient from '../../backend/src/db/client.js';
 
 process.env.NODE_ENV = 'test';
 
@@ -50,10 +51,10 @@ function createUploadApp(testUser: User) {
   return app;
 }
 
-test('POST /api/upload/photo skips bill creation without supporting fields', async (t) => {
+test('POST /api/upload/photo skips bill creation without supporting fields', async ({ onTestFinished }) => {
   const mem = applySchema();
   const wiring = wireDbClient(mem);
-  t.after(() => wiring.restore());
+  onTestFinished(() => wiring.restore());
 
   const { pool } = wiring;
   const { user } = await seedUserAndRecipient(pool);
@@ -62,17 +63,28 @@ test('POST /api/upload/photo skips bill creation without supporting fields', asy
   const ocrModule = await import('../../backend/src/services/ocr.js');
   const storageModule = await import('../../backend/src/services/storage.js');
 
-  const extractTextMock = mock.method(ocrModule, 'extractTextFromImage', async () => {
-    return `
+  const extractTextMock = vi
+    .spyOn(ocrModule, 'extractTextFromImage')
+    .mockResolvedValue(`
       STATEMENT
       Amount Due: $145.00
       Please pay soon
-    `;
-  });
-  const storeFileMock = mock.method(storageModule, 'storeFile', async () => 'file-key');
-  const storeTextMock = mock.method(storageModule, 'storeText', async () => 'text-key');
+    `);
+  const storeFileMock = vi.spyOn(storageModule, 'storeFile').mockResolvedValue('file-key');
+  const storeTextMock = vi.spyOn(storageModule, 'storeText').mockResolvedValue('text-key');
 
   const app = createUploadApp(testUser);
+
+  const originalQuery = backendDbClient.query;
+  backendDbClient.query = async (sql: string, params?: any[]) => {
+    if (sql.includes('UPDATE users u') && sql.includes('RETURNING')) {
+      return { rows: [{ id: params?.[0] ?? 1 }], rowCount: 1, command: 'UPDATE', fields: [], oid: 0 };
+    }
+    return originalQuery(sql, params);
+  };
+  onTestFinished(() => {
+    backendDbClient.query = originalQuery;
+  });
 
   const response = await request(app)
     .post('/api/upload/photo')
@@ -93,17 +105,17 @@ test('POST /api/upload/photo skips bill creation without supporting fields', asy
   assert.equal(itemRows.rowCount, 1);
   assert.equal(itemRows.rows[0].detected_type, 'bill');
 
-  assert.equal(extractTextMock.mock.callCount(), 1);
-  assert.equal(storeFileMock.mock.callCount(), 1);
-  assert.equal(storeTextMock.mock.callCount(), 1);
+  assert.equal(extractTextMock.mock.calls.length, 1);
+  assert.equal(storeFileMock.mock.calls.length, 1);
+  assert.equal(storeTextMock.mock.calls.length, 1);
 
-  mock.restoreAll();
+  vi.restoreAllMocks();
 });
 
-test('POST /api/upload/photo creates bill when supporting fields present', async (t) => {
+test('POST /api/upload/photo creates bill when supporting fields present', async ({ onTestFinished }) => {
   const mem = applySchema();
   const wiring = wireDbClient(mem);
-  t.after(() => wiring.restore());
+  onTestFinished(() => wiring.restore());
 
   const { pool } = wiring;
   const { user } = await seedUserAndRecipient(pool);
@@ -112,18 +124,29 @@ test('POST /api/upload/photo creates bill when supporting fields present', async
   const ocrModule = await import('../../backend/src/services/ocr.js');
   const storageModule = await import('../../backend/src/services/storage.js');
 
-  const extractTextMock = mock.method(ocrModule, 'extractTextFromImage', async () => {
-    return `
+  const extractTextMock = vi
+    .spyOn(ocrModule, 'extractTextFromImage')
+    .mockResolvedValue(`
       MEDICAL BILL STATEMENT
       Amount Due: $240.50
       Pay by 10/25/2025
       Visit https://billing.example.com/pay
-    `;
-  });
-  const storeFileMock = mock.method(storageModule, 'storeFile', async () => 'file-key');
-  const storeTextMock = mock.method(storageModule, 'storeText', async () => 'text-key');
+    `);
+  const storeFileMock = vi.spyOn(storageModule, 'storeFile').mockResolvedValue('file-key');
+  const storeTextMock = vi.spyOn(storageModule, 'storeText').mockResolvedValue('text-key');
 
   const app = createUploadApp(testUser);
+
+  const originalQuery = backendDbClient.query;
+  backendDbClient.query = async (sql: string, params?: any[]) => {
+    if (sql.includes('UPDATE users u') && sql.includes('RETURNING')) {
+      return { rows: [{ id: params?.[0] ?? 1 }], rowCount: 1, command: 'UPDATE', fields: [], oid: 0 };
+    }
+    return originalQuery(sql, params);
+  };
+  onTestFinished(() => {
+    backendDbClient.query = originalQuery;
+  });
 
   const response = await request(app)
     .post('/api/upload/photo')
@@ -144,9 +167,9 @@ test('POST /api/upload/photo creates bill when supporting fields present', async
   const billCount = await pool.query('SELECT COUNT(*) FROM bills');
   assert.equal(Number(billCount.rows[0].count), 1);
 
-  assert.equal(extractTextMock.mock.callCount(), 1);
-  assert.equal(storeFileMock.mock.callCount(), 1);
-  assert.equal(storeTextMock.mock.callCount(), 1);
+  assert.equal(extractTextMock.mock.calls.length, 1);
+  assert.equal(storeFileMock.mock.calls.length, 1);
+  assert.equal(storeTextMock.mock.calls.length, 1);
 
-  mock.restoreAll();
+  vi.restoreAllMocks();
 });

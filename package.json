@@ -19,7 +19,7 @@
     "env:mobile:dev": "node scripts/swap-mobile-env.js dev",
     "test": "npm run test --workspaces --if-present",
     "test:backend": "npm run test --workspace=backend",
-    "test:contracts": "npm run test --prefix tests",
+    "test:contracts": "npm run test --workspace=tests",
     "coverage": "npm run test:coverage --workspace=backend && npm run test:coverage --workspace=mobile",
     "db:migrate": "npm run db:migrate --workspace=backend",
     "lint:deps": "dependency-cruiser --config dependency-cruiser.config.cjs backend/src",

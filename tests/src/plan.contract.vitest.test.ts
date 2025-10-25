@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import express from 'express';
 import request from 'supertest';
@@ -196,13 +196,13 @@ function assertIsIsoString(value: string | null, message: string) {
   assert.doesNotThrow(() => new Date(value).toISOString(), message);
 }
 
-test('GET /api/plan returns payload compatible with shared PlanPayload for owner view', async (t) => {
+test('GET /api/plan returns payload compatible with shared PlanPayload for owner view', async ({ onTestFinished }) => {
   const mem = applySchema();
   const client = wireDbClient(mem);
   const { owner } = await seedPlanFixture(client.pool);
   const app = createApp(owner);
 
-  t.after(async () => {
+  onTestFinished(async () => {
     await client.pool.end();
     client.restore();
   });
@@ -241,13 +241,13 @@ test('GET /api/plan returns payload compatible with shared PlanPayload for owner
   assert.ok(bill.amount);
 });
 
-test('GET /api/plan filters collaborator view and hides invite tokens', async (t) => {
+test('GET /api/plan filters collaborator view and hides invite tokens', async ({ onTestFinished }) => {
   const mem = applySchema();
   const client = wireDbClient(mem);
   const { collaborator } = await seedPlanFixture(client.pool);
   const app = createApp(collaborator);
 
-  t.after(async () => {
+  onTestFinished(async () => {
     await client.pool.end();
     client.restore();
   });
@@ -261,13 +261,13 @@ test('GET /api/plan filters collaborator view and hides invite tokens', async (t
   assert.equal(payload.collaborators[0].inviteToken, '');
 });
 
-test('GET /api/collaborators mirrors shared collaborator payload expectations', async (t) => {
+test('GET /api/collaborators mirrors shared collaborator payload expectations', async ({ onTestFinished }) => {
   const mem = applySchema();
   const client = wireDbClient(mem);
   const { owner } = await seedPlanFixture(client.pool);
   const app = createApp(owner);
 
-  t.after(async () => {
+  onTestFinished(async () => {
     await client.pool.end();
     client.restore();
   });
