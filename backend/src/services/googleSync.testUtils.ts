@@ -1,4 +1,3 @@
-import type { TestContext } from 'node:test';
 import { newDb } from 'pg-mem';
 import type { Pool } from 'pg';
 
@@ -24,7 +23,11 @@ export interface GoogleSyncTestContext {
   restore(): Promise<void>;
 }
 
-export async function createGoogleSyncTestContext(t: TestContext): Promise<GoogleSyncTestContext> {
+type CleanupRegistrar = (fn: () => Promise<void> | void) => void;
+
+export async function createGoogleSyncTestContext(
+  registerCleanup?: CleanupRegistrar
+): Promise<GoogleSyncTestContext> {
   const dbClientModule = await import('../db/client.js');
   const dbClient = dbClientModule.default as unknown as DbClientProxy;
   const queriesModule = await import('../db/queries.js');
@@ -184,15 +187,23 @@ export async function createGoogleSyncTestContext(t: TestContext): Promise<Googl
     restoreEnv('GOOGLE_SYNC_ENABLE_POLLING_FALLBACK', envBackup.GOOGLE_SYNC_ENABLE_POLLING_FALLBACK);
   }
 
-  t.after(async () => {
+  const cleanup = async () => {
     await restore();
-  });
+  };
+
+  if (registerCleanup) {
+    registerCleanup(cleanup);
+  } else {
+    process.once('exit', () => {
+      void cleanup();
+    });
+  }
 
   return {
     pool,
     exec: (text: string, params?: any[]) => pool.query(text, params),
     scheduleCalls,
-    restore
+    restore: cleanup
   };
 }
 
