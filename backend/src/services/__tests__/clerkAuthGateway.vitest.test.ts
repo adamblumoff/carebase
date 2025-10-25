@@ -56,17 +56,22 @@ async function loadGateway() {
 }
 
 describe('clerkAuthGateway', () => {
-  it('logs with optional metadata', async () => {
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  it('logs diagnostic output only when CLERK_DEBUG is enabled', async () => {
+    const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
     const { logClerk } = await loadGateway();
 
+    // Should no-op when debug flag disabled
     logClerk('hello');
-    logClerk('world', { ok: true });
+    expect(debugSpy).not.toHaveBeenCalled();
 
-    expect(logSpy).toHaveBeenNthCalledWith(1, '[ClerkSync] hello');
-    expect(logSpy).toHaveBeenNthCalledWith(2, '[ClerkSync] world', { ok: true });
+    process.env.CLERK_DEBUG = 'true';
+    logClerk('world');
+    logClerk('metadata', { ok: true });
 
-    logSpy.mockRestore();
+    expect(debugSpy).toHaveBeenNthCalledWith(1, '[ClerkSync] world');
+    expect(debugSpy).toHaveBeenNthCalledWith(2, '[ClerkSync] metadata', { ok: true });
+
+    debugSpy.mockRestore();
   });
 
   it('returns null and warns once when secret missing', async () => {
@@ -160,7 +165,8 @@ describe('clerkAuthGateway', () => {
     getClerkJwksVerifierMock.mockResolvedValue('verifier');
     jwtVerifyMock.mockResolvedValue({ payload: { sub: 'user_1', sid: 'sid_1', exp: 456 } });
 
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    process.env.CLERK_DEBUG = 'true';
+    const logSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
     const { verifyClerkSessionToken } = await loadGateway();
 
     const result = await verifyClerkSessionToken('jwt-token');

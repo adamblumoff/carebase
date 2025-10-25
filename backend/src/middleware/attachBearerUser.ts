@@ -19,7 +19,6 @@ function resolveClerkAuthState(req: Request): ClerkAuthState | null {
 
   try {
     const state = maybeAuth();
-    console.log('[Auth] Clerk middleware auth state', state);
     return state ?? null;
   } catch (error) {
     console.warn('[Auth] Failed to resolve Clerk middleware auth state', error);
@@ -53,11 +52,6 @@ async function attachFromClerkState(req: Request, state: ClerkAuthState): Promis
   };
 
   incrementMetric('auth.clerk.http', 1, { via: 'clerk-middleware' });
-  console.log('[Auth] Request authenticated via Clerk middleware', {
-    userId: user.id,
-    clerkUserId: state.userId,
-    sessionId: state.sessionId ?? null
-  });
 
   return true;
 }
@@ -96,18 +90,13 @@ export async function attachBearerUser(req: Request, res: Response, next: NextFu
     }
 
     (req as any).user = user;
-    (req as any).clerkAuth = {
-      userId: clerkVerification.userId,
-      sessionId: clerkVerification.sessionId,
-      expiresAt: clerkVerification.expiresAt ?? null
-    };
+  (req as any).clerkAuth = {
+    userId: clerkVerification.userId,
+    sessionId: clerkVerification.sessionId,
+    expiresAt: clerkVerification.expiresAt ?? null
+  };
 
-    console.log('[Auth] Bearer token resolved via Clerk session', {
-      userId: user.id,
-      clerkUserId: clerkVerification.userId,
-      sessionId: clerkVerification.sessionId
-    });
-    incrementMetric('auth.clerk.http', 1, { via: 'clerk-session' });
+  incrementMetric('auth.clerk.http', 1, { via: 'clerk-session' });
     return next();
   } catch (error) {
     console.error('Bearer auth error:', error);

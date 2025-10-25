@@ -62,18 +62,8 @@ export async function uploadPhoto(req: Request, res: Response): Promise<void> {
       storageKey,
     });
 
-    const ocrPreview = ocrText.slice(0, 400);
-    console.log('[upload] OCR text preview:', ocrPreview);
-
     const parsed = parseSource(source, ocrText);
     const { classification, billData, billOverdue } = parsed;
-    console.log('[upload] Parsed classification:', {
-      type: classification.type,
-      confidence: classification.confidence,
-      hasBillData: Boolean(billData),
-      billKeys: billData ? Object.keys(billData) : [],
-    });
-    console.log('[upload] OCR stored key:', ocrTextStorageKey, 'length:', ocrText.length);
 
     const billHasAmount = typeof billData?.amount === 'number';
     const billHasSupportField = Boolean(billData?.dueDate || billData?.statementDate || billData?.payUrl);
@@ -102,12 +92,6 @@ export async function uploadPhoto(req: Request, res: Response): Promise<void> {
         status: billData?.status ?? 'todo',
         notes: null
       });
-      console.log('[upload] Skipping bill creation due to missing supporting fields', {
-        billHasAmount,
-        hasDueDate: Boolean(billData?.dueDate),
-        hasStatementDate: Boolean(billData?.statementDate),
-        hasPayUrl: Boolean(billData?.payUrl)
-      });
     }
 
     await createAuditLog(item.id, 'auto_classified', {
@@ -123,10 +107,6 @@ export async function uploadPhoto(req: Request, res: Response): Promise<void> {
       billAutoCreated: canAutoCreateBill,
       reviewStatus
     });
-
-    console.log(
-      `Created ${classification.type} from photo upload with confidence ${classification.confidence}`,
-    );
 
     const responsePayload: UploadPhotoResponse = {
       success: true,

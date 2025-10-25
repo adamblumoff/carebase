@@ -20,10 +20,13 @@ export interface ClerkTokenVerification {
 }
 
 export function logClerk(message: string, meta?: Record<string, unknown>): void {
+  if (process.env.CLERK_DEBUG !== 'true') {
+    return;
+  }
   if (meta) {
-    console.log(`[ClerkSync] ${message}`, meta);
+    console.debug(`[ClerkSync] ${message}`, meta);
   } else {
-    console.log(`[ClerkSync] ${message}`);
+    console.debug(`[ClerkSync] ${message}`);
   }
 }
 

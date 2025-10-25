@@ -35,11 +35,6 @@ async function authenticateSocket(socket: Socket): Promise<User | null> {
   if (clerkVerification) {
     const user = await findUserByClerkUserId(clerkVerification.userId);
     if (user) {
-      console.log('[Realtime] Authenticated via Clerk session', {
-        userId: user.id,
-        clerkUserId: clerkVerification.userId,
-        sessionId: clerkVerification.sessionId
-      });
       incrementMetric('auth.clerk.socket', 1, { via: 'clerk-session' });
       return user;
     }
