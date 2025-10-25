@@ -20,7 +20,7 @@
     "test": "npm run test --workspaces --if-present",
     "test:backend": "npm run test --workspace=backend",
     "test:contracts": "npm run test --workspace=tests",
-    "coverage": "npm run test:coverage --workspace=backend && npm run test:coverage --workspace=mobile",
+    "coverage": "npm run test:coverage --workspace=backend && npm run test:coverage --workspace=tests && npm run test:coverage --workspace=shared && npm run test:coverage --workspace=mobile",
     "db:migrate": "npm run db:migrate --workspace=backend",
     "lint:deps": "dependency-cruiser --config dependency-cruiser.config.cjs backend/src",
     "configure:clerk-template": "tsx scripts/configure-clerk-template.ts",

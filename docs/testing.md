@@ -10,8 +10,8 @@ This overview captures the automated test suites currently in place, the coverag
   - Contract-style tests from the `tests/` workspace now execute through Vitest as well, so controller payload checks and API contract assertions share the same tooling and reporters.  
   - Command: `npm run test --workspace=backend`
 - **Coverage**  
-  - Command: `npm run test:coverage --workspace=backend` (called automatically by `npm run coverage`).  
-  - Generates v8 coverage for statements, branches, functions, and lines; the script removes the local `coverage/` folder after reporting so CI stays clean.
+  - Command: `npm run test:coverage --workspace=backend` (root `npm run coverage` runs backend → contracts → shared → mobile).  
+  - Generates v8 coverage for statements, branches, functions, and lines; each workspace script removes its local `coverage/` folder after reporting so CI stays clean.
 
 ### Mobile (`@carebase/mobile`)
 - **Vitest + React Testing Library**  
@@ -24,7 +24,7 @@ This overview captures the automated test suites currently in place, the coverag
 
 ### Shared & Contracts
 - Shared types compile during all builds; `tests/src/plan.contract.test.ts` enforces payload shape compatibility.
-- No standalone coverage instrumentation yet for the `shared/` workspace.
+- `npm run coverage` now invokes `vitest --coverage` inside the `shared/` workspace, so any future shared helpers automatically roll into the global coverage summary (currently minimal until dedicated specs are added).
 
 ## Coverage Snapshot
 
