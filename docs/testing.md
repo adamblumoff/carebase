@@ -1,17 +1,17 @@
-# Testing Overview – October 2025
+# Testing Overview – October 25, 2030
 
 This overview captures the automated test suites currently in place, the coverage we’re tracking, and the highest-value areas still missing tests.
 
 ## Current Test Suites
 
 ### Backend (`@carebase/backend`)
-- **Node test runner (`tsx --test`)**  
-  - Integration coverage for Express controllers, Google sync workflows, webhook ingestion, and parsing/plan services.  
-  - Contract-focused tests run against pg-mem to simulate Postgres behaviour (appointments, bills, collaborators).
-- **Vitest Unit Suites**  
-  - Lower-level coverage for controller helpers, plan payload builders, and Google sync “latest-write-wins” logic.
-- **Contract Tests (`tests/` workspace)**  
-  - TAP + Supertest suites verifying API payloads match shared types, using pg-mem for fast feedback.
+- **Vitest (unit + integration)**  
+  - Single runner for all suites, including Express integration tests, Google sync workflows, webhook ingestion, parsing/plan services, and db query coverage via pg-mem.  
+  - Contract-style tests from the `tests/` workspace now execute through Vitest as well, so controller payload checks and API contract assertions share the same tooling and reporters.  
+  - Command: `npm run test --workspace=backend`
+- **Coverage**  
+  - Command: `npm run test:coverage --workspace=backend` (called automatically by `npm run coverage`).  
+  - Generates v8 coverage for statements, branches, functions, and lines; the script removes the local `coverage/` folder after reporting so CI stays clean.
 
 ### Mobile (`@carebase/mobile`)
 - **Vitest + React Testing Library**  
@@ -28,36 +28,34 @@ This overview captures the automated test suites currently in place, the coverag
 
 ## Coverage Snapshot
 
-| Workspace | Tooling | Current Highlights |
-|-----------|---------|--------------------|
-| Backend   | `tsx --test`, Vitest | High coverage around Google sync push/pull cycles, webhook ingestion, plan payloads. Critical routes exercised with pg-mem. |
-| Mobile    | Vitest + RTL | Core logic layers at/above thresholds; presenters, providers, hooks, and API shims covered. UI rendering tests intentionally excluded. |
-| Tests (contracts) | TAP | Ensures API responses align with shared TypeScript contracts. |
+Latest snapshot (after `npm run coverage` on October 25, 2030):
+
+| Workspace | Lines | Branches | Functions | Statements | Notes |
+|-----------|-------|----------|-----------|------------|-------|
+| Backend   | 71.82 % | 68.63 % | 82.64 % | 71.82 % | Google sync suites, webhook integrations, storage/metrics helpers, and db query branches now run under Vitest. |
+| Mobile    | 98.70 % | 89.47 % | 80.00 % | 98.70 % | Logic layers, presenters, and hooks are fully covered; UI-heavy screens remain intentionally excluded. |
+| Contracts (`tests/`) | counted with Backend | counted with Backend | counted with Backend | counted with Backend | Contract suites execute inside the backend Vitest run, so their coverage rolls into backend totals. |
 
 _Note: We intentionally exclude React Native screen snapshot tests due to historic flakiness; logic extracted into presenters or hooks is covered instead._
 
 ## High-Value Coverage Gaps
 
-1. **Plan & Navigation flows – Mobile UI**
-   - Lightweight integration tests (or additional presenter helpers) for `PlanScreen` interactions, collaborator widgets, and navigation guard flows would increase confidence without reintroducing flakey render suites.
+1. **Shared Workspace Instrumentation**
+   - Coverage still skips the `shared/` package. Adding lightweight Vitest suites (even smoke-level) would surface unused exports and regressions in shared DTO parsers.
 
-2. **Realtime & Webhook End-to-End**
-   - Add backend-to-mobile integration tests that simulate webhook → sync → realtime emit → mobile listener to ensure the “latest write wins” path stays intact.
+2. **Realtime + Mobile Consumption**
+   - End-to-end validation of webhook → Google sync → realtime emitter → mobile listener remains manual. A combined contract test (backend + mobile) would harden this flow.
 
-3. **Shared Workspace Instrumentation**
-   - Hook up coverage for `shared/` types/helpers where feasible (even if minimal) so builds flag accidental dead code or untyped exports.
+3. **Mobile Offline & Error Recovery**
+   - Hooks that manage offline retries (plan refresh, collaborator invites) are partially covered. Add network-failure cases to ensure exponential backoff and user messaging behave.
 
-4. **Failure Path Testing**
-   - Backend: exercise Google credential rotation errors, watch renewal failures, and webhook signature mismatch pathways to ensure logging & alerting integrate cleanly.
-   - Mobile: cover offline retries for plan refresh and collaborator invite flows.
-
-5. **Performance/Load Testing Hooks**
-   - Contract tests currently hit happy paths; layering stress scenarios (large plan payloads, 2500+ Google events) would help catch pagination or batch-processing regressions.
+4. **Stress Scenarios**
+   - Contract suites cover happy paths; simulate large Google calendar payloads (2,500+ events) and bulk collaborator imports to detect pagination or batching regressions ahead of time.
 
 ## Next Steps
 
-- Decide whether to introduce a light RN render test harness (limited to critical flows) or keep expanding presenter-level tests.
 - Integrate coverage reporting for the `shared/` workspace and combine results in the root `npm run coverage`.
-- Document testing expectations in contributing guidelines so new features ship with corresponding unit/integration tests.
+- Decide whether to reintroduce a constrained RN render harness for critical flows or continue investing in presenter-level tests only.
+- Document expectations in CONTRIBUTING (tests + coverage deltas) when the shared coverage work lands.
 
 Update this file whenever suites expand or coverage thresholds change.***
