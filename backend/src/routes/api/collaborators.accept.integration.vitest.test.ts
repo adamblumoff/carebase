@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import express from 'express';
 import request from 'supertest';
@@ -79,7 +79,7 @@ const baseSchema = `
   );
 `;
 
-test('POST /api/collaborators/accept updates collaborator and returns payload', async (t) => {
+test('POST /api/collaborators/accept updates collaborator and returns payload', async ({ onTestFinished }) => {
   const mem = newDb({ autoCreateForeignKeyIndices: true });
   mem.public.registerFunction({
     name: 'now',
@@ -108,7 +108,7 @@ test('POST /api/collaborators/accept updates collaborator and returns payload', 
   dbAny.end = () => pool.end();
   dbAny.pool = pool;
 
-  t.after(async () => {
+  onTestFinished(async () => {
     dbAny.query = originalQuery;
     dbAny.getClient = originalGetClient;
     dbAny.end = originalEnd;
@@ -161,7 +161,7 @@ test('POST /api/collaborators/accept updates collaborator and returns payload', 
   assert.ok(rows[0].accepted_at instanceof Date);
 });
 
-test('POST /api/collaborators/accept rejects mismatched email', async (t) => {
+test('POST /api/collaborators/accept rejects mismatched email', async ({ onTestFinished }) => {
   const mem = newDb({ autoCreateForeignKeyIndices: true });
   mem.public.registerFunction({
     name: 'now',
@@ -190,7 +190,7 @@ test('POST /api/collaborators/accept rejects mismatched email', async (t) => {
   dbAny.end = () => pool.end();
   dbAny.pool = pool;
 
-  t.after(async () => {
+  onTestFinished(async () => {
     dbAny.query = originalQuery;
     dbAny.getClient = originalGetClient;
     dbAny.end = originalEnd;

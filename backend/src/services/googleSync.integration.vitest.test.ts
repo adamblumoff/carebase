@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 
 import { createGoogleSyncTestContext } from './googleSync.testUtils.js';
@@ -105,15 +105,15 @@ async function seedGoogleCredential(
   });
 }
 
-test('initial sync pushes pending appointments and stores next sync token', async (t) => {
-  const ctx = await createGoogleSyncTestContext(t);
+test('initial sync pushes pending appointments and stores next sync token', async ({ onTestFinished }) => {
+  const ctx = await createGoogleSyncTestContext(onTestFinished);
   const fakeCalendar = new FakeGoogleCalendarApi();
   fakeCalendar.install();
-  t.after(() => fakeCalendar.restore());
+  onTestFinished(() => fakeCalendar.restore());
 
   const googleSyncModule = await import('./googleSync.js');
   const { syncUserWithGoogle, __resetGoogleSyncStateForTests } = googleSyncModule;
-  t.after(() => __resetGoogleSyncStateForTests());
+  onTestFinished(() => __resetGoogleSyncStateForTests());
 
   const { userId, itemId } = await seedAppointmentFixture(ctx.pool);
   await seedGoogleCredential(ctx.pool, userId, { syncToken: null });
@@ -161,15 +161,15 @@ test('initial sync pushes pending appointments and stores next sync token', asyn
   assert.equal(ctx.scheduleCalls.length, 0);
 });
 
-test('remote updates supersede local appointment when Google timestamp is newer', async (t) => {
-  const ctx = await createGoogleSyncTestContext(t);
+test('remote updates supersede local appointment when Google timestamp is newer', async ({ onTestFinished }) => {
+  const ctx = await createGoogleSyncTestContext(onTestFinished);
   const fakeCalendar = new FakeGoogleCalendarApi();
   fakeCalendar.install();
-  t.after(() => fakeCalendar.restore());
+  onTestFinished(() => fakeCalendar.restore());
 
   const googleSyncModule = await import('./googleSync.js');
   const { syncUserWithGoogle, __resetGoogleSyncStateForTests } = googleSyncModule;
-  t.after(() => __resetGoogleSyncStateForTests());
+  onTestFinished(() => __resetGoogleSyncStateForTests());
 
   const { userId, itemId, appointmentId } = await seedAppointmentFixture(ctx.pool, { summary: 'Local summary' });
   await seedGoogleCredential(ctx.pool, userId);
@@ -244,15 +244,15 @@ test('remote updates supersede local appointment when Google timestamp is newer'
   }
 });
 
-test('local edits push to Google when sync link is pending', async (t) => {
-  const ctx = await createGoogleSyncTestContext(t);
+test('local edits push to Google when sync link is pending', async ({ onTestFinished }) => {
+  const ctx = await createGoogleSyncTestContext(onTestFinished);
   const fakeCalendar = new FakeGoogleCalendarApi();
   fakeCalendar.install();
-  t.after(() => fakeCalendar.restore());
+  onTestFinished(() => fakeCalendar.restore());
 
   const googleSyncModule = await import('./googleSync.js');
   const { syncUserWithGoogle, __resetGoogleSyncStateForTests } = googleSyncModule;
-  t.after(() => __resetGoogleSyncStateForTests());
+  onTestFinished(() => __resetGoogleSyncStateForTests());
 
   const queries = await import('../db/queries.js');
 
@@ -297,15 +297,15 @@ test('local edits push to Google when sync link is pending', async (t) => {
   assert.equal(appointmentRows[0].summary, 'Locally updated summary');
 });
 
-test('invalid sync token triggers reset and retry without duplicate pushes', async (t) => {
-  const ctx = await createGoogleSyncTestContext(t);
+test('invalid sync token triggers reset and retry without duplicate pushes', async ({ onTestFinished }) => {
+  const ctx = await createGoogleSyncTestContext(onTestFinished);
   const fakeCalendar = new FakeGoogleCalendarApi();
   fakeCalendar.install();
-  t.after(() => fakeCalendar.restore());
+  onTestFinished(() => fakeCalendar.restore());
 
   const googleSyncModule = await import('./googleSync.js');
   const { syncUserWithGoogle, __resetGoogleSyncStateForTests } = googleSyncModule;
-  t.after(() => __resetGoogleSyncStateForTests());
+  onTestFinished(() => __resetGoogleSyncStateForTests());
 
   const { userId, itemId } = await seedAppointmentFixture(ctx.pool);
   await seedGoogleCredential(ctx.pool, userId);

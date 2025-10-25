@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 
 import { createGoogleSyncTestContext } from './googleSync.testUtils.js';
@@ -92,18 +92,18 @@ async function seedAppointmentForUser(
   return { recipientId, itemId, appointmentId };
 }
 
-test('ensureManagedCalendarForUser creates a managed calendar when none exists', async (t) => {
-  const ctx = await createGoogleSyncTestContext(t);
+test('ensureManagedCalendarForUser creates a managed calendar when none exists', async ({ onTestFinished }) => {
+  const ctx = await createGoogleSyncTestContext(onTestFinished);
   const fakeCalendar = new FakeGoogleCalendarApi();
   fakeCalendar.install();
-  t.after(() => fakeCalendar.restore());
+  onTestFinished(() => fakeCalendar.restore());
 
   const googleSyncModule = await import('./googleSync.js');
   const { ensureManagedCalendarForUser, __resetGoogleSyncStateForTests } = googleSyncModule as {
     ensureManagedCalendarForUser: (credential: any, accessToken: string) => Promise<any>;
     __resetGoogleSyncStateForTests: () => void;
   };
-  t.after(() => __resetGoogleSyncStateForTests());
+  onTestFinished(() => __resetGoogleSyncStateForTests());
 
   const userId = await createUser(ctx);
   await upsertGoogleCredential(userId, {
@@ -143,22 +143,22 @@ test('ensureManagedCalendarForUser creates a managed calendar when none exists',
   assert.equal(rows[0].managed_calendar_state, 'active');
 });
 
-test('ensureManagedCalendarForUser reuses an existing CareBase calendar', async (t) => {
-  const ctx = await createGoogleSyncTestContext(t);
+test('ensureManagedCalendarForUser reuses an existing CareBase calendar', async ({ onTestFinished }) => {
+  const ctx = await createGoogleSyncTestContext(onTestFinished);
   const fakeCalendar = new FakeGoogleCalendarApi();
   fakeCalendar.install();
   fakeCalendar.seedCalendarList([
     { id: 'carebase-existing', summary: 'CareBase' },
     { id: 'primary', summary: 'Primary' }
   ]);
-  t.after(() => fakeCalendar.restore());
+  onTestFinished(() => fakeCalendar.restore());
 
   const googleSyncModule = await import('./googleSync.js');
   const { ensureManagedCalendarForUser, __resetGoogleSyncStateForTests } = googleSyncModule as {
     ensureManagedCalendarForUser: (credential: any, accessToken: string) => Promise<any>;
     __resetGoogleSyncStateForTests: () => void;
   };
-  t.after(() => __resetGoogleSyncStateForTests());
+  onTestFinished(() => __resetGoogleSyncStateForTests());
 
   const userId = await createUser(ctx);
   await upsertGoogleCredential(userId, {
@@ -198,18 +198,18 @@ test('ensureManagedCalendarForUser reuses an existing CareBase calendar', async 
   assert.equal(rows[0].managed_calendar_state, 'active');
 });
 
-test('ensureManagedCalendarForUser recreates calendar when stored id is invalid', async (t) => {
-  const ctx = await createGoogleSyncTestContext(t);
+test('ensureManagedCalendarForUser recreates calendar when stored id is invalid', async ({ onTestFinished }) => {
+  const ctx = await createGoogleSyncTestContext(onTestFinished);
   const fakeCalendar = new FakeGoogleCalendarApi();
   fakeCalendar.install();
-  t.after(() => fakeCalendar.restore());
+  onTestFinished(() => fakeCalendar.restore());
 
   const googleSyncModule = await import('./googleSync.js');
   const { ensureManagedCalendarForUser, __resetGoogleSyncStateForTests } = googleSyncModule as {
     ensureManagedCalendarForUser: (credential: any, accessToken: string) => Promise<any>;
     __resetGoogleSyncStateForTests: () => void;
   };
-  t.after(() => __resetGoogleSyncStateForTests());
+  onTestFinished(() => __resetGoogleSyncStateForTests());
 
   const userId = await createUser(ctx);
   await upsertGoogleCredential(userId, {
@@ -264,19 +264,19 @@ test('ensureManagedCalendarForUser recreates calendar when stored id is invalid'
   assert.ok(createRequests.length >= 1);
 });
 
-test('migrateEventsToManagedCalendar moves events and refreshManagedCalendarWatch updates channel', async (t) => {
-  const ctx = await createGoogleSyncTestContext(t);
+test('migrateEventsToManagedCalendar moves events and refreshManagedCalendarWatch updates channel', async ({ onTestFinished }) => {
+  const ctx = await createGoogleSyncTestContext(onTestFinished);
   const fakeCalendar = new FakeGoogleCalendarApi();
   fakeCalendar.install();
-  t.after(() => fakeCalendar.restore());
+  onTestFinished(() => fakeCalendar.restore());
 
   const googleSyncModule = await import('./googleSync.js');
   const {
-    ensureManagedCalendarForUser,
-    migrateEventsToManagedCalendar,
-    refreshManagedCalendarWatch,
-    __resetGoogleSyncStateForTests
-  } = googleSyncModule as {
+      ensureManagedCalendarForUser,
+      migrateEventsToManagedCalendar,
+      refreshManagedCalendarWatch,
+      __resetGoogleSyncStateForTests
+    } = googleSyncModule as {
     ensureManagedCalendarForUser: (credential: any, accessToken: string) => Promise<any>;
     migrateEventsToManagedCalendar: (credential: any, accessToken: string, calendarId: string) => Promise<any>;
     refreshManagedCalendarWatch: (
@@ -287,7 +287,7 @@ test('migrateEventsToManagedCalendar moves events and refreshManagedCalendarWatc
     ) => Promise<void>;
     __resetGoogleSyncStateForTests: () => void;
   };
-  t.after(() => __resetGoogleSyncStateForTests());
+  onTestFinished(() => __resetGoogleSyncStateForTests());
 
   const userId = await createUser(ctx);
   await upsertGoogleCredential(userId, {
@@ -368,11 +368,11 @@ test('migrateEventsToManagedCalendar moves events and refreshManagedCalendarWatc
   assert.equal(channelRows[0].calendar_id, targetCalendarId);
 });
 
-test('ensureManagedCalendarAclForUser shares calendar with accepted collaborators', async (t) => {
-  const ctx = await createGoogleSyncTestContext(t);
+test('ensureManagedCalendarAclForUser shares calendar with accepted collaborators', async ({ onTestFinished }) => {
+  const ctx = await createGoogleSyncTestContext(onTestFinished);
   const fakeCalendar = new FakeGoogleCalendarApi();
   fakeCalendar.install();
-  t.after(() => fakeCalendar.restore());
+  onTestFinished(() => fakeCalendar.restore());
 
   const googleSyncModule = await import('./googleSync.js');
   const {
@@ -389,7 +389,7 @@ test('ensureManagedCalendarAclForUser shares calendar with accepted collaborator
     ) => Promise<{ granted: number; skipped: number; errors: number }>;
     __resetGoogleSyncStateForTests: () => void;
   };
-  t.after(() => __resetGoogleSyncStateForTests());
+  onTestFinished(() => __resetGoogleSyncStateForTests());
 
   const userId = await createUser(ctx);
   await upsertGoogleCredential(userId, {

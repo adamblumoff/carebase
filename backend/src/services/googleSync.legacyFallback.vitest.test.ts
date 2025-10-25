@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import type { Appointment } from '@carebase/shared';
 import { encryptSecret } from '../utils/secretCipher.js';
@@ -14,7 +14,7 @@ const dbClient = dbClientModule.default as {
   query: (text: string, params?: any[]) => Promise<any>;
 };
 
-test('legacy Google events without carebaseType still update local plan', async (t) => {
+test('legacy Google events without carebaseType still update local plan', async ({ onTestFinished }) => {
   const originalQuery = dbClient.query;
   const originalFetch = global.fetch;
 
@@ -710,10 +710,11 @@ test('legacy Google events without carebaseType still update local plan', async 
     throw new Error(`Unexpected fetch call: ${url}`);
   };
 
-  t.after(() => {
+  onTestFinished(() => {
     dbClient.query = originalQuery;
     global.fetch = originalFetch;
     __resetGoogleSyncStateForTests();
+    __setGoogleSyncSchedulerForTests(null);
   });
 
   const summary = await syncUserWithGoogle(ownerUserId);
@@ -751,7 +752,7 @@ test('legacy Google events without carebaseType still update local plan', async 
   assert.equal(user?.plan_version, 1);
 });
 
-test('remote edits with newer timestamp override pending local push', async (t) => {
+test('remote edits with newer timestamp override pending local push', async ({ onTestFinished }) => {
   const originalQuery = dbClient.query;
   const originalFetch = global.fetch;
 
@@ -1218,7 +1219,7 @@ test('remote edits with newer timestamp override pending local push', async (t) 
     throw new Error(`Unexpected fetch ${method} ${url}`);
   };
 
-  t.after(() => {
+  onTestFinished(() => {
     __setGoogleSyncSchedulerForTests(null);
     dbClient.query = originalQuery;
     global.fetch = originalFetch;
