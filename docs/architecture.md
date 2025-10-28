@@ -36,3 +36,11 @@ Dependency-cruiser enforces the boundary between `backend/src/db/**` and most of
   this template via `CLERK_JWT_TEMPLATE_NAME` / `EXPO_PUBLIC_CLERK_JWT_TEMPLATE`.
 
 Keep this document up to date when adjusting boundaries or adding new cross-cutting helpers.
+
+## Medication Services (Planned)
+
+- `medicationService` will encapsulate CRUD, intake acknowledgements, refill projections, and reminder scheduling while delegating to `db/queries/medications*`.
+- New tables: `medications`, `medication_doses`, `medication_intakes`, plus a helper view/table for refill projections.
+- Reminder orchestration will live in `services/medicationReminderScheduler.ts`, reusing the existing queue/worker infrastructure (`services/realtime` bootstrap hooks).
+- Routes will mount under `/api/medications`; mutations require owner context, while collaborators receive read-only data.
+- Mobile clients will surface medications in a dedicated screen and interact through the shared API types defined in `shared/types`.
