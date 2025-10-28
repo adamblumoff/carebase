@@ -135,6 +135,46 @@ describe('AuthProvider', () => {
     });
   });
 
+  it('schedules an automatic retry after an initial failure', async () => {
+    const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+
+    try {
+      clerkState.isSignedIn = true;
+      checkSessionMock.mockRejectedValueOnce(new Error('bad'));
+
+      const latest = renderAuthProvider();
+
+      await waitFor(() => {
+        expect(latest.current?.status).toBe('error');
+        expect(latest.current?.pendingRetry).toBe(true);
+      });
+
+      expect(setTimeoutSpy).toHaveBeenCalled();
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
+  });
+
+  it('does not duplicate work when retrySession is invoked while auto retry is pending', async () => {
+    clerkState.isSignedIn = true;
+    checkSessionMock.mockRejectedValueOnce(new Error('bad'));
+
+    const latest = renderAuthProvider();
+
+    await waitFor(() => {
+      expect(latest.current?.status).toBe('error');
+      expect(latest.current?.pendingRetry).toBe(true);
+    });
+
+    await act(async () => {
+      await latest.current?.retrySession();
+    });
+
+    expect(checkSessionMock).toHaveBeenCalledTimes(1);
+    expect(latest.current?.status).toBe('error');
+    expect(latest.current?.pendingRetry).toBe(true);
+  });
+
   it('signIn accepts next user payload', async () => {
     clerkState.isSignedIn = true;
     const override = { email: 'override@test.com' };

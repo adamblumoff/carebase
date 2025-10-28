@@ -6,7 +6,7 @@ import React, { useEffect, useCallback } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import AppNavigator from './src/navigation/AppNavigator';
 import { ThemeProvider, useTheme } from './src/theme';
-import { View, ActivityIndicator, Text, StyleSheet, Linking as RNLinking, TouchableOpacity } from 'react-native';
+import { View, ActivityIndicator, Text, StyleSheet, Linking as RNLinking } from 'react-native';
 import { AuthProvider, useAuth } from './src/auth/AuthContext';
 import { ToastProvider } from './src/ui/ToastProvider';
 import { CollaboratorProvider } from './src/collaborators/CollaboratorProvider';
@@ -26,7 +26,7 @@ import {
   clearClerkTokenCache
 } from './src/auth/clerkTokenCache';
 
-const DEFAULT_RETRY_MESSAGE = "We couldn't refresh your session. Please try again.";
+import { DEFAULT_RETRY_MESSAGE, RetrySplash } from './src/ui/RetrySplash';
 
 function SplashScreen() {
   const { colorScheme, palette } = useTheme();
@@ -34,45 +34,6 @@ function SplashScreen() {
     <View style={[styles.splashContainer, { backgroundColor: palette.background }]}> 
       <ActivityIndicator size="large" color={palette.primary} />
       <Text style={[styles.splashText, { color: palette.textSecondary }]}>Loading…</Text>
-    </View>
-  );
-}
-
-type RetrySplashProps = {
-  message?: string | null;
-  pending: boolean;
-  onRetry: () => void;
-  onSignOut: () => void;
-};
-
-function RetrySplash({ message, pending, onRetry, onSignOut }: RetrySplashProps) {
-  const { palette } = useTheme();
-  const displayMessage = message && message.trim().length > 0 ? message : DEFAULT_RETRY_MESSAGE;
-
-  return (
-    <View style={[styles.splashContainer, { backgroundColor: palette.background }]}> 
-      {pending ? <ActivityIndicator size="large" color={palette.primary} /> : <View style={styles.retrySpacer} />}
-      <Text
-        style={[
-          styles.splashText,
-          { color: palette.textSecondary, textAlign: 'center', marginHorizontal: 32 }
-        ]}
-      >
-        {pending ? 'Hang tight—we\'re reconnecting.' : displayMessage}
-      </Text>
-      <TouchableOpacity
-        style={[
-          styles.retryButton,
-          { backgroundColor: palette.primary, opacity: pending ? 0.6 : 1 }
-        ]}
-        disabled={pending}
-        onPress={onRetry}
-      >
-        <Text style={styles.retryButtonText}>{pending ? 'Retrying…' : 'Try again'}</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.retrySecondaryButton} onPress={onSignOut}>
-        <Text style={[styles.retrySecondaryText, { color: palette.textSecondary }]}>Sign out instead</Text>
-      </TouchableOpacity>
     </View>
   );
 }
@@ -217,27 +178,5 @@ const styles = StyleSheet.create({
   },
   splashText: {
     fontSize: 14,
-  },
-  retrySpacer: {
-    height: 48,
-  },
-  retryButton: {
-    marginTop: 24,
-    paddingVertical: 12,
-    paddingHorizontal: 32,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  retrySecondaryButton: {
-    marginTop: 16,
-    paddingVertical: 8,
-  },
-  retrySecondaryText: {
-    fontSize: 14,
-    fontWeight: '600',
   },
 });
