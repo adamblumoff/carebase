@@ -2,11 +2,11 @@
  * Carebase Mobile App
  * Healthcare coordination: Show Up (appointments) + Pay (bills)
  */
-import React, { useMemo, useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import AppNavigator from './src/navigation/AppNavigator';
 import { ThemeProvider, useTheme } from './src/theme';
-import { View, ActivityIndicator, Text, StyleSheet, Linking as RNLinking } from 'react-native';
+import { View, ActivityIndicator, Text, StyleSheet, Linking as RNLinking, TouchableOpacity } from 'react-native';
 import { AuthProvider, useAuth } from './src/auth/AuthContext';
 import { ToastProvider } from './src/ui/ToastProvider';
 import { CollaboratorProvider } from './src/collaborators/CollaboratorProvider';
@@ -26,6 +26,8 @@ import {
   clearClerkTokenCache
 } from './src/auth/clerkTokenCache';
 
+const DEFAULT_RETRY_MESSAGE = "We couldn't refresh your session. Please try again.";
+
 function SplashScreen() {
   const { colorScheme, palette } = useTheme();
   return (
@@ -36,18 +38,59 @@ function SplashScreen() {
   );
 }
 
+type RetrySplashProps = {
+  message?: string | null;
+  pending: boolean;
+  onRetry: () => void;
+  onSignOut: () => void;
+};
+
+function RetrySplash({ message, pending, onRetry, onSignOut }: RetrySplashProps) {
+  const { palette } = useTheme();
+  const displayMessage = message && message.trim().length > 0 ? message : DEFAULT_RETRY_MESSAGE;
+
+  return (
+    <View style={[styles.splashContainer, { backgroundColor: palette.background }]}> 
+      {pending ? <ActivityIndicator size="large" color={palette.primary} /> : <View style={styles.retrySpacer} />}
+      <Text
+        style={[
+          styles.splashText,
+          { color: palette.textSecondary, textAlign: 'center', marginHorizontal: 32 }
+        ]}
+      >
+        {pending ? 'Hang tight—we\'re reconnecting.' : displayMessage}
+      </Text>
+      <TouchableOpacity
+        style={[
+          styles.retryButton,
+          { backgroundColor: palette.primary, opacity: pending ? 0.6 : 1 }
+        ]}
+        disabled={pending}
+        onPress={onRetry}
+      >
+        <Text style={styles.retryButtonText}>{pending ? 'Retrying…' : 'Try again'}</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.retrySecondaryButton} onPress={onSignOut}>
+        <Text style={[styles.retrySecondaryText, { color: palette.textSecondary }]}>Sign out instead</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 function AppContent() {
   const { colorScheme } = useTheme();
   const statusBarStyle = colorScheme === 'dark' ? 'light' : 'dark';
   const auth = useAuth();
+  const { status, lastError, pendingRetry, retrySession, signOut } = auth;
   const { handleIncomingUrl } = usePendingInviteAcceptance();
 
-  const navigator = useMemo(() => {
-    if (auth.status === 'loading') {
-      return <SplashScreen />;
-    }
-    return <AppNavigator isSignedIn={auth.status === 'signedIn'} />;
-  }, [auth.status]);
+  const handleRetryPress = useCallback(() => {
+    void retrySession();
+  }, [retrySession]);
+
+  const handleSignOutPress = useCallback(() => {
+    void signOut();
+  }, [signOut]);
 
   useEffect(() => {
     RNLinking.getInitialURL()
@@ -67,9 +110,26 @@ function AppContent() {
     };
   }, [handleIncomingUrl]);
 
+  let content: React.ReactNode;
+  if (status === 'loading') {
+    content = <SplashScreen />;
+  } else if (status === 'error') {
+    content = (
+      <RetrySplash
+        message={lastError ?? DEFAULT_RETRY_MESSAGE}
+        pending={pendingRetry}
+        onRetry={handleRetryPress}
+        onSignOut={handleSignOutPress}
+      />
+    );
+  } else {
+    const navigator = <AppNavigator isSignedIn={status === 'signedIn'} />;
+    content = status === 'signedIn' ? <PlanProvider>{navigator}</PlanProvider> : navigator;
+  }
+
   return (
     <>
-      {auth.status === 'signedIn' ? <PlanProvider>{navigator}</PlanProvider> : navigator}
+      {content}
       <StatusBar style={statusBarStyle} />
     </>
   );
@@ -157,5 +217,27 @@ const styles = StyleSheet.create({
   },
   splashText: {
     fontSize: 14,
+  },
+  retrySpacer: {
+    height: 48,
+  },
+  retryButton: {
+    marginTop: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  retrySecondaryButton: {
+    marginTop: 16,
+    paddingVertical: 8,
+  },
+  retrySecondaryText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
