@@ -122,15 +122,16 @@ describe('AuthProvider', () => {
     });
   });
 
-  it('falls back to signedOut when session lookup fails', async () => {
+  it('enters error retry mode when session lookup fails', async () => {
     clerkState.isSignedIn = true;
     checkSessionMock.mockRejectedValue(new Error('bad'));
 
     const latest = renderAuthProvider();
 
     await waitFor(() => {
-      expect(latest.current?.status).toBe('signedOut');
+      expect(latest.current?.status).toBe('error');
       expect(latest.current?.user).toBeNull();
+      expect(latest.current?.lastError).toBeTruthy();
     });
   });
 

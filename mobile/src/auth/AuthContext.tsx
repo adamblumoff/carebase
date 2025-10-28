@@ -12,23 +12,33 @@ import { authEvents } from './authEvents';
 import { clearClerkTokenCache } from './clerkTokenCache';
 import { useAuth as useClerkAuth } from '@clerk/clerk-expo';
 
+const AUTO_RETRY_DELAY_MS = 2000;
+const DEFAULT_SESSION_ERROR = 'We couldn\'t refresh your session. Please try again.';
+
 interface AuthContextValue {
-  status: 'loading' | 'signedOut' | 'signedIn';
+  status: 'loading' | 'signedOut' | 'signedIn' | 'error';
   user: any | null;
+  lastError: string | null;
+  pendingRetry: boolean;
   signIn: (user?: any) => void;
   signOut: () => Promise<void>;
+  retrySession: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [status, setStatus] = useState<'loading' | 'signedOut' | 'signedIn'>('loading');
+  const [status, setStatus] = useState<'loading' | 'signedOut' | 'signedIn' | 'error'>('loading');
   const [user, setUser] = useState<any | null>(null);
+  const [lastError, setLastError] = useState<string | null>(null);
+  const [pendingRetry, setPendingRetry] = useState(false);
   const signOutInProgress = useRef(false);
-  const statusRef = useRef<'loading' | 'signedOut' | 'signedIn'>(status);
+  const statusRef = useRef<'loading' | 'signedOut' | 'signedIn' | 'error'>(status);
   const bootstrappedRef = useRef(false);
   const sessionRequestRef = useRef<Promise<void> | null>(null);
   const clerkSignedInRef = useRef<boolean | null>(null);
+  const autoRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoRetryAttemptedRef = useRef(false);
   const { isLoaded, isSignedIn, signOut: clerkSignOut } = useClerkAuth();
 
   useEffect(() => {
@@ -47,15 +57,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return sessionRequestRef.current;
     }
 
-    if (initial) {
+    if (initial || !keepSignedIn) {
       setStatus('loading');
-    } else if (!keepSignedIn) {
-      setStatus('loading');
+      setLastError(null);
+    }
+
+    if (autoRetryTimeoutRef.current) {
+      clearTimeout(autoRetryTimeoutRef.current);
+      autoRetryTimeoutRef.current = null;
     }
 
     const request = (async () => {
       try {
         const session = await checkSession();
+        setLastError(null);
+        setPendingRetry(false);
+        autoRetryAttemptedRef.current = false;
+
         if (session.authenticated) {
           setUser(session.user ?? null);
           setStatus('signedIn');
@@ -66,7 +84,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (error) {
         console.error('Session bootstrap error', error);
         setUser(null);
-        setStatus('signedOut');
+        setStatus('error');
+        setLastError(DEFAULT_SESSION_ERROR);
+
+        if (initial && !autoRetryAttemptedRef.current) {
+          autoRetryAttemptedRef.current = true;
+          setPendingRetry(true);
+          autoRetryTimeoutRef.current = setTimeout(() => {
+            const retryPromise = loadSessionUser({ keepSignedIn: true });
+            retryPromise
+              .catch(() => {
+                // error handling occurs inside loadSessionUser
+              })
+              .finally(() => {
+                setPendingRetry(false);
+              });
+          }, AUTO_RETRY_DELAY_MS);
+        } else {
+          setPendingRetry(false);
+        }
       } finally {
         bootstrappedRef.current = true;
         sessionRequestRef.current = null;
@@ -79,6 +115,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signIn = useCallback(
     (nextUser?: any) => {
+      setLastError(null);
+      setPendingRetry(false);
       if (nextUser) {
         setUser(nextUser ?? null);
         setStatus('signedIn');
@@ -109,6 +147,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       clearClerkTokenCache();
       setUser(null);
       setStatus('signedOut');
+      setLastError(null);
+      setPendingRetry(false);
+      autoRetryAttemptedRef.current = false;
+      if (autoRetryTimeoutRef.current) {
+        clearTimeout(autoRetryTimeoutRef.current);
+        autoRetryTimeoutRef.current = null;
+      }
     } catch (error) {
       console.warn('Logout request error', error);
     } finally {
@@ -116,14 +161,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [clerkSignOut]);
 
+  const retrySession = useCallback(async () => {
+    if (pendingRetry) {
+      return;
+    }
+
+    setPendingRetry(true);
+    setLastError(null);
+
+    if (autoRetryTimeoutRef.current) {
+      clearTimeout(autoRetryTimeoutRef.current);
+      autoRetryTimeoutRef.current = null;
+    }
+
+    try {
+      await loadSessionUser({ keepSignedIn: true });
+    } finally {
+      setPendingRetry(false);
+    }
+  }, [pendingRetry, loadSessionUser]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       status,
       user,
+      lastError,
+      pendingRetry,
       signIn,
       signOut,
+      retrySession
     }),
-    [status, user, signIn, signOut]
+    [status, user, lastError, pendingRetry, signIn, signOut, retrySession]
   );
 
   useEffect(() => {
@@ -160,6 +228,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       unsubscribe();
     };
   }, [isLoaded, isSignedIn, loadSessionUser, signOut]);
+
+  useEffect(() => {
+    return () => {
+      if (autoRetryTimeoutRef.current) {
+        clearTimeout(autoRetryTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
