@@ -60,16 +60,73 @@ export default function LoginScreen() {
   const [info, setInfo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const resolveSessionId = (
+    candidate?: string | null | undefined
+  ): string | null => {
+    if (candidate && candidate.length > 0) {
+      return candidate;
+    }
+    if (clerkAuth.sessionId && clerkAuth.sessionId.length > 0) {
+      return clerkAuth.sessionId;
+    }
+    const inferred = clerkAuth.session?.id;
+    return typeof inferred === 'string' && inferred.length > 0 ? inferred : null;
+  };
+
   const finishSignIn = async (
     createdSessionId?: string | null,
     activeSetter?: SetActiveFn | null
-  ) => {
-    if (!createdSessionId) {
-      return;
+  ): Promise<boolean> => {
+    const sessionToActivate = resolveSessionId(createdSessionId);
+
+    if (!sessionToActivate) {
+      if (clerkAuth.isSignedIn) {
+        await auth.signIn();
+        return true;
+      }
+      return false;
     }
+
     const setter = activeSetter ?? setActive ?? clerkAuth.setActive;
-    await setter?.({ session: createdSessionId });
+    try {
+      await setter?.({ session: sessionToActivate });
+    } catch (error: any) {
+      const message =
+        typeof error?.message === 'string' ? error.message.toLowerCase() : '';
+      if (!message.includes('already active')) {
+        console.warn('[Auth] Unable to activate Clerk session', {
+          sessionId: sessionToActivate,
+          error
+        });
+      }
+    }
+
     await auth.signIn();
+    return true;
+  };
+
+  const isAlreadySignedInError = (error: unknown): boolean => {
+    if (!error || typeof error !== 'object') {
+      return false;
+    }
+
+    const anyError = error as {
+      message?: string;
+      errors?: Array<{ message?: string; code?: string }>;
+    };
+
+    const directMessage = anyError.message ?? anyError.errors?.[0]?.message;
+    if (typeof directMessage === 'string' && directMessage.toLowerCase().includes("already signed in")) {
+      return true;
+    }
+
+    if (Array.isArray(anyError.errors)) {
+      return anyError.errors.some(
+        (entry) => typeof entry?.code === 'string' && entry.code.includes('session')
+      );
+    }
+
+    return false;
   };
 
   const handlePasswordSignIn = async () => {
@@ -199,9 +256,16 @@ export default function LoginScreen() {
         await resource.update(updatePayload);
       }
 
+      if (clerkAuth.isSignedIn) {
+        return resolveSessionId(resource.createdSessionId);
+      }
+
       const completion = await resource.create({ transfer: true });
       return completion?.createdSessionId ?? resource.createdSessionId ?? null;
     } catch (err) {
+      if (isAlreadySignedInError(err)) {
+        return resolveSessionId(resource?.createdSessionId);
+      }
       console.error('[Auth] Failed to auto-complete Clerk sign-up', err);
       return null;
     }
@@ -235,25 +299,30 @@ export default function LoginScreen() {
         return;
       }
 
-      const sessionId =
-        result.createdSessionId ??
-        result.signIn?.createdSessionId ??
-        result.signUp?.createdSessionId ??
-        null;
+      const candidateSessions = [
+        result.createdSessionId,
+        result.signIn?.createdSessionId,
+        result.signUp?.createdSessionId
+      ].filter((value): value is string => typeof value === 'string' && value.length > 0);
 
-      if (sessionId) {
-        await finishSignIn(sessionId, result.setActive);
+      for (const candidate of candidateSessions) {
+        if (await finishSignIn(candidate, result.setActive)) {
+          setInfo('Signed in successfully.');
+          return;
+        }
+      }
+
+      if (clerkAuth.isSignedIn && (await finishSignIn(null, result.setActive))) {
         setInfo('Signed in successfully.');
         return;
       }
 
-      if (result.signUp) {
+      if (result.signUp && !clerkAuth.isSignedIn) {
         const completedSession = await autoCompleteSignUp(
           result.signUp,
           result.signUp.emailAddress ?? result.signIn?.identifier ?? email
         );
-        if (completedSession) {
-          await finishSignIn(completedSession, result.setActive);
+        if (await finishSignIn(completedSession, result.setActive)) {
           setInfo('Signed in successfully.');
           return;
         }
@@ -268,6 +337,10 @@ export default function LoginScreen() {
 
       setError('OAuth sign-in was cancelled or incomplete.');
     } catch (err: any) {
+      if (isAlreadySignedInError(err) && (await finishSignIn(null, null))) {
+        setInfo('Signed in successfully.');
+        return;
+      }
       console.error('[Auth] OAuth flow error', err);
       setError(err?.errors?.[0]?.longMessage ?? 'Unable to complete OAuth sign-in.');
     } finally {
