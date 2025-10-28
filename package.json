@@ -24,7 +24,7 @@
     "db:migrate": "npm run db:migrate --workspace=backend",
     "lint:deps": "dependency-cruiser --config dependency-cruiser.config.cjs backend/src",
     "configure:clerk-template": "tsx scripts/configure-clerk-template.ts",
-    "num_lines": "find . \\( -path '*.ts' -o -path '*.js' -o -path '*.sql' \\) ! -path '*node_modules*' | xargs wc -l"
+    "num_lines": "npx cloc ~/carebase --exclude-dir=node_modules,android,ios  --exclude-lang=JSON,Markdown"
   },
   "keywords": [
     "healthcare",
