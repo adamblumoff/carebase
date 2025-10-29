@@ -63,6 +63,9 @@ vi.mock('expo-notifications', () => {
 
   const getPermissionsAsync = vi.fn(async () => ({ ...defaultPermission }));
   const requestPermissionsAsync = vi.fn(async () => ({ ...grantedPermission }));
+  const getAllScheduledNotificationsAsync = vi.fn(async () => []);
+  const scheduleNotificationAsync = vi.fn(async () => 'mock-notification-id');
+  const cancelScheduledNotificationAsync = vi.fn(async () => {});
 
   return {
     __esModule: true,
@@ -74,6 +77,9 @@ vi.mock('expo-notifications', () => {
     setNotificationChannelAsync: vi.fn(async () => {}),
     getPermissionsAsync,
     requestPermissionsAsync,
+    getAllScheduledNotificationsAsync,
+    scheduleNotificationAsync,
+    cancelScheduledNotificationAsync,
     AndroidImportance: { MAX: 5 }
   };
 });

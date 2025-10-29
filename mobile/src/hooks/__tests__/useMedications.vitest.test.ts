@@ -21,6 +21,10 @@ const apiMocks = vi.hoisted(() => ({
   clearMedicationRefillProjection: vi.fn()
 }));
 
+const reminderMocks = vi.hoisted(() => ({
+  syncLocalMedicationReminders: vi.fn()
+}));
+
 vi.mock('../../auth/AuthContext', () => ({
   useAuth: () => ({ status: 'signedIn' as const })
 }));
@@ -36,6 +40,7 @@ vi.mock('../../utils/realtime', () => ({
 }));
 
 vi.mock('../../api/medications', () => apiMocks);
+vi.mock('../../notifications/localMedicationReminders', () => reminderMocks);
 
 const listeners: Array<(delta: PlanItemDelta) => void> = [];
 
@@ -71,6 +76,7 @@ beforeEach(() => {
   listeners.length = 0;
   apiMocks.fetchMedications.mockResolvedValue({ medications: [createMedication()] });
   apiMocks.createMedication.mockResolvedValue(createMedication(2));
+  reminderMocks.syncLocalMedicationReminders.mockResolvedValue(undefined);
 });
 
 describe('useMedications', () => {
@@ -80,6 +86,10 @@ describe('useMedications', () => {
     await waitFor(() => {
       expect(result.current.medications).toHaveLength(1);
     });
+
+    expect(reminderMocks.syncLocalMedicationReminders).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ id: 1 })])
+    );
 
     apiMocks.fetchMedications.mockResolvedValueOnce({ medications: [createMedication(3)] });
 

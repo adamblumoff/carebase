@@ -26,6 +26,7 @@ import {
 } from '../api/medications';
 import { useAuth } from '../auth/AuthContext';
 import { addPlanDeltaListener } from '../utils/realtime';
+import { syncLocalMedicationReminders } from '../notifications/localMedicationReminders';
 import type { PlanItemDelta } from '@carebase/shared';
 
 interface UseMedicationsOptions extends MedicationListOptions {}
@@ -95,6 +96,10 @@ export function useMedications(options?: UseMedicationsOptions): UseMedicationsR
     });
     return unsubscribe;
   }, [loadMedications]);
+
+  useEffect(() => {
+    void syncLocalMedicationReminders(medications);
+  }, [medications]);
 
   const mutateState = useCallback((updated: MedicationWithDetails) => {
     setMedications((current) => {
