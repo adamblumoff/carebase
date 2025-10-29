@@ -7,6 +7,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useTheme } from '../theme';
 import type { RootStackParamList } from './types';
 export type { RootStackParamList } from './types';
+import { navigationRef, flushNavigationQueue } from './navigationRef';
 
 // Screens
 import LoginScreen from '../screens/LoginScreen';
@@ -47,7 +48,12 @@ export default function AppNavigator({ isSignedIn }: AppNavigatorProps) {
   );
 
   return (
-    <NavigationContainer theme={navigationTheme} key={isSignedIn ? 'app-stack' : 'auth-stack'}>
+    <NavigationContainer
+      ref={navigationRef}
+      onReady={flushNavigationQueue}
+      theme={navigationTheme}
+      key={isSignedIn ? 'app-stack' : 'auth-stack'}
+    >
       <Stack.Navigator
         initialRouteName={isSignedIn ? 'Plan' : 'Login'}
         screenOptions={{

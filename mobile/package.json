@@ -14,8 +14,8 @@
     "env:mobile:dev": "node ../scripts/swap-mobile-env.js dev"
   },
   "dependencies": {
-    "@react-native-async-storage/async-storage": "2.2.0",
     "@clerk/clerk-expo": "^2.17.1",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "^8.4.5",
     "@react-navigation/native": "^7.1.18",
     "@react-navigation/native-stack": "^7.3.27",
@@ -24,6 +24,7 @@
     "expo-auth-session": "^7.0.8",
     "expo-camera": "^17.0.8",
     "expo-image-picker": "^17.0.8",
+    "expo-notifications": "~0.30.7",
     "expo-secure-store": "^12.8.1",
     "expo-status-bar": "~3.0.8",
     "expo-web-browser": "^15.0.8",

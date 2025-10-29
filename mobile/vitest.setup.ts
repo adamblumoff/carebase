@@ -37,6 +37,20 @@ vi.mock('expo-constants', () => ({
   }
 }));
 
+vi.mock('expo-notifications', () => {
+  const remove = vi.fn();
+  return {
+    __esModule: true,
+    setNotificationHandler: vi.fn(),
+    addNotificationReceivedListener: vi.fn(() => ({ remove })),
+    addNotificationResponseReceivedListener: vi.fn(() => ({ remove })),
+    getLastNotificationResponseAsync: vi.fn(async () => null),
+    setNotificationCategoryAsync: vi.fn(async () => {}),
+    setNotificationChannelAsync: vi.fn(async () => {}),
+    AndroidImportance: { MAX: 5 }
+  };
+});
+
 const defaultClerkState = {
   isLoaded: true,
   isSignedIn: false,

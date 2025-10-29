@@ -122,6 +122,7 @@ export default function PlanScreen({ navigation, route }: Props) {
   const [medicationFormError, setMedicationFormError] = useState<string | null>(null);
   const [medicationFormEditing, setMedicationFormEditing] = useState<MedicationWithDetails | null>(null);
   const [medicationFormPrefill, setMedicationFormPrefill] = useState<MedicationDraft | null>(null);
+  const pendingMedicationFocusRef = useRef<number | null>(null);
   const medicationSummary = useMedicationSummary(medicationsState.medications);
   const activeMedication = useMemo(
     () => medicationsState.medications.find((med) => med.id === selectedMedicationId) ?? null,
@@ -481,6 +482,33 @@ export default function PlanScreen({ navigation, route }: Props) {
       navigation.setParams({ medicationDraft: undefined });
     }
   }, [navigation, openCreateMedication, route.params?.medicationDraft]);
+
+  useEffect(() => {
+    const focusId = route.params?.focusMedicationId ?? null;
+    if (focusId != null) {
+      pendingMedicationFocusRef.current = focusId;
+      navigation.setParams({ focusMedicationId: undefined });
+    }
+  }, [navigation, route.params?.focusMedicationId]);
+
+  useEffect(() => {
+    const pendingId = pendingMedicationFocusRef.current;
+    if (pendingId == null) {
+      return;
+    }
+
+    const medication = medicationsState.medications.find((med) => med.id === pendingId) ?? null;
+    if (medication) {
+      setSelectedMedicationId(pendingId);
+      setMedicationSheetVisible(true);
+      pendingMedicationFocusRef.current = null;
+      return;
+    }
+
+    if (!medicationsState.loading) {
+      pendingMedicationFocusRef.current = null;
+    }
+  }, [medicationsState.loading, medicationsState.medications]);
 
   const closeMedicationForm = useCallback(() => {
     setMedicationFormVisible(false);

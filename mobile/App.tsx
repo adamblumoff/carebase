@@ -27,6 +27,7 @@ import {
 } from './src/auth/clerkTokenCache';
 
 import { DEFAULT_RETRY_MESSAGE, RetrySplash } from './src/ui/RetrySplash';
+import { useNotifications } from './src/notifications/useNotifications';
 
 function SplashScreen() {
   const { colorScheme, palette } = useTheme();
@@ -44,6 +45,7 @@ function AppContent() {
   const auth = useAuth();
   const { status, lastError, pendingRetry, retrySession, signOut } = auth;
   const { handleIncomingUrl } = usePendingInviteAcceptance();
+  useNotifications();
 
   const handleRetryPress = useCallback(() => {
     void retrySession();
