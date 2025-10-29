@@ -3,7 +3,7 @@ import {
   validateMedicationForm,
   type MedicationFormValues,
   type DoseFormValue
-} from '../MedicationFormSheet';
+} from '../MedicationFormSheet.helpers';
 
 const buildDose = (overrides: Partial<DoseFormValue> = {}): DoseFormValue => ({
   id: 10,
@@ -60,9 +60,7 @@ describe('validateMedicationForm', () => {
   it('flags invalid dose time format', () => {
     const { errors } = validateMedicationForm(
       buildValues({
-        doses: [
-          buildDose({ timeOfDay: '8:30' })
-        ]
+        doses: [buildDose({ timeOfDay: '8:30' })]
       })
     );
     expect(errors.doses?.[0]?.timeOfDay).toBe('Enter time as HH:mm (24-hour).');
@@ -71,9 +69,7 @@ describe('validateMedicationForm', () => {
   it('flags invalid timezone', () => {
     const { errors } = validateMedicationForm(
       buildValues({
-        doses: [
-          buildDose({ timezone: 'Mars/Olympus' })
-        ]
+        doses: [buildDose({ timezone: 'Mars/Olympus' })]
       })
     );
     expect(errors.doses?.[0]?.timezone).toBe('Enter a valid IANA timezone (e.g. America/Chicago).');

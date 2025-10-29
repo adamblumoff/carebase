@@ -15,56 +15,15 @@ import {
 } from 'react-native';
 import type { MedicationWithDetails } from '@carebase/shared';
 import { useTheme, spacing, radius } from '../../../theme';
-
-export interface DoseFormValue {
-  id?: number;
-  label: string;
-  timeOfDay: string;
-  timezone: string;
-}
-
-export interface MedicationFormValues {
-  name: string;
-  instructions: string;
-  doses: DoseFormValue[];
-}
-
-function buildInitialValues(medication: MedicationWithDetails | null, defaultTimezone: string): MedicationFormValues {
-  if (!medication) {
-    return {
-      name: '',
-      instructions: '',
-      doses: [
-        {
-          label: '',
-          timeOfDay: '08:00',
-          timezone: defaultTimezone
-        }
-      ]
-    };
-  }
-  const mappedDoses =
-    medication.doses.length > 0
-      ? medication.doses.map((dose) => ({
-          id: dose.id,
-          label: dose.label ?? '',
-          timeOfDay: dose.timeOfDay,
-          timezone: dose.timezone
-        }))
-      : [
-          {
-            label: '',
-            timeOfDay: '08:00',
-            timezone: defaultTimezone
-          }
-        ];
-
-  return {
-    name: medication.name,
-    instructions: medication.instructions ?? '',
-    doses: mappedDoses
-  };
-}
+import DateTimePickerModal from '../../../components/DateTimePickerModal';
+import {
+  buildInitialValues,
+  validateMedicationForm,
+  type DoseFormValidationErrors,
+  type DoseFormValue,
+  type MedicationFormValidationErrors,
+  type MedicationFormValues
+} from './MedicationFormSheet.helpers';
 
 interface MedicationFormSheetProps {
   visible: boolean;
@@ -78,87 +37,20 @@ interface MedicationFormSheetProps {
   ctaLabel?: string;
 }
 
-export interface DoseFormValidationErrors {
-  label?: string;
-  timeOfDay?: string;
-  timezone?: string;
-}
+const toTwoDigit = (value: number) => value.toString().padStart(2, '0');
 
-export interface MedicationFormValidationErrors {
-  name?: string;
-  doses?: DoseFormValidationErrors[];
-}
-
-const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
-
-const validateTimeOfDay = (value: string): string | null => {
-  if (!TIME_PATTERN.test(value)) {
-    return 'Enter time as HH:mm (24-hour).';
+const parseTimeToDate = (value: string): Date => {
+  const [hours, minutes] = value.split(':').map((part) => Number(part));
+  const date = new Date();
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+    date.setHours(8, 0, 0, 0);
+    return date;
   }
-  return null;
+  date.setHours(hours, minutes, 0, 0);
+  return date;
 };
 
-const validateTimezone = (value: string): string | null => {
-  if (!value) {
-    return 'Enter a timezone (e.g. America/Chicago).';
-  }
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone: value }).format(new Date());
-    return null;
-  } catch {
-    return 'Enter a valid IANA timezone (e.g. America/Chicago).';
-  }
-};
-
-export function validateMedicationForm(values: MedicationFormValues): {
-  errors: MedicationFormValidationErrors;
-  normalized: MedicationFormValues;
-} {
-  const trimmedName = values.name.trim();
-  const trimmedInstructions = values.instructions.trim();
-  const normalizedDoses = values.doses.map((dose) => ({
-    id: dose.id,
-    label: dose.label.trim(),
-    timeOfDay: dose.timeOfDay.trim(),
-    timezone: dose.timezone.trim()
-  }));
-
-  const errors: MedicationFormValidationErrors = {};
-  const doseErrors: DoseFormValidationErrors[] = [];
-
-  if (!trimmedName) {
-    errors.name = 'Enter a medication name.';
-  }
-
-  if (normalizedDoses.length === 0) {
-    errors.doses = [{ timeOfDay: 'Add at least one dose.' }];
-  } else {
-    normalizedDoses.forEach((dose) => {
-      const currentErrors: DoseFormValidationErrors = {};
-      const timeError = validateTimeOfDay(dose.timeOfDay);
-      if (timeError) {
-        currentErrors.timeOfDay = timeError;
-      }
-      const timezoneError = validateTimezone(dose.timezone);
-      if (timezoneError) {
-        currentErrors.timezone = timezoneError;
-      }
-      doseErrors.push(currentErrors);
-    });
-    if (doseErrors.some((entry) => Object.keys(entry).length > 0)) {
-      errors.doses = doseErrors;
-    }
-  }
-
-  return {
-    errors,
-    normalized: {
-      name: trimmedName,
-      instructions: trimmedInstructions,
-      doses: normalizedDoses
-    }
-  };
-}
+const formatDateToTime = (value: Date): string => `${toTwoDigit(value.getHours())}:${toTwoDigit(value.getMinutes())}`;
 
 export function MedicationFormSheet({
   visible,
@@ -175,6 +67,8 @@ export function MedicationFormSheet({
   const [values, setValues] = useState<MedicationFormValues>(() => buildInitialValues(medication, defaultTimezone));
   const [fieldErrors, setFieldErrors] = useState<MedicationFormValidationErrors>({});
   const [keyboardPadding, setKeyboardPadding] = useState(0);
+  const [activeDosePicker, setActiveDosePicker] = useState<{ index: number; date: Date } | null>(null);
+  const [dosePickerVisible, setDosePickerVisible] = useState(false);
 
   useEffect(() => {
     setValues(buildInitialValues(medication, defaultTimezone));
@@ -218,12 +112,12 @@ export function MedicationFormSheet({
     setValues((current) => ({
       ...current,
       doses: [
-        ...current.doses,
         {
           label: '',
           timeOfDay: '08:00',
-          timezone: current.doses[current.doses.length - 1]?.timezone ?? defaultTimezone
-        }
+          timezone: current.doses[0]?.timezone ?? defaultTimezone
+        },
+        ...current.doses
       ]
     }));
   };
@@ -245,6 +139,27 @@ export function MedicationFormSheet({
       }
       return { ...prev, doses: dosesErrors };
     });
+  };
+
+  const openDoseTimePicker = (index: number) => {
+    const dose = values.doses[index];
+    setActiveDosePicker({ index, date: parseTimeToDate(dose.timeOfDay) });
+    setDosePickerVisible(true);
+  };
+
+  const closeDoseTimePicker = () => {
+    setDosePickerVisible(false);
+    setActiveDosePicker(null);
+  };
+
+  const handleConfirmDoseTime = (selectedDate: Date) => {
+    if (activeDosePicker == null) {
+      closeDoseTimePicker();
+      return;
+    }
+    const nextTime = formatDateToTime(selectedDate);
+    handleDoseChange(activeDosePicker.index, 'timeOfDay', nextTime);
+    closeDoseTimePicker();
   };
 
   const handleSubmit = async () => {
@@ -382,22 +297,20 @@ export function MedicationFormSheet({
                     <Text style={[styles.label, styles.doseSubLabel, { color: palette.textSecondary }]}>
                       Time of day (HH:mm)
                     </Text>
-                    <TextInput
-                      value={dose.timeOfDay}
-                      onChangeText={(text) => handleDoseChange(index, 'timeOfDay', text)}
-                      placeholder="08:00"
-                      style={[
-                        styles.input,
-                        styles.doseInput,
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.doseTimeButton,
                         {
                           borderColor: doseError?.timeOfDay ? palette.danger : palette.border,
-                          color: palette.textPrimary
-                        }
+                          backgroundColor: palette.surface
+                        },
+                        pressed && styles.doseTimeButtonPressed
                       ]}
-                      placeholderTextColor={palette.textMuted}
-                      autoCapitalize="none"
-                      keyboardType="numeric"
-                    />
+                      onPress={() => openDoseTimePicker(index)}
+                      accessibilityRole="button"
+                    >
+                      <Text style={[styles.doseTimeText, { color: palette.textPrimary }]}>{dose.timeOfDay}</Text>
+                    </Pressable>
                     {doseError?.timeOfDay ? (
                       <Text style={[styles.inputErrorText, { color: palette.danger }]}>{doseError.timeOfDay}</Text>
                     ) : null}
@@ -473,6 +386,13 @@ export function MedicationFormSheet({
                 </Pressable>
               </View>
           </ScrollView>
+          <DateTimePickerModal
+            visible={dosePickerVisible}
+            mode="time"
+            value={activeDosePicker?.date ?? new Date()}
+            onDismiss={closeDoseTimePicker}
+            onConfirm={handleConfirmDoseTime}
+          />
         </View>
       </View>
     </Modal>
@@ -574,6 +494,21 @@ const styles = StyleSheet.create({
   },
   doseInput: {
     marginTop: spacing(0.75)
+  },
+  doseTimeButton: {
+    marginTop: spacing(0.75),
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    paddingVertical: spacing(1),
+    paddingHorizontal: spacing(1.5),
+    alignItems: 'flex-start'
+  },
+  doseTimeButtonPressed: {
+    opacity: 0.85
+  },
+  doseTimeText: {
+    fontSize: 15,
+    fontWeight: '600'
   },
   addDoseButton: {
     marginTop: spacing(2),

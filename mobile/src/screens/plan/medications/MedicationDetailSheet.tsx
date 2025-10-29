@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -40,6 +40,27 @@ export function MedicationDetailSheet({
   actionError
 }: MedicationDetailSheetProps) {
   const { palette } = useTheme();
+  const sortedDoses = useMemo(() => {
+    if (!medication) return [];
+    return [...medication.doses].sort((a, b) => {
+      const updatedA = a.updatedAt ? new Date(a.updatedAt).getTime() : null;
+      const updatedB = b.updatedAt ? new Date(b.updatedAt).getTime() : null;
+      if (updatedA != null && updatedB != null && updatedA !== updatedB) {
+        return updatedB - updatedA;
+      }
+      if (a.timeOfDay !== b.timeOfDay) {
+        return b.timeOfDay.localeCompare(a.timeOfDay);
+      }
+      return (a.label ?? '').localeCompare(b.label ?? '');
+    });
+  }, [medication]);
+
+  const sortedIntakes = useMemo(() => {
+    if (!medication) return [];
+    return [...medication.upcomingIntakes].sort(
+      (a, b) => new Date(b.scheduledFor).getTime() - new Date(a.scheduledFor).getTime()
+    );
+  }, [medication]);
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -84,7 +105,7 @@ export function MedicationDetailSheet({
                 {medication.doses.length === 0 ? (
                   <Text style={[styles.sectionText, { color: palette.textMuted }]}>No doses configured.</Text>
                 ) : (
-                  medication.doses.map((dose) => (
+                  sortedDoses.map((dose) => (
                     <View key={dose.id} style={styles.row}>
                       <Text style={[styles.rowTitle, { color: palette.textPrimary }]}>
                         {dose.label ?? 'Dose'}
@@ -126,7 +147,7 @@ export function MedicationDetailSheet({
                 {medication.upcomingIntakes.length === 0 ? (
                   <Text style={[styles.sectionText, { color: palette.textMuted }]}>No upcoming intakes.</Text>
                 ) : (
-                  medication.upcomingIntakes.slice(0, 5).map((intake) => (
+                  sortedIntakes.slice(0, 5).map((intake) => (
                     <View key={intake.id} style={[styles.intakeCard, { borderColor: palette.border }]}
                     >
                       <Text style={[styles.rowTitle, { color: palette.textPrimary }]}>

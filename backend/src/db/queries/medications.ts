@@ -573,7 +573,7 @@ export async function listMedicationIntakes(
     `SELECT *
      FROM medication_intakes
      WHERE ${conditions.join(' AND ')}
-     ORDER BY scheduled_for ASC
+     ORDER BY scheduled_for DESC
      ${limitSql}`,
     params
   );
