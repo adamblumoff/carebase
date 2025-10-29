@@ -36,7 +36,7 @@ import { useMedications } from '../hooks/useMedications';
 import { useMedicationSummary } from './plan/medications/useMedicationSummary';
 import { MedicationSummaryList } from './plan/medications/MedicationSummaryList';
 import { MedicationDetailSheet } from './plan/medications/MedicationDetailSheet';
-import { MedicationFormSheet } from './plan/medications/MedicationFormSheet';
+import { MedicationFormSheet, type MedicationFormValues } from './plan/medications/MedicationFormSheet';
 import { useAuth } from '../auth/AuthContext';
 
 type DraftFormState = {
@@ -475,7 +475,7 @@ export default function PlanScreen({ navigation }: Props) {
   }, [activeMedication, canManageMedications, toast]);
 
   const handleMedicationFormSubmit = useCallback(
-    async (values: { name: string; instructions: string; timeOfDay: string; timezone: string }) => {
+    async (values: MedicationFormValues) => {
       if (!canManageMedications) {
         setMedicationFormError('Only the plan owner can manage medications.');
         return;

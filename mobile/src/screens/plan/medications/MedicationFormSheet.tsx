@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -14,7 +14,7 @@ import {
 import type { MedicationWithDetails } from '@carebase/shared';
 import { useTheme, spacing, radius } from '../../../theme';
 
-interface MedicationFormValues {
+export interface MedicationFormValues {
   name: string;
   instructions: string;
   timeOfDay: string;
@@ -51,6 +51,65 @@ interface MedicationFormSheetProps {
   ctaLabel?: string;
 }
 
+export type MedicationFormValidationErrors = Partial<Record<keyof MedicationFormValues, string>>;
+
+const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+const validateTimeOfDay = (value: string): string | null => {
+  if (!TIME_PATTERN.test(value)) {
+    return 'Enter time as HH:mm (24-hour).';
+  }
+  return null;
+};
+
+const validateTimezone = (value: string): string | null => {
+  if (!value) {
+    return 'Enter a timezone (e.g. America/Chicago).';
+  }
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value }).format(new Date());
+    return null;
+  } catch {
+    return 'Enter a valid IANA timezone (e.g. America/Chicago).';
+  }
+};
+
+export function validateMedicationForm(values: MedicationFormValues): {
+  errors: MedicationFormValidationErrors;
+  normalized: MedicationFormValues;
+} {
+  const trimmedName = values.name.trim();
+  const trimmedInstructions = values.instructions.trim();
+  const trimmedTime = values.timeOfDay.trim();
+  const trimmedTimezone = values.timezone.trim();
+
+  const errors: MedicationFormValidationErrors = {};
+
+  if (!trimmedName) {
+    errors.name = 'Enter a medication name.';
+  }
+
+  const timeError = validateTimeOfDay(trimmedTime);
+  if (timeError) {
+    errors.timeOfDay = timeError;
+  }
+
+  const timezoneError = validateTimezone(trimmedTimezone);
+  if (timezoneError) {
+    errors.timezone = timezoneError;
+  }
+
+  return {
+    errors,
+    normalized: {
+      name: trimmedName,
+      instructions: trimmedInstructions,
+      timeOfDay: trimmedTime,
+      timezone: trimmedTimezone
+    }
+  };
+}
+
 export function MedicationFormSheet({
   visible,
   mode,
@@ -64,19 +123,33 @@ export function MedicationFormSheet({
 }: MedicationFormSheetProps) {
   const { palette } = useTheme();
   const [values, setValues] = useState<MedicationFormValues>(() => buildInitialValues(medication, defaultTimezone));
+  const [fieldErrors, setFieldErrors] = useState<MedicationFormValidationErrors>({});
 
   useEffect(() => {
     setValues(buildInitialValues(medication, defaultTimezone));
+    setFieldErrors({});
   }, [medication, defaultTimezone, visible]);
 
-  const disabled = useMemo(() => values.name.trim().length === 0, [values.name]);
+  const canSubmit = values.name.trim().length > 0 && !submitting;
 
   const handleChange = (field: keyof MedicationFormValues, next: string) => {
     setValues((current) => ({ ...current, [field]: next }));
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const nextErrors = { ...prev };
+      delete nextErrors[field];
+      return nextErrors;
+    });
   };
 
   const handleSubmit = async () => {
-    await onSubmit(values);
+    const result = validateMedicationForm(values);
+    if (Object.keys(result.errors).length > 0) {
+      setFieldErrors(result.errors);
+      return;
+    }
+    setFieldErrors({});
+    await onSubmit(result.normalized);
   };
 
   return (
@@ -104,10 +177,19 @@ export function MedicationFormSheet({
               value={values.name}
               onChangeText={(text) => handleChange('name', text)}
               placeholder="e.g. Lipitor"
-              style={[styles.input, { borderColor: palette.border, color: palette.textPrimary }]}
+              style={[
+                styles.input,
+                {
+                  borderColor: fieldErrors.name ? palette.danger : palette.border,
+                  color: palette.textPrimary
+                }
+              ]}
               placeholderTextColor={palette.textMuted}
               autoCapitalize="words"
             />
+            {fieldErrors.name ? (
+              <Text style={[styles.inputErrorText, { color: palette.danger }]}>{fieldErrors.name}</Text>
+            ) : null}
 
             <Text style={[styles.label, { color: palette.textSecondary }]}>Instructions</Text>
             <TextInput
@@ -126,21 +208,39 @@ export function MedicationFormSheet({
               value={values.timeOfDay}
               onChangeText={(text) => handleChange('timeOfDay', text)}
               placeholder="08:00"
-              style={[styles.input, { borderColor: palette.border, color: palette.textPrimary }]}
+              style={[
+                styles.input,
+                {
+                  borderColor: fieldErrors.timeOfDay ? palette.danger : palette.border,
+                  color: palette.textPrimary
+                }
+              ]}
               placeholderTextColor={palette.textMuted}
               autoCapitalize="none"
               keyboardType="numeric"
             />
+            {fieldErrors.timeOfDay ? (
+              <Text style={[styles.inputErrorText, { color: palette.danger }]}>{fieldErrors.timeOfDay}</Text>
+            ) : null}
 
             <Text style={[styles.label, { color: palette.textSecondary }]}>Timezone</Text>
             <TextInput
               value={values.timezone}
               onChangeText={(text) => handleChange('timezone', text)}
               placeholder="America/New_York"
-              style={[styles.input, { borderColor: palette.border, color: palette.textPrimary }]}
+              style={[
+                styles.input,
+                {
+                  borderColor: fieldErrors.timezone ? palette.danger : palette.border,
+                  color: palette.textPrimary
+                }
+              ]}
               placeholderTextColor={palette.textMuted}
               autoCapitalize="words"
             />
+            {fieldErrors.timezone ? (
+              <Text style={[styles.inputErrorText, { color: palette.danger }]}>{fieldErrors.timezone}</Text>
+            ) : null}
 
             {error ? (
               <View style={[styles.errorBanner, { backgroundColor: palette.dangerSoft }]}>
@@ -168,7 +268,7 @@ export function MedicationFormSheet({
                   pressed && !disabled && !submitting && styles.primaryButtonPressed
                 ]}
                 onPress={handleSubmit}
-                disabled={disabled || submitting}
+                disabled={!canSubmit}
               >
                 {submitting ? (
                   <ActivityIndicator color="#fff" size="small" />
@@ -293,4 +393,3 @@ const styles = StyleSheet.create({
     textAlign: 'center'
   }
 });
-
