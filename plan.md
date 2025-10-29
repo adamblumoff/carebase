@@ -48,20 +48,20 @@ Launch a first-class medication management experience that lets caregivers captu
 7. Update observability: emit structured logs/metrics for reminders sent, acknowledgements, and missed doses; add basic dashboard/alerts if existing stack supports it.
 
 ## Milestone 4 — Mobile UX & OCR Capture
-1. Create medications feature directory (`mobile/src/screens/medications`) with:
-   - `MedicationListScreen` listing active medications, dose status, overdue badges.
-   - `MedicationDetailScreen` showing instructions, schedule, refill estimate, and intake history summary (last 7 days).
-   - `MedicationIntakeSheet` component for “Mark taken” / “Skip” actions.
-   - Navigation updates in `mobile/src/navigation/AppNavigator.tsx` to add tab/stack entry.
-2. Build API client (`mobile/src/api/medications.ts`) and associated hooks (`mobile/src/hooks/useMedications.ts`, `useMedicationIntake.ts`) with optimistic updates on acknowledgements.
-3. Implement manual entry form (`MedicationEditScreen` or modal) respecting owner-only editing; ensure collaborators fall back to read-only state.
-4. Integrate OCR:
+1. Keep the plan experience as the single landing surface:
+   - Extend `mobile/src/screens/plan/PlanScreen.tsx` (or equivalent) with a medications summary module that surfaces next doses, overdue badges, and quick actions.
+   - Launch medication detail via in-plan navigation (bottom sheet, drawer, or nested stack) so users never leave the plan context; avoid adding a top-level tab/route that competes with the plan entry point.
+   - Ensure collaborators accessing the app still route to the plan screen on launch and only see read-only medication rows.
+2. Build medication UI components inside `mobile/src/screens/plan/medications/` for list, detail, and intake experiences, reusing them within the plan screen without introducing a separate navigation root.
+3. Build API client (`mobile/src/api/medications.ts`) and associated hooks (`mobile/src/hooks/useMedications.ts`, `useMedicationIntake.ts`) with optimistic updates on acknowledgements; co-locate plan-specific selectors that hydrate the summary module.
+4. Implement manual entry form exposed from the plan page (`MedicationEditSheet` or modal) respecting owner-only editing; ensure collaborators fall back to read-only state.
+5. Integrate OCR:
    - Extend existing upload flow with a `Scan Prescription` option launching camera.
    - Add new OCR endpoint `POST /api/upload/medication-label` or reuse generic upload by passing intent flag.
    - Map parsed fields to form defaults; allow user to adjust before saving.
-5. Wire push notification handling: register new Expo notification categories, display in-app banners, deep-link taps to the relevant medication detail.
-6. Add local reminders fallback (optional) if backend push fails—log but defer full offline support.
-7. Create Vitest suites for hooks/components (`*.vitest.test.tsx`) and integration tests for navigation flows; mock Expo notifications to verify acknowledgement callouts.
+6. Wire push notification handling: register new Expo notification categories, display in-app banners, and deep-link taps to the plan screen with the medication detail sheet open.
+7. Add local reminders fallback (optional) if backend push fails—log but defer full offline support.
+8. Create Vitest suites for hooks/components (`*.vitest.test.tsx`) and integration tests that confirm the plan landing page renders medication summaries and can drill into detail flows; mock Expo notifications to verify acknowledgement callouts.
 
 ## Milestone 5 — Testing, QA, and Rollout
 1. Backend
@@ -96,8 +96,7 @@ Launch a first-class medication management experience that lets caregivers captu
 ## Exit Criteria
 - Schema + shared types merged, migrations applied in staging.
 - Backend routes pass contract tests; reminder engine verified with fake clock integration tests.
-- Mobile client displays medications, handles intake actions, and receives push notifications across platforms.
+- Mobile client lands on the plan screen, surfaces medication summaries there, handles intake actions, and receives push notifications across platforms.
 - OCR flow produces editable drafts with >80% field accuracy on test set.
 - Runbook created for support with troubleshooting steps for reminders and refill projections.
 - Feature flag enabled for pilot group with positive feedback and <5% reminder failure rate over first week.
-

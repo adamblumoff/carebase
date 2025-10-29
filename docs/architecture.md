@@ -40,7 +40,11 @@ Keep this document up to date when adjusting boundaries or adding new cross-cutt
 ## Medication Services (Planned)
 
 - `medicationService` will encapsulate CRUD, intake acknowledgements, refill projections, and reminder scheduling while delegating to `db/queries/medications*`.
-- New tables: `medications`, `medication_doses`, `medication_intakes`, plus a helper view/table for refill projections.
+- Persistence model now lives in `schema.sql`:
+  - `medications` captures ownership (`owner_id`), strength/form metadata, dosing instructions, pharmacist preferences, and archival timestamps.
+  - `medication_doses` stores fixed-time schedules with timezone context, reminder windows, and active flags.
+  - `medication_intakes` records adherence events with optional dose linkage, recorded timestamps, and actor metadata.
+  - `medication_refill_forecasts` tracks the projected run-out date per medication.
 - Reminder orchestration will live in `services/medicationReminderScheduler.ts`, reusing the existing queue/worker infrastructure (`services/realtime` bootstrap hooks).
 - Routes will mount under `/api/medications`; mutations require owner context, while collaborators receive read-only data.
-- Mobile clients will surface medications in a dedicated screen and interact through the shared API types defined in `shared/types`.
+- Shared contract types (`Medication`, `MedicationDose`, `MedicationIntake`, etc.) are exported from `@carebase/shared` for backend/mobile parity.

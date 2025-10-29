@@ -184,6 +184,61 @@ ALTER TABLE bill_drafts
 ALTER TABLE bill_drafts
   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 
+-- Medications table
+CREATE TABLE IF NOT EXISTS medications (
+  id SERIAL PRIMARY KEY,
+  recipient_id INTEGER NOT NULL REFERENCES recipients(id) ON DELETE CASCADE,
+  owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  strength_value DECIMAL(10, 2),
+  strength_unit VARCHAR(64),
+  form VARCHAR(64),
+  instructions TEXT,
+  notes TEXT,
+  prescribing_provider VARCHAR(255),
+  start_date DATE,
+  end_date DATE,
+  quantity_on_hand INTEGER,
+  refill_threshold INTEGER,
+  preferred_pharmacy VARCHAR(255),
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  archived_at TIMESTAMP
+);
+
+-- Medication doses table
+CREATE TABLE IF NOT EXISTS medication_doses (
+  id SERIAL PRIMARY KEY,
+  medication_id INTEGER NOT NULL REFERENCES medications(id) ON DELETE CASCADE,
+  label VARCHAR(255),
+  time_of_day TIME NOT NULL,
+  timezone VARCHAR(100) NOT NULL,
+  reminder_window_minutes INTEGER NOT NULL DEFAULT 120,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Medication intakes table
+CREATE TABLE IF NOT EXISTS medication_intakes (
+  id SERIAL PRIMARY KEY,
+  medication_id INTEGER NOT NULL REFERENCES medications(id) ON DELETE CASCADE,
+  dose_id INTEGER REFERENCES medication_doses(id) ON DELETE SET NULL,
+  scheduled_for TIMESTAMPTZ NOT NULL,
+  acknowledged_at TIMESTAMPTZ,
+  status VARCHAR(10) NOT NULL CHECK (status IN ('taken', 'skipped', 'expired')),
+  actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Medication refill forecasts helper table
+CREATE TABLE IF NOT EXISTS medication_refill_forecasts (
+  medication_id INTEGER PRIMARY KEY REFERENCES medications(id) ON DELETE CASCADE,
+  expected_run_out_on DATE,
+  calculated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Google sync links table
 CREATE TABLE IF NOT EXISTS google_sync_links (
   id SERIAL PRIMARY KEY,

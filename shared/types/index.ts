@@ -199,6 +199,87 @@ export interface BillPayload extends Omit<Bill, 'statementDate' | 'dueDate' | 'c
   createdAt: string;
 }
 
+// ========== MEDICATIONS ==========
+
+export type MedicationIntakeStatus = 'taken' | 'skipped' | 'expired';
+
+export interface Medication {
+  id: number;
+  recipientId: number;
+  ownerId: number;
+  name: string;
+  strengthValue: number | null;
+  strengthUnit: string | null;
+  form: string | null;
+  instructions: string | null;
+  notes: string | null;
+  prescribingProvider: string | null;
+  startDate: Date | null;
+  endDate: Date | null;
+  quantityOnHand: number | null;
+  refillThreshold: number | null;
+  preferredPharmacy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  archivedAt: Date | null;
+}
+
+export interface MedicationDose {
+  id: number;
+  medicationId: number;
+  label: string | null;
+  timeOfDay: string;
+  timezone: string;
+  reminderWindowMinutes: number;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface MedicationIntake {
+  id: number;
+  medicationId: number;
+  doseId: number | null;
+  scheduledFor: Date;
+  acknowledgedAt: Date | null;
+  status: MedicationIntakeStatus;
+  actorUserId: number | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface MedicationRefillProjection {
+  medicationId: number;
+  expectedRunOutOn: Date | null;
+  calculatedAt: Date;
+}
+
+export interface MedicationPayload extends Omit<Medication, 'startDate' | 'endDate' | 'createdAt' | 'updatedAt' | 'archivedAt'> {
+  startDate: string | null;
+  endDate: string | null;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt: string | null;
+}
+
+export interface MedicationDosePayload extends Omit<MedicationDose, 'createdAt' | 'updatedAt'> {
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MedicationIntakePayload extends Omit<MedicationIntake, 'scheduledFor' | 'acknowledgedAt' | 'createdAt' | 'updatedAt'> {
+  scheduledFor: string;
+  acknowledgedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MedicationWithDetails extends Medication {
+  doses: MedicationDose[];
+  upcomingIntakes: MedicationIntake[];
+  refillProjection: MedicationRefillProjection | null;
+}
+
 // ========== AUDIT ==========
 
 export interface AuditLog {
