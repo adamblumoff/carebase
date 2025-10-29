@@ -27,7 +27,8 @@ import {
   updateMedication,
   updateMedicationDose,
   updateMedicationIntake,
-  upsertMedicationRefillProjection
+  upsertMedicationRefillProjection,
+  ensureOwnerCollaborator
 } from '../db/queries.js';
 import type {
   MedicationDoseUpdateData,
@@ -45,7 +46,8 @@ const MAX_INTAKE_LIMIT = 50;
 
 interface MedicationContext {
   recipientId: number;
-  ownerId: number;
+  ownerUserId: number;
+  ownerCollaboratorId: number | null;
   role: 'owner' | 'collaborator';
 }
 
@@ -65,10 +67,19 @@ async function resolveContext(user: User): Promise<MedicationContext> {
   if (!context.recipient) {
     throw new NotFoundError('No recipient found');
   }
+  const role = context.collaborator ? 'collaborator' : 'owner';
+  let ownerCollaboratorId: number | null = context.collaborator?.id ?? null;
+
+  if (role === 'owner') {
+    const ownerCollaborator = await ensureOwnerCollaborator(context.recipient.id, user);
+    ownerCollaboratorId = ownerCollaborator.id;
+  }
+
   return {
     recipientId: context.recipient.id,
-    ownerId: context.recipient.userId,
-    role: context.collaborator ? 'collaborator' : 'owner'
+    ownerUserId: context.recipient.userId,
+    ownerCollaboratorId,
+    role
   };
 }
 
@@ -404,8 +415,12 @@ export async function createMedicationForOwner(
     throw new ForbiddenError('Cannot create medication for another recipient');
   }
 
+  if (context.ownerCollaboratorId == null) {
+    throw new ForbiddenError('Unable to determine owner context');
+  }
+
   const writeData = mapCreatePayload(payload);
-  const medication = await createMedication(context.recipientId, context.ownerId, writeData);
+  const medication = await createMedication(context.recipientId, context.ownerCollaboratorId, writeData);
 
   try {
     if (payload.doses && payload.doses.length > 0) {
@@ -415,11 +430,11 @@ export async function createMedicationForOwner(
       }
     }
   } catch (error) {
-    await deleteMedication(medication.id, context.ownerId);
+    await deleteMedication(medication.id, context.ownerCollaboratorId);
     throw error;
   }
 
-  await touchPlanForUser(context.ownerId);
+  await touchPlanForUser(context.ownerUserId);
   return hydrateMedication(medication.id, context);
 }
 
@@ -430,23 +445,29 @@ export async function updateMedicationForOwner(
 ): Promise<MedicationWithDetails> {
   const context = await resolveContext(user);
   ensureOwner(context);
+  if (context.ownerCollaboratorId == null) {
+    throw new ForbiddenError('Unable to determine owner context');
+  }
   const updateData = mapUpdatePayload(payload);
-  const updated = await updateMedication(medicationId, context.recipientId, context.ownerId, updateData);
+  const updated = await updateMedication(medicationId, context.recipientId, context.ownerCollaboratorId, updateData);
   if (!updated) {
     throw new NotFoundError('Medication not found');
   }
-  await touchPlanForUser(context.ownerId);
+  await touchPlanForUser(context.ownerUserId);
   return hydrateMedication(medicationId, context);
 }
 
 export async function archiveMedicationForOwner(user: User, medicationId: number): Promise<MedicationWithDetails> {
   const context = await resolveContext(user);
   ensureOwner(context);
-  const archived = await archiveMedication(medicationId, context.recipientId, context.ownerId);
+  if (context.ownerCollaboratorId == null) {
+    throw new ForbiddenError('Unable to determine owner context');
+  }
+  const archived = await archiveMedication(medicationId, context.recipientId, context.ownerCollaboratorId);
   if (!archived) {
     throw new NotFoundError('Medication not found');
   }
-  await touchPlanForUser(context.ownerId);
+  await touchPlanForUser(context.ownerUserId);
   return hydrateMedication(medicationId, context);
 }
 
@@ -456,11 +477,14 @@ export async function unarchiveMedicationForOwner(
 ): Promise<MedicationWithDetails> {
   const context = await resolveContext(user);
   ensureOwner(context);
-  const restored = await unarchiveMedication(medicationId, context.recipientId, context.ownerId);
+  if (context.ownerCollaboratorId == null) {
+    throw new ForbiddenError('Unable to determine owner context');
+  }
+  const restored = await unarchiveMedication(medicationId, context.recipientId, context.ownerCollaboratorId);
   if (!restored) {
     throw new NotFoundError('Medication not found');
   }
-  await touchPlanForUser(context.ownerId);
+  await touchPlanForUser(context.ownerUserId);
   return hydrateMedication(medicationId, context);
 }
 
@@ -477,7 +501,7 @@ export async function createMedicationDoseForOwner(
   }
   const doseInput = mapDoseInput(dose, 0);
   await createMedicationDose(medicationId, doseInput);
-  await touchPlanForUser(context.ownerId);
+  await touchPlanForUser(context.ownerUserId);
   return hydrateMedication(medicationId, context);
 }
 
@@ -498,7 +522,7 @@ export async function updateMedicationDoseForOwner(
   if (!updated) {
     throw new NotFoundError('Dose not found');
   }
-  await touchPlanForUser(context.ownerId);
+  await touchPlanForUser(context.ownerUserId);
   return hydrateMedication(medicationId, context);
 }
 
@@ -517,7 +541,7 @@ export async function deleteMedicationDoseForOwner(
   if (!removed) {
     throw new NotFoundError('Dose not found');
   }
-  await touchPlanForUser(context.ownerId);
+  await touchPlanForUser(context.ownerUserId);
   return hydrateMedication(medicationId, context);
 }
 
@@ -534,7 +558,7 @@ export async function recordMedicationIntake(
   }
   const writeData = buildIntakeWriteData(payload, user.id);
   await createMedicationIntake(medicationId, writeData);
-  await touchPlanForUser(context.ownerId);
+  await touchPlanForUser(context.ownerUserId);
   return hydrateMedication(medicationId, context);
 }
 
@@ -555,7 +579,7 @@ export async function updateMedicationIntakeStatus(
   if (!updated) {
     throw new NotFoundError('Intake not found');
   }
-  await touchPlanForUser(context.ownerId);
+  await touchPlanForUser(context.ownerUserId);
   return hydrateMedication(medicationId, context);
 }
 
@@ -572,7 +596,7 @@ export async function setMedicationRefillProjection(
   }
   const parsedDate = expectedRunOutOn ? parseOptionalDate(expectedRunOutOn, 'expectedRunOutOn') : null;
   await upsertMedicationRefillProjection(medicationId, parsedDate ?? null);
-  await touchPlanForUser(context.ownerId);
+  await touchPlanForUser(context.ownerUserId);
   return hydrateMedication(medicationId, context);
 }
 
@@ -587,6 +611,6 @@ export async function clearMedicationRefillProjection(
     throw new NotFoundError('Medication not found');
   }
   await deleteMedicationRefillProjection(medicationId);
-  await touchPlanForUser(context.ownerId);
+  await touchPlanForUser(context.ownerUserId);
   return hydrateMedication(medicationId, context);
 }

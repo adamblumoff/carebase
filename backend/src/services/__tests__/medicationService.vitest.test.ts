@@ -29,7 +29,8 @@ const queriesMock: QueryMocks = {
   updateMedication: vi.fn(),
   updateMedicationDose: vi.fn(),
   updateMedicationIntake: vi.fn(),
-  upsertMedicationRefillProjection: vi.fn()
+  upsertMedicationRefillProjection: vi.fn(),
+  ensureOwnerCollaborator: vi.fn()
 };
 
 vi.mock('../../db/queries.js', () => queriesMock);
@@ -64,7 +65,7 @@ function createMedication(overrides: Partial<Medication> = {}): Medication {
   return {
     id: 100,
     recipientId: 55,
-    ownerId: 10,
+    ownerId: 500,
     name: 'Lipitor',
     strengthValue: 5,
     strengthUnit: 'mg',
@@ -128,6 +129,7 @@ function resetMocks(): void {
   queriesMock.listMedicationDoses.mockResolvedValue([]);
   queriesMock.listMedicationIntakes.mockResolvedValue([]);
   queriesMock.getMedicationRefillProjection.mockResolvedValue(null);
+  queriesMock.ensureOwnerCollaborator.mockResolvedValue({ id: 500 });
 }
 
 beforeEach(() => {
@@ -143,7 +145,7 @@ describe('listMedicationsForUser', () => {
     const projection = createProjection();
 
     queriesMock.resolveRecipientContextForUser.mockResolvedValueOnce({
-      recipient: { id: medication.recipientId, userId: medication.ownerId, displayName: 'Alex', createdAt: now },
+      recipient: { id: medication.recipientId, userId: user.id, displayName: 'Alex', createdAt: now },
       collaborator: null
     });
     queriesMock.listMedicationsForRecipient.mockResolvedValueOnce([medication]);
@@ -158,6 +160,7 @@ describe('listMedicationsForUser', () => {
     expect(results[0]?.upcomingIntakes[0]?.status).toBe('taken');
     expect(results[0]?.refillProjection?.expectedRunOutOn).toEqual(projection.expectedRunOutOn);
     expect(queriesMock.listMedicationsForRecipient).toHaveBeenCalledWith(medication.recipientId, { includeArchived: true });
+    expect(queriesMock.ensureOwnerCollaborator).toHaveBeenCalledWith(medication.recipientId, user);
   });
 
   it('filters archived medications for collaborators', async () => {
@@ -165,7 +168,7 @@ describe('listMedicationsForUser', () => {
     const medication = createMedication({ archivedAt: new Date() });
 
     queriesMock.resolveRecipientContextForUser.mockResolvedValueOnce({
-      recipient: { id: medication.recipientId, userId: medication.ownerId, displayName: 'Alex', createdAt: now },
+      recipient: { id: medication.recipientId, userId: 42, displayName: 'Alex', createdAt: now },
       collaborator: { id: 77 }
     });
     queriesMock.listMedicationsForRecipient.mockResolvedValueOnce([medication]);
@@ -174,6 +177,7 @@ describe('listMedicationsForUser', () => {
 
     expect(results).toHaveLength(0);
     expect(queriesMock.listMedicationsForRecipient).toHaveBeenCalledWith(medication.recipientId, { includeArchived: false });
+    expect(queriesMock.ensureOwnerCollaborator).not.toHaveBeenCalled();
   });
 });
 
@@ -183,7 +187,7 @@ describe('createMedicationForOwner', () => {
     const medication = createMedication();
 
     queriesMock.resolveRecipientContextForUser.mockResolvedValueOnce({
-      recipient: { id: medication.recipientId, userId: medication.ownerId, displayName: 'Alex', createdAt: now },
+      recipient: { id: medication.recipientId, userId: user.id, displayName: 'Alex', createdAt: now },
       collaborator: null
     });
     queriesMock.createMedication.mockResolvedValueOnce(medication);
@@ -217,6 +221,12 @@ describe('createMedicationForOwner', () => {
     });
 
     expect(result.name).toBe('Lipitor');
+    expect(queriesMock.ensureOwnerCollaborator).toHaveBeenCalledWith(medication.recipientId, user);
+    expect(queriesMock.createMedication).toHaveBeenCalledWith(
+      medication.recipientId,
+      500,
+      expect.any(Object)
+    );
     expect(queriesMock.createMedicationDose).toHaveBeenCalledWith(medication.id, {
       label: 'Morning',
       timeOfDay: '08:00:00',
@@ -224,7 +234,7 @@ describe('createMedicationForOwner', () => {
       reminderWindowMinutes: 90,
       isActive: true
     });
-    expect(queriesMock.touchPlanForUser).toHaveBeenCalledWith(medication.ownerId);
+    expect(queriesMock.touchPlanForUser).toHaveBeenCalledWith(user.id);
   });
 
   it('throws when recipient mismatch', async () => {
@@ -262,7 +272,7 @@ describe('updateMedicationForOwner', () => {
     const medication = createMedication();
 
     queriesMock.resolveRecipientContextForUser.mockResolvedValueOnce({
-      recipient: { id: medication.recipientId, userId: medication.ownerId, displayName: 'Alex', createdAt: now },
+      recipient: { id: medication.recipientId, userId: user.id, displayName: 'Alex', createdAt: now },
       collaborator: null
     });
     queriesMock.updateMedication.mockResolvedValueOnce(medication);
@@ -278,10 +288,10 @@ describe('updateMedicationForOwner', () => {
     expect(queriesMock.updateMedication).toHaveBeenCalledWith(
       medication.id,
       medication.recipientId,
-      medication.ownerId,
+      500,
       expect.objectContaining({ name: 'Updated', preferredPharmacy: 'Walgreens' })
     );
-    expect(queriesMock.touchPlanForUser).toHaveBeenCalledWith(medication.ownerId);
+    expect(queriesMock.touchPlanForUser).toHaveBeenCalledWith(user.id);
   });
 
   it('throws NotFound when update returns null', async () => {
@@ -303,7 +313,7 @@ describe('recordMedicationIntake', () => {
     const medication = createMedication();
 
     queriesMock.resolveRecipientContextForUser.mockResolvedValueOnce({
-      recipient: { id: medication.recipientId, userId: medication.ownerId, displayName: 'Alex', createdAt: now },
+      recipient: { id: medication.recipientId, userId: user.id, displayName: 'Alex', createdAt: now },
       collaborator: null
     });
     queriesMock.getMedicationForRecipient.mockResolvedValueOnce(medication);
@@ -318,7 +328,7 @@ describe('recordMedicationIntake', () => {
 
     expect(result.recipientId).toBe(medication.recipientId);
     expect(queriesMock.createMedicationIntake).toHaveBeenCalled();
-    expect(queriesMock.touchPlanForUser).toHaveBeenCalledWith(medication.ownerId);
+    expect(queriesMock.touchPlanForUser).toHaveBeenCalledWith(user.id);
   });
 
   it('rejects collaborator mutation attempts', async () => {

@@ -58,11 +58,19 @@ async function seedMedicationFixture(pool: any) {
   );
   const recipientId = recipientInsert.rows[0].id as number;
 
+  const ownerCollaboratorInsert = await pool.query(
+    `INSERT INTO care_collaborators (recipient_id, user_id, email, role, status, invite_token, invited_by, invited_at, accepted_at)
+     VALUES ($1, $2, $3, 'owner', 'accepted', 'owner-token', $2, NOW(), NOW())
+     RETURNING *`,
+    [recipientId, owner.id, owner.email]
+  );
+  const ownerCollaboratorId = ownerCollaboratorInsert.rows[0].id as number;
+
   const medicationInsert = await pool.query(
     `INSERT INTO medications (recipient_id, owner_id, name, strength_value, strength_unit, form, instructions, start_date, quantity_on_hand, refill_threshold, preferred_pharmacy, created_at, updated_at)
      VALUES ($1, $2, 'Lipitor', 5, 'mg', 'tablet', 'Take daily', NOW()::date, 30, 10, 'CVS', NOW(), NOW())
      RETURNING *`,
-    [recipientId, owner.id]
+    [recipientId, ownerCollaboratorId]
   );
   const medicationId = medicationInsert.rows[0].id as number;
 

@@ -188,7 +188,7 @@ ALTER TABLE bill_drafts
 CREATE TABLE IF NOT EXISTS medications (
   id SERIAL PRIMARY KEY,
   recipient_id INTEGER NOT NULL REFERENCES recipients(id) ON DELETE CASCADE,
-  owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  owner_id INTEGER NOT NULL REFERENCES care_collaborators(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
   strength_value DECIMAL(10, 2),
   strength_unit VARCHAR(64),

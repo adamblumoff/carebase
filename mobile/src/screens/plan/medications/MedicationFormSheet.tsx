@@ -9,7 +9,9 @@ import {
   Text,
   TextInput,
   TouchableWithoutFeedback,
-  View
+  View,
+  Keyboard,
+  type KeyboardEvent
 } from 'react-native';
 import type { MedicationWithDetails } from '@carebase/shared';
 import { useTheme, spacing, radius } from '../../../theme';
@@ -124,6 +126,7 @@ export function MedicationFormSheet({
   const { palette } = useTheme();
   const [values, setValues] = useState<MedicationFormValues>(() => buildInitialValues(medication, defaultTimezone));
   const [fieldErrors, setFieldErrors] = useState<MedicationFormValidationErrors>({});
+  const [keyboardPadding, setKeyboardPadding] = useState(0);
 
   useEffect(() => {
     setValues(buildInitialValues(medication, defaultTimezone));
@@ -152,6 +155,21 @@ export function MedicationFormSheet({
     await onSubmit(result.normalized);
   };
 
+  useEffect(() => {
+    const handleShow = (event: KeyboardEvent) => {
+      setKeyboardPadding(event.endCoordinates?.height ?? 0);
+    };
+    const handleHide = () => {
+      setKeyboardPadding(0);
+    };
+    const showListener = Keyboard.addListener('keyboardDidShow', handleShow);
+    const hideListener = Keyboard.addListener('keyboardDidHide', handleHide);
+    return () => {
+      showListener.remove();
+      hideListener.remove();
+    };
+  }, []);
+
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.overlay}>
@@ -164,119 +182,121 @@ export function MedicationFormSheet({
           </View>
           <ScrollView
             style={styles.content}
-            contentContainerStyle={{ paddingBottom: spacing(3) }}
+            contentContainerStyle={{
+              paddingBottom: spacing(3) + keyboardPadding
+            }}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            <Text style={[styles.title, { color: palette.textPrimary }]}>
-              {mode === 'create' ? 'Add medication' : 'Edit medication'}
-            </Text>
+              <Text style={[styles.title, { color: palette.textPrimary }]}>
+                {mode === 'create' ? 'Add medication' : 'Edit medication'}
+              </Text>
 
-            <Text style={[styles.label, { color: palette.textSecondary }]}>Name</Text>
-            <TextInput
-              value={values.name}
-              onChangeText={(text) => handleChange('name', text)}
-              placeholder="e.g. Lipitor"
-              style={[
-                styles.input,
-                {
-                  borderColor: fieldErrors.name ? palette.danger : palette.border,
-                  color: palette.textPrimary
-                }
-              ]}
-              placeholderTextColor={palette.textMuted}
-              autoCapitalize="words"
-            />
-            {fieldErrors.name ? (
-              <Text style={[styles.inputErrorText, { color: palette.danger }]}>{fieldErrors.name}</Text>
-            ) : null}
+              <Text style={[styles.label, { color: palette.textSecondary }]}>Name</Text>
+              <TextInput
+                value={values.name}
+                onChangeText={(text) => handleChange('name', text)}
+                placeholder="e.g. Lipitor"
+                style={[
+                  styles.input,
+                  {
+                    borderColor: fieldErrors.name ? palette.danger : palette.border,
+                    color: palette.textPrimary
+                  }
+                ]}
+                placeholderTextColor={palette.textMuted}
+                autoCapitalize="words"
+              />
+              {fieldErrors.name ? (
+                <Text style={[styles.inputErrorText, { color: palette.danger }]}>{fieldErrors.name}</Text>
+              ) : null}
 
-            <Text style={[styles.label, { color: palette.textSecondary }]}>Instructions</Text>
-            <TextInput
-              value={values.instructions}
-              onChangeText={(text) => handleChange('instructions', text)}
-              placeholder="Add instructions (optional)"
-              style={[styles.input, styles.inputMultiline, { borderColor: palette.border, color: palette.textPrimary }]}
-              placeholderTextColor={palette.textMuted}
+              <Text style={[styles.label, { color: palette.textSecondary }]}>Instructions</Text>
+              <TextInput
+                value={values.instructions}
+                onChangeText={(text) => handleChange('instructions', text)}
+                placeholder="Add instructions (optional)"
+                style={[styles.input, styles.inputMultiline, { borderColor: palette.border, color: palette.textPrimary }]}
+                placeholderTextColor={palette.textMuted}
               multiline
-            />
+              />
 
-            <Text style={[styles.sectionHeading, { color: palette.textPrimary }]}>Primary dose</Text>
+              <Text style={[styles.sectionHeading, { color: palette.textPrimary }]}>Primary dose</Text>
 
-            <Text style={[styles.label, { color: palette.textSecondary }]}>Time of day (HH:mm)</Text>
-            <TextInput
-              value={values.timeOfDay}
-              onChangeText={(text) => handleChange('timeOfDay', text)}
-              placeholder="08:00"
-              style={[
-                styles.input,
-                {
-                  borderColor: fieldErrors.timeOfDay ? palette.danger : palette.border,
-                  color: palette.textPrimary
-                }
-              ]}
-              placeholderTextColor={palette.textMuted}
-              autoCapitalize="none"
-              keyboardType="numeric"
-            />
-            {fieldErrors.timeOfDay ? (
-              <Text style={[styles.inputErrorText, { color: palette.danger }]}>{fieldErrors.timeOfDay}</Text>
-            ) : null}
+              <Text style={[styles.label, { color: palette.textSecondary }]}>Time of day (HH:mm)</Text>
+              <TextInput
+                value={values.timeOfDay}
+                onChangeText={(text) => handleChange('timeOfDay', text)}
+                placeholder="08:00"
+                style={[
+                  styles.input,
+                  {
+                    borderColor: fieldErrors.timeOfDay ? palette.danger : palette.border,
+                    color: palette.textPrimary
+                  }
+                ]}
+                placeholderTextColor={palette.textMuted}
+                autoCapitalize="none"
+                keyboardType="numeric"
+              />
+              {fieldErrors.timeOfDay ? (
+                <Text style={[styles.inputErrorText, { color: palette.danger }]}>{fieldErrors.timeOfDay}</Text>
+              ) : null}
 
-            <Text style={[styles.label, { color: palette.textSecondary }]}>Timezone</Text>
-            <TextInput
-              value={values.timezone}
-              onChangeText={(text) => handleChange('timezone', text)}
-              placeholder="America/New_York"
-              style={[
-                styles.input,
-                {
-                  borderColor: fieldErrors.timezone ? palette.danger : palette.border,
-                  color: palette.textPrimary
-                }
-              ]}
-              placeholderTextColor={palette.textMuted}
-              autoCapitalize="words"
-            />
-            {fieldErrors.timezone ? (
-              <Text style={[styles.inputErrorText, { color: palette.danger }]}>{fieldErrors.timezone}</Text>
-            ) : null}
+              <Text style={[styles.label, { color: palette.textSecondary }]}>Timezone</Text>
+              <TextInput
+                value={values.timezone}
+                onChangeText={(text) => handleChange('timezone', text)}
+                placeholder="America/New_York"
+                style={[
+                  styles.input,
+                  {
+                    borderColor: fieldErrors.timezone ? palette.danger : palette.border,
+                    color: palette.textPrimary
+                  }
+                ]}
+                placeholderTextColor={palette.textMuted}
+                autoCapitalize="words"
+              />
+              {fieldErrors.timezone ? (
+                <Text style={[styles.inputErrorText, { color: palette.danger }]}>{fieldErrors.timezone}</Text>
+              ) : null}
 
-            {error ? (
-              <View style={[styles.errorBanner, { backgroundColor: palette.dangerSoft }]}>
-                <Text style={[styles.errorText, { color: palette.danger }]}>{error}</Text>
+              {error ? (
+                <View style={[styles.errorBanner, { backgroundColor: palette.dangerSoft }]}>
+                  <Text style={[styles.errorText, { color: palette.danger }]}>{error}</Text>
+                </View>
+              ) : null}
+
+              <View style={styles.actions}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.secondaryButton,
+                    { borderColor: palette.border },
+                    pressed && styles.secondaryButtonPressed
+                  ]}
+                  onPress={onClose}
+                  disabled={submitting}
+                >
+                  <Text style={[styles.secondaryButtonText, { color: palette.textSecondary }]}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.primaryButton,
+                    { backgroundColor: palette.primary },
+                    (!canSubmit || submitting) && styles.primaryButtonDisabled,
+                    pressed && canSubmit && !submitting && styles.primaryButtonPressed
+                  ]}
+                  onPress={handleSubmit}
+                  disabled={!canSubmit}
+                >
+                  {submitting ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={styles.primaryButtonText}>{ctaLabel ?? (mode === 'create' ? 'Save medication' : 'Save changes')}</Text>
+                  )}
+                </Pressable>
               </View>
-            ) : null}
-
-            <View style={styles.actions}>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.secondaryButton,
-                  { borderColor: palette.border },
-                  pressed && styles.secondaryButtonPressed
-                ]}
-                onPress={onClose}
-                disabled={submitting}
-              >
-                <Text style={[styles.secondaryButtonText, { color: palette.textSecondary }]}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.primaryButton,
-                  { backgroundColor: palette.primary },
-                  (disabled || submitting) && styles.primaryButtonDisabled,
-                  pressed && !disabled && !submitting && styles.primaryButtonPressed
-                ]}
-                onPress={handleSubmit}
-                disabled={!canSubmit}
-              >
-                {submitting ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <Text style={styles.primaryButtonText}>{ctaLabel ?? (mode === 'create' ? 'Save medication' : 'Save changes')}</Text>
-                )}
-              </Pressable>
-            </View>
           </ScrollView>
         </View>
       </View>
