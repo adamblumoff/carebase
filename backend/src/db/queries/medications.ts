@@ -360,6 +360,14 @@ export async function unarchiveMedication(
   return result.rows[0] ? toMedication(result.rows[0]) : null;
 }
 
+export async function deleteMedication(id: number, ownerId: number): Promise<boolean> {
+  const result = await db.query(
+    `DELETE FROM medications WHERE id = $1 AND owner_id = $2`,
+    [id, ownerId]
+  );
+  return result.rowCount > 0;
+}
+
 export async function getMedicationById(id: number): Promise<Medication | null> {
   const result = await db.query<MedicationRow>(
     `SELECT * FROM medications WHERE id = $1`,

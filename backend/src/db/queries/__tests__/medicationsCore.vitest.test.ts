@@ -13,6 +13,7 @@ const {
   createMedication,
   updateMedication,
   archiveMedication,
+  deleteMedication,
   listMedicationsForRecipient,
   createMedicationDose,
   updateMedicationDose,
@@ -161,6 +162,17 @@ describe('medication queries', () => {
     await listMedicationsForRecipient(10, { includeArchived: true });
     const [listAllSql] = dbMocks.query.mock.calls[2] as [string, unknown[]];
     expect(listAllSql).not.toContain('archived_at IS NULL');
+  });
+
+  it('deletes medication for owner', async () => {
+    dbMocks.query.mockResolvedValueOnce({ rowCount: 1 });
+
+    const removed = await deleteMedication(42, 3);
+
+    expect(removed).toBe(true);
+    const [sql, params] = dbMocks.query.mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain('DELETE FROM medications');
+    expect(params).toEqual([42, 3]);
   });
 });
 

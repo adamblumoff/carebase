@@ -120,6 +120,34 @@ export {
   updateBillStatusForRecipient
 } from './queries/bills.js';
 
+export {
+  archiveMedication,
+  createMedication,
+  createMedicationDose,
+  createMedicationIntake,
+  deleteMedication,
+  deleteMedicationDose,
+  deleteMedicationRefillProjection,
+  getMedicationById,
+  getMedicationForRecipient,
+  getMedicationRefillProjection,
+  listMedicationDoses,
+  listMedicationIntakes,
+  listMedicationsForRecipient,
+  unarchiveMedication,
+  updateMedication,
+  updateMedicationDose,
+  updateMedicationIntake,
+  upsertMedicationRefillProjection
+} from './queries/medications.js';
+export type {
+  MedicationWriteData,
+  MedicationDoseWriteData,
+  MedicationDoseUpdateData,
+  MedicationIntakeWriteData,
+  MedicationIntakeUpdateData
+} from './queries/medications.js';
+
 export { createAuditLog, getLowConfidenceItems, reclassifyItem } from './queries/audit.js';
 export type { LowConfidenceItemRow } from './queries/audit.js';
 
