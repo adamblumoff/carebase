@@ -19,6 +19,21 @@ export const API_ENDPOINTS = {
   deleteBill: (id: number) => `/api/bills/${id}`,
   markBillPaid: (id: number) => `/api/bills/${id}/mark-paid`,
 
+  // Medications
+  medications: {
+    list: '/api/medications',
+    create: '/api/medications',
+    detail: (id: number) => `/api/medications/${id}`,
+    update: (id: number) => `/api/medications/${id}`,
+    archive: (id: number) => `/api/medications/${id}/archive`,
+    unarchive: (id: number) => `/api/medications/${id}/unarchive`,
+    doses: (id: number) => `/api/medications/${id}/doses`,
+    dose: (id: number, doseId: number) => `/api/medications/${id}/doses/${doseId}`,
+    intakes: (id: number) => `/api/medications/${id}/intakes`,
+    intake: (id: number, intakeId: number) => `/api/medications/${id}/intakes/${intakeId}`,
+    refill: (id: number) => `/api/medications/${id}/refill`
+  },
+
   // Upload
   uploadPhoto: '/api/upload/photo',
 

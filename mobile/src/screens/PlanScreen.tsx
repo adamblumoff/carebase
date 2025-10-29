@@ -22,7 +22,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
-import type { BillStatus, PendingReviewDraft, PendingReviewItem } from '@carebase/shared';
+import type { BillStatus, PendingReviewDraft, PendingReviewItem, MedicationWithDetails } from '@carebase/shared';
 import { useTheme, spacing, radius, type Palette, type Shadow } from '../theme';
 import { useToast } from '../ui/ToastProvider';
 import { formatDisplayDate, formatDisplayTime, parseServerDate } from '../utils/date';
@@ -32,6 +32,11 @@ import { decideRefreshToast, findCollaboratorEmail, summarizePlan } from './plan
 import { usePendingReviews } from '../hooks/usePendingReviews';
 import type { ReviewBillPayload } from '../api/review';
 import DateTimePickerModal from '../components/DateTimePickerModal';
+import { useMedications } from '../hooks/useMedications';
+import { useMedicationSummary } from './plan/medications/useMedicationSummary';
+import { MedicationSummaryList } from './plan/medications/MedicationSummaryList';
+import { MedicationDetailSheet } from './plan/medications/MedicationDetailSheet';
+import { MedicationFormSheet } from './plan/medications/MedicationFormSheet';
 
 type DraftFormState = {
   amount: string;
@@ -53,11 +58,13 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Plan'>;
 
 export default function PlanScreen({ navigation }: Props) {
   const { palette, shadow } = useTheme();
+  const defaultTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC', []);
   const styles = useMemo(() => createStyles(palette, shadow), [palette, shadow]);
   const toast = useToast();
   const { plan, loading, error, refreshing, refresh, lastUpdate } = usePlan();
   const lastToastRef = useRef<number>(0);
   const summary = useMemo(() => summarizePlan(plan ?? null), [plan]);
+  const planRecipientId = plan?.recipient?.id ?? null;
   const pendingReviews = usePendingReviews();
   const [reviewModalVisible, setReviewModalVisible] = useState(false);
   const [selectedReview, setSelectedReview] = useState<PendingReviewItem | null>(null);
@@ -74,6 +81,22 @@ export default function PlanScreen({ navigation }: Props) {
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [modalAction, setModalAction] = useState<'save' | 'approve' | null>(null);
   const [rejectingId, setRejectingId] = useState<number | null>(null);
+
+  const medicationsState = useMedications();
+  const [medicationSheetVisible, setMedicationSheetVisible] = useState(false);
+  const [selectedMedicationId, setSelectedMedicationId] = useState<number | null>(null);
+  const [medicationActionError, setMedicationActionError] = useState<string | null>(null);
+  const [medicationActionPending, setMedicationActionPending] = useState(false);
+  const [medicationFormVisible, setMedicationFormVisible] = useState(false);
+  const [medicationFormMode, setMedicationFormMode] = useState<'create' | 'edit'>('create');
+  const [medicationFormSubmitting, setMedicationFormSubmitting] = useState(false);
+  const [medicationFormError, setMedicationFormError] = useState<string | null>(null);
+  const [medicationFormEditing, setMedicationFormEditing] = useState<MedicationWithDetails | null>(null);
+  const medicationSummary = useMedicationSummary(medicationsState.medications);
+  const activeMedication = useMemo(
+    () => medicationsState.medications.find((med) => med.id === selectedMedicationId) ?? null,
+    [medicationsState.medications, selectedMedicationId]
+  );
 
   const AnimatedStatusBadge: React.FC<{ status: string }> = ({ status }) => {
     const scale = useRef(new Animated.Value(1)).current;
@@ -347,6 +370,154 @@ export default function PlanScreen({ navigation }: Props) {
     });
   }, [refresh]);
 
+  const openMedicationDetail = useCallback((id: number) => {
+    setSelectedMedicationId(id);
+    setMedicationActionError(null);
+    setMedicationSheetVisible(true);
+  }, []);
+
+  const closeMedicationDetail = useCallback(() => {
+    setMedicationSheetVisible(false);
+    setMedicationActionError(null);
+    setMedicationActionPending(false);
+    setSelectedMedicationId(null);
+  }, []);
+
+  const handleMedicationMutator = useCallback(
+    async (mutator: () => Promise<void>) => {
+      setMedicationActionPending(true);
+      setMedicationActionError(null);
+      try {
+        await mutator();
+      } catch (error: any) {
+        const message = error?.response?.data?.error || error?.message || 'Unable to update medication right now.';
+        setMedicationActionError(message);
+      } finally {
+        setMedicationActionPending(false);
+      }
+    },
+    []
+  );
+
+  const handleMarkIntake = useCallback(
+    async (status: 'taken' | 'skipped', intakeId: number) => {
+      if (!selectedMedicationId) return;
+      await handleMedicationMutator(() =>
+        medicationsState.updateIntakeStatus(selectedMedicationId, intakeId, status)
+      );
+    },
+    [handleMedicationMutator, medicationsState, selectedMedicationId]
+  );
+
+  const handleRecordNow = useCallback(async () => {
+    if (!selectedMedicationId) return;
+    await handleMedicationMutator(() =>
+      medicationsState.recordIntake(selectedMedicationId, {
+        doseId: null,
+        scheduledFor: new Date().toISOString(),
+        status: 'taken'
+      })
+    );
+  }, [handleMedicationMutator, medicationsState, selectedMedicationId]);
+
+const openCreateMedication = useCallback(() => {
+  setMedicationFormMode('create');
+  setMedicationFormEditing(null);
+  setMedicationFormError(null);
+  setMedicationFormVisible(true);
+}, []);
+
+const closeMedicationForm = useCallback(() => {
+  setMedicationFormVisible(false);
+  setMedicationFormError(null);
+  setMedicationFormEditing(null);
+}, []);
+
+const openEditMedication = useCallback(() => {
+  if (!activeMedication) return;
+  setMedicationFormMode('edit');
+  setMedicationFormEditing(activeMedication);
+  setMedicationFormError(null);
+  setMedicationFormVisible(true);
+  setMedicationSheetVisible(false);
+}, [activeMedication]);
+
+const handleMedicationFormSubmit = useCallback(
+  async (values: { name: string; instructions: string; timeOfDay: string; timezone: string }) => {
+    if (!planRecipientId && medicationFormMode === 'create') {
+      setMedicationFormError('Recipient not loaded yet.');
+      return;
+    }
+    setMedicationFormSubmitting(true);
+    setMedicationFormError(null);
+    try {
+      if (medicationFormMode === 'create') {
+        const created = await medicationsState.createMedication({
+          recipientId: planRecipientId!,
+          name: values.name.trim(),
+          instructions: values.instructions.trim() || null,
+          doses: [
+            {
+              label: 'Primary',
+              timeOfDay: values.timeOfDay,
+              timezone: values.timezone,
+              reminderWindowMinutes: 120,
+              isActive: true
+            }
+          ]
+        });
+        closeMedicationForm();
+        setSelectedMedicationId(created.id);
+        setMedicationSheetVisible(true);
+      } else if (medicationFormMode === 'edit' && medicationFormEditing) {
+        const medicationId = medicationFormEditing.id;
+        const updates: any = {};
+        const trimmedName = values.name.trim();
+        if (trimmedName && trimmedName !== medicationFormEditing.name) {
+          updates.name = trimmedName;
+        }
+        const trimmedInstructions = values.instructions.trim();
+        if ((medicationFormEditing.instructions ?? '') !== trimmedInstructions) {
+          updates.instructions = trimmedInstructions;
+        }
+        if (Object.keys(updates).length > 0) {
+          await medicationsState.updateMedication(medicationId, updates);
+        }
+        const existingDose = medicationFormEditing.doses[0] ?? null;
+        if (existingDose) {
+          const doseUpdates: any = {};
+          if (existingDose.timeOfDay !== values.timeOfDay) {
+            doseUpdates.timeOfDay = values.timeOfDay;
+          }
+          if (existingDose.timezone !== values.timezone) {
+            doseUpdates.timezone = values.timezone;
+          }
+          if (Object.keys(doseUpdates).length > 0) {
+            await medicationsState.updateDose(medicationId, existingDose.id, doseUpdates);
+          }
+        } else {
+          await medicationsState.createDose(medicationId, {
+            label: 'Primary',
+            timeOfDay: values.timeOfDay,
+            timezone: values.timezone,
+            reminderWindowMinutes: 120,
+            isActive: true
+          });
+        }
+        closeMedicationForm();
+        setSelectedMedicationId(medicationId);
+        setMedicationSheetVisible(true);
+      }
+    } catch (error: any) {
+      const message = error?.response?.data?.error || error?.message || 'Unable to save medication right now.';
+      setMedicationFormError(message);
+    } finally {
+      setMedicationFormSubmitting(false);
+    }
+  },
+  [medicationFormMode, medicationFormEditing, medicationsState, planRecipientId]
+);
+
   const formatDate = useCallback(
     (dateString: string) => formatDisplayDate(parseServerDate(dateString)),
     []
@@ -390,6 +561,74 @@ export default function PlanScreen({ navigation }: Props) {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.primary} />
         }
       >
+        {medicationsState.loading ? (
+          <View style={styles.medicationLoading}>
+            <ActivityIndicator color={palette.primary} size="small" />
+            <Text style={styles.medicationLoadingText}>Loading medications…</Text>
+          </View>
+        ) : null}
+        {medicationsState.error ? (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>{medicationsState.error}</Text>
+          </View>
+        ) : null}
+        {medicationSummary.length > 0 ? (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleRow}>
+                <Text style={styles.sectionIcon}>💊</Text>
+                <Text style={styles.sectionTitle}>Medications</Text>
+              </View>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.linkButton,
+                  pressed && styles.linkButtonPressed
+                ]}
+                onPress={openCreateMedication}
+              >
+                <Text style={[styles.linkButtonText, { color: palette.primary }]}>Add medication</Text>
+              </Pressable>
+            </View>
+            <MedicationSummaryList
+              items={medicationSummary}
+              onSelect={openMedicationDetail}
+            />
+          </View>
+        ) : medicationsState.loading ? null : (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleRow}>
+                <Text style={styles.sectionIcon}>💊</Text>
+                <Text style={styles.sectionTitle}>Medications</Text>
+              </View>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.linkButton,
+                  pressed && styles.linkButtonPressed
+                ]}
+                onPress={openCreateMedication}
+              >
+                <Text style={[styles.linkButtonText, { color: palette.primary }]}>Add medication</Text>
+              </Pressable>
+            </View>
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>No medications yet</Text>
+              <Text style={styles.emptyText}>
+                When you add medications, they’ll show up here with upcoming doses and quick actions.
+              </Text>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.primaryCta,
+                  { backgroundColor: palette.primary },
+                  pressed && styles.primaryCtaPressed
+                ]}
+                onPress={openCreateMedication}
+              >
+                <Text style={styles.primaryCtaText}>Add medication</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
         <View style={styles.header}>
           <View style={styles.headerButtons}>
             <Pressable
@@ -610,6 +849,28 @@ export default function PlanScreen({ navigation }: Props) {
         </View>
       </ScrollView>
 
+      <MedicationDetailSheet
+        visible={medicationSheetVisible}
+        medication={activeMedication}
+        onClose={closeMedicationDetail}
+        onMarkTaken={(intakeId) => handleMarkIntake('taken', intakeId)}
+        onMarkSkipped={(intakeId) => handleMarkIntake('skipped', intakeId)}
+        onRecordNow={handleRecordNow}
+        onEdit={openEditMedication}
+        actionPending={medicationActionPending}
+        actionError={medicationActionError}
+      />
+      <MedicationFormSheet
+        visible={medicationFormVisible}
+        mode={medicationFormMode}
+        medication={medicationFormEditing}
+        defaultTimezone={defaultTimezone}
+        onClose={closeMedicationForm}
+        onSubmit={handleMedicationFormSubmit}
+        submitting={medicationFormSubmitting}
+        error={medicationFormError}
+      />
+
       <Modal
         visible={reviewModalVisible}
         animationType="slide"
@@ -802,6 +1063,21 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
     scrollContent: {
       paddingBottom: spacing(4),
     },
+    medicationLoading: {
+      marginHorizontal: spacing(3),
+      marginTop: spacing(2),
+      paddingVertical: spacing(2),
+      paddingHorizontal: spacing(2),
+      borderRadius: radius.md,
+      backgroundColor: palette.surface,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing(1.5)
+    },
+    medicationLoadingText: {
+      color: palette.textSecondary,
+      fontSize: 13
+    },
     loadingState: {
       flex: 1,
       justifyContent: 'center',
@@ -950,6 +1226,18 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
       fontSize: 13,
       color: palette.textMuted,
     },
+    linkButton: {
+      paddingHorizontal: spacing(1),
+      paddingVertical: spacing(0.5),
+      borderRadius: radius.sm
+    },
+    linkButtonPressed: {
+      opacity: 0.8
+    },
+    linkButtonText: {
+      fontSize: 13,
+      fontWeight: '600'
+    },
     sectionDivider: {
       height: 1,
       backgroundColor: palette.primary,
@@ -1030,6 +1318,20 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
       borderRadius: radius.md,
       padding: spacing(3),
       alignItems: 'center',
+    },
+    primaryCta: {
+      marginTop: spacing(2),
+      paddingHorizontal: spacing(3),
+      paddingVertical: spacing(1.25),
+      borderRadius: radius.sm
+    },
+    primaryCtaPressed: {
+      opacity: 0.9
+    },
+    primaryCtaText: {
+      color: '#fff',
+      fontWeight: '600',
+      fontSize: 15
     },
     emptyTitle: {
       fontSize: 16,
