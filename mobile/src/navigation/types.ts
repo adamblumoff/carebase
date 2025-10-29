@@ -1,10 +1,10 @@
-import type { Appointment, Bill } from '@carebase/shared';
+import type { Appointment, Bill, MedicationDraft } from '@carebase/shared';
 
 export type RootStackParamList = {
   Login: undefined;
-  Plan: undefined;
+  Plan: { medicationDraft?: MedicationDraft | null } | undefined;
   AppointmentDetail: { appointment: Appointment };
   BillDetail: { bill: Bill };
   Settings: undefined;
-  Camera: undefined;
+  Camera: { intent?: 'bill' | 'medication'; timezone?: string } | undefined;
 };

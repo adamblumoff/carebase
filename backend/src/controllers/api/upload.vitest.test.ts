@@ -234,4 +234,49 @@ describe('uploadPhoto controller', () => {
       })
     );
   });
+
+  it('returns medication draft when medication intent is specified', async () => {
+    const extractMock = vi.spyOn(ocr, 'extractTextFromImage').mockResolvedValue(
+      'Lipitor 10 mg\nTake one tablet twice daily\n8 AM\n8 PM'
+    );
+    const storeFileMock = vi.spyOn(storage, 'storeFile');
+    const storeTextMock = vi.spyOn(storage, 'storeText');
+    const createSourceMock = vi.spyOn(queries, 'createSource');
+    const createItemMock = vi.spyOn(queries, 'createItem');
+
+    const res: Partial<Response> = {
+      status: vi.fn(() => res as Response),
+      json: vi.fn(() => res as Response)
+    };
+
+    await uploadPhoto(
+      {
+        user: { id: 3 } as User,
+        file: {
+          buffer: Buffer.from('med'),
+          mimetype: 'image/jpeg',
+          originalname: 'label.jpg'
+        },
+        query: { intent: 'medication', timezone: 'America/Chicago' }
+      } as unknown as Request,
+      res as Response
+    );
+
+    expect(res.status).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        medicationDraft: expect.objectContaining({
+          name: 'Lipitor 10 mg',
+          doses: expect.arrayContaining([
+            expect.objectContaining({ timeOfDay: '08:00', timezone: 'America/Chicago' })
+          ])
+        })
+      })
+    );
+    expect(extractMock).toHaveBeenCalledTimes(1);
+    expect(storeFileMock).not.toHaveBeenCalled();
+    expect(storeTextMock).not.toHaveBeenCalled();
+    expect(createSourceMock).not.toHaveBeenCalled();
+    expect(createItemMock).not.toHaveBeenCalled();
+  });
 });

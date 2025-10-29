@@ -13,7 +13,7 @@ import {
   Keyboard,
   type KeyboardEvent
 } from 'react-native';
-import type { MedicationWithDetails } from '@carebase/shared';
+import type { MedicationDraft, MedicationWithDetails } from '@carebase/shared';
 import { useTheme, spacing, radius } from '../../../theme';
 import DateTimePickerModal from '../../../components/DateTimePickerModal';
 import {
@@ -30,6 +30,7 @@ interface MedicationFormSheetProps {
   mode: 'create' | 'edit';
   medication: MedicationWithDetails | null;
   defaultTimezone: string;
+  draft?: MedicationDraft | null;
   onClose: () => void;
   onSubmit: (values: MedicationFormValues) => Promise<void>;
   submitting: boolean;
@@ -57,6 +58,7 @@ export function MedicationFormSheet({
   mode,
   medication,
   defaultTimezone,
+  draft,
   onClose,
   onSubmit,
   submitting,
@@ -64,16 +66,16 @@ export function MedicationFormSheet({
   ctaLabel
 }: MedicationFormSheetProps) {
   const { palette } = useTheme();
-  const [values, setValues] = useState<MedicationFormValues>(() => buildInitialValues(medication, defaultTimezone));
+  const [values, setValues] = useState<MedicationFormValues>(() => buildInitialValues(medication, defaultTimezone, draft));
   const [fieldErrors, setFieldErrors] = useState<MedicationFormValidationErrors>({});
   const [keyboardPadding, setKeyboardPadding] = useState(0);
   const [activeDosePicker, setActiveDosePicker] = useState<{ index: number; date: Date } | null>(null);
   const [dosePickerVisible, setDosePickerVisible] = useState(false);
 
   useEffect(() => {
-    setValues(buildInitialValues(medication, defaultTimezone));
+    setValues(buildInitialValues(medication, defaultTimezone, draft));
     setFieldErrors({});
-  }, [medication, defaultTimezone, visible]);
+  }, [medication, defaultTimezone, visible, draft]);
 
   const canSubmit = values.name.trim().length > 0 && values.doses.length > 0 && !submitting;
 

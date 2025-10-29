@@ -22,7 +22,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
-import type { BillStatus, PendingReviewDraft, PendingReviewItem, MedicationWithDetails } from '@carebase/shared';
+import type {
+  BillStatus,
+  PendingReviewDraft,
+  PendingReviewItem,
+  MedicationWithDetails,
+  MedicationDraft
+} from '@carebase/shared';
 import { useTheme, spacing, radius, type Palette, type Shadow } from '../theme';
 import { useToast } from '../ui/ToastProvider';
 import { formatDisplayDate, formatDisplayTime, parseServerDate } from '../utils/date';
@@ -61,7 +67,7 @@ const toIsoDate = (value: Date): string => {
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Plan'>;
 
-export default function PlanScreen({ navigation }: Props) {
+export default function PlanScreen({ navigation, route }: Props) {
   const { palette, shadow } = useTheme();
   const defaultTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC', []);
   const styles = useMemo(() => createStyles(palette, shadow), [palette, shadow]);
@@ -115,6 +121,7 @@ export default function PlanScreen({ navigation }: Props) {
   const [medicationFormSubmitting, setMedicationFormSubmitting] = useState(false);
   const [medicationFormError, setMedicationFormError] = useState<string | null>(null);
   const [medicationFormEditing, setMedicationFormEditing] = useState<MedicationWithDetails | null>(null);
+  const [medicationFormPrefill, setMedicationFormPrefill] = useState<MedicationDraft | null>(null);
   const medicationSummary = useMedicationSummary(medicationsState.medications);
   const activeMedication = useMemo(
     () => medicationsState.medications.find((med) => med.id === selectedMedicationId) ?? null,
@@ -447,21 +454,39 @@ export default function PlanScreen({ navigation }: Props) {
     );
   }, [canManageMedications, handleMedicationMutator, medicationsState, selectedMedicationId]);
 
-  const openCreateMedication = useCallback(() => {
+  const openCreateMedication = useCallback((draft?: MedicationDraft | null) => {
     if (!canManageMedications) {
       toast.showToast('Only the plan owner can manage medications.');
       return;
     }
     setMedicationFormMode('create');
     setMedicationFormEditing(null);
+    setMedicationFormPrefill(draft ?? null);
     setMedicationFormError(null);
     setMedicationFormVisible(true);
   }, [canManageMedications, toast]);
+
+  const openMedicationScanner = useCallback(() => {
+    if (!canManageMedications) {
+      toast.showToast('Only the plan owner can manage medications.');
+      return;
+    }
+    navigation.navigate('Camera', { intent: 'medication', timezone: defaultTimezone });
+  }, [canManageMedications, defaultTimezone, navigation, toast]);
+
+  useEffect(() => {
+    const draftFromRoute = route.params?.medicationDraft ?? null;
+    if (draftFromRoute) {
+      openCreateMedication(draftFromRoute);
+      navigation.setParams({ medicationDraft: undefined });
+    }
+  }, [navigation, openCreateMedication, route.params?.medicationDraft]);
 
   const closeMedicationForm = useCallback(() => {
     setMedicationFormVisible(false);
     setMedicationFormError(null);
     setMedicationFormEditing(null);
+    setMedicationFormPrefill(null);
   }, []);
 
   const openEditMedication = useCallback(() => {
@@ -473,6 +498,7 @@ export default function PlanScreen({ navigation }: Props) {
     }
     setMedicationFormMode('edit');
     setMedicationFormEditing(activeMedication);
+    setMedicationFormPrefill(null);
     setMedicationFormError(null);
     setMedicationFormVisible(true);
     setMedicationSheetVisible(false);
@@ -647,15 +673,26 @@ export default function PlanScreen({ navigation }: Props) {
                 <Text style={styles.sectionTitle}>Medications</Text>
               </View>
               {canManageMedications ? (
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.linkButton,
-                    pressed && styles.linkButtonPressed
-                  ]}
-                  onPress={openCreateMedication}
-                >
-                  <Text style={[styles.linkButtonText, { color: palette.primary }]}>Add medication</Text>
-                </Pressable>
+                <View style={styles.sectionActions}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.linkButton,
+                      pressed && styles.linkButtonPressed
+                    ]}
+                    onPress={() => openCreateMedication()}
+                  >
+                    <Text style={[styles.linkButtonText, { color: palette.primary }]}>Add medication</Text>
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.secondaryLinkButton,
+                      pressed && styles.linkButtonPressed
+                    ]}
+                    onPress={openMedicationScanner}
+                  >
+                    <Text style={[styles.secondaryLinkText, { color: palette.primary }]}>Scan prescription</Text>
+                  </Pressable>
+                </View>
               ) : (
                 <Text style={[styles.readOnlyLabel, { color: palette.textMuted }]}>View only</Text>
               )}
@@ -678,7 +715,7 @@ export default function PlanScreen({ navigation }: Props) {
                     styles.linkButton,
                     pressed && styles.linkButtonPressed
                   ]}
-                  onPress={openCreateMedication}
+                  onPress={() => openCreateMedication()}
                 >
                   <Text style={[styles.linkButtonText, { color: palette.primary }]}>Add medication</Text>
                 </Pressable>
@@ -692,16 +729,28 @@ export default function PlanScreen({ navigation }: Props) {
                 When the plan owner adds medications, they’ll show up here with upcoming doses and quick actions.
               </Text>
               {canManageMedications ? (
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.primaryCta,
-                    { backgroundColor: palette.primary },
-                    pressed && styles.primaryCtaPressed
-                  ]}
-                  onPress={openCreateMedication}
-                >
-                  <Text style={styles.primaryCtaText}>Add medication</Text>
-                </Pressable>
+                <View style={styles.emptyActions}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.primaryCta,
+                      { backgroundColor: palette.primary },
+                      pressed && styles.primaryCtaPressed
+                    ]}
+                    onPress={() => openCreateMedication()}
+                  >
+                    <Text style={styles.primaryCtaText}>Add manually</Text>
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.primaryCta,
+                      styles.primaryCtaOutline,
+                      pressed && styles.primaryCtaPressed
+                    ]}
+                    onPress={openMedicationScanner}
+                  >
+                    <Text style={[styles.primaryCtaText, { color: palette.primary }]}>Scan prescription</Text>
+                  </Pressable>
+                </View>
               ) : (
                 <Text style={[styles.readOnlyHelper, { color: palette.textMuted }]}>
                   Need changes? Ask the plan owner to add the prescription.
@@ -718,7 +767,7 @@ export default function PlanScreen({ navigation }: Props) {
                 styles.actionPrimary,
                 pressed && styles.actionPillPressed,
               ]}
-              onPress={() => navigation.navigate('Camera')}
+              onPress={() => navigation.navigate('Camera', { intent: 'bill' })}
             >
               <Text style={styles.actionPrimaryText}>📷 Scan bill</Text>
             </Pressable>
@@ -947,6 +996,7 @@ export default function PlanScreen({ navigation }: Props) {
         mode={medicationFormMode}
         medication={medicationFormEditing}
         defaultTimezone={defaultTimezone}
+        draft={medicationFormPrefill}
         onClose={closeMedicationForm}
         onSubmit={handleMedicationFormSubmit}
         submitting={medicationFormSubmitting}
@@ -1291,6 +1341,11 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
       alignItems: 'center',
       justifyContent: 'space-between',
     },
+    sectionActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing(1.25)
+    },
     sectionTitleRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -1317,6 +1372,17 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
       opacity: 0.8
     },
     linkButtonText: {
+      fontSize: 13,
+      fontWeight: '600'
+    },
+    secondaryLinkButton: {
+      paddingHorizontal: spacing(1),
+      paddingVertical: spacing(0.5),
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: palette.textMuted
+    },
+    secondaryLinkText: {
       fontSize: 13,
       fontWeight: '600'
     },
@@ -1409,12 +1475,23 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
       borderRadius: radius.md,
       padding: spacing(3),
       alignItems: 'center',
+      gap: spacing(1.5)
+    },
+    emptyActions: {
+      width: '100%',
+      marginTop: spacing(1),
+      gap: spacing(1.25)
     },
     primaryCta: {
-      marginTop: spacing(2),
       paddingHorizontal: spacing(3),
       paddingVertical: spacing(1.25),
-      borderRadius: radius.sm
+      borderRadius: radius.sm,
+      alignItems: 'center'
+    },
+    primaryCtaOutline: {
+      borderWidth: 1,
+      borderColor: palette.primary,
+      backgroundColor: 'transparent'
     },
     primaryCtaPressed: {
       opacity: 0.9

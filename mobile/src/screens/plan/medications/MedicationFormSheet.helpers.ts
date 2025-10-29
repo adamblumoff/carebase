@@ -1,4 +1,4 @@
-import type { MedicationDose, MedicationWithDetails } from '@carebase/shared';
+import type { MedicationDose, MedicationDraft, MedicationWithDetails } from '@carebase/shared';
 
 export interface DoseFormValue {
   id?: number;
@@ -50,10 +50,38 @@ export const sortDosesDescending = (doses: MedicationDose[]): MedicationDose[] =
   });
 };
 
+const buildDraftValues = (draft: MedicationDraft | null | undefined, defaultTimezone: string): MedicationFormValues | null => {
+  if (!draft) return null;
+  const doses = draft.doses && draft.doses.length > 0
+    ? draft.doses.map((dose, index) => ({
+        label: dose.label ?? (draft.doses.length > 1 ? `Dose ${index + 1}` : ''),
+        timeOfDay: dose.timeOfDay,
+        timezone: dose.timezone || defaultTimezone
+      }))
+    : [
+        {
+          label: '',
+          timeOfDay: '08:00',
+          timezone: defaultTimezone
+        }
+      ];
+  return {
+    name: draft.name ?? '',
+    instructions: draft.instructions ?? '',
+    doses
+  };
+};
+
 export const buildInitialValues = (
   medication: MedicationWithDetails | null,
-  defaultTimezone: string
+  defaultTimezone: string,
+  draft?: MedicationDraft | null
 ): MedicationFormValues => {
+  const draftValues = buildDraftValues(draft, defaultTimezone);
+  if (draftValues) {
+    return draftValues;
+  }
+
   if (!medication) {
     return {
       name: '',

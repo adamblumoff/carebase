@@ -86,7 +86,7 @@ export default function AppNavigator({ isSignedIn }: AppNavigatorProps) {
             <Stack.Screen
               name="Camera"
               component={CameraScreen}
-              options={{ title: 'Scan Bill' }}
+              options={{ title: 'Scan Document' }}
             />
           </>
         ) : (

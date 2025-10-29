@@ -280,6 +280,18 @@ export interface MedicationWithDetails extends Medication {
   refillProjection: MedicationRefillProjection | null;
 }
 
+export interface MedicationDraftDose {
+  label: string | null;
+  timeOfDay: string;
+  timezone: string;
+}
+
+export interface MedicationDraft {
+  name: string | null;
+  instructions: string | null;
+  doses: MedicationDraftDose[];
+}
+
 // ========== AUDIT ==========
 
 export interface AuditLog {
@@ -489,18 +501,19 @@ export interface CollaboratorAssignRequest {
 
 export interface UploadPhotoResponse {
   success: boolean;
-  classification: {
+  classification?: {
     detectedType: ItemType;
     confidence: number;
-  };
-  item: Item;
-  bill: Bill | null;
-  extracted: BillCreateRequest | null;
-  overdue: boolean;
-  ocr: {
+  } | null;
+  item?: Item | null;
+  bill?: Bill | null;
+  extracted?: BillCreateRequest | null;
+  overdue?: boolean;
+  medicationDraft?: MedicationDraft | null;
+  ocr?: {
     preview: string;
     storageKey: string | null;
     length: number;
-  };
+  } | null;
 }
 export const PLAN_ITEM_DELTA_EVENT = 'plan:item-delta' as const;
