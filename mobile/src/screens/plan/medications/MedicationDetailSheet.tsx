@@ -17,6 +17,7 @@ import { formatDisplayDate, formatDisplayTime } from '../../../utils/date';
 interface MedicationDetailSheetProps {
   visible: boolean;
   medication: MedicationWithDetails | null;
+  canManage: boolean;
   onClose: () => void;
   onMarkTaken: (intakeId: number) => Promise<void>;
   onMarkSkipped: (intakeId: number) => Promise<void>;
@@ -29,6 +30,7 @@ interface MedicationDetailSheetProps {
 export function MedicationDetailSheet({
   visible,
   medication,
+  canManage,
   onClose,
   onMarkTaken,
   onMarkSkipped,
@@ -65,17 +67,19 @@ export function MedicationDetailSheet({
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
                   <Text style={[styles.sectionHeading, { color: palette.textPrimary }]}>Schedule</Text>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.editButton,
-                      { borderColor: palette.primary },
-                      pressed && styles.editButtonPressed
-                    ]}
-                    onPress={onEdit}
-                    accessibilityRole="button"
-                  >
-                    <Text style={[styles.editButtonText, { color: palette.primary }]}>Edit</Text>
-                  </Pressable>
+                  {canManage ? (
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.editButton,
+                        { borderColor: palette.primary },
+                        pressed && styles.editButtonPressed
+                      ]}
+                      onPress={onEdit}
+                      accessibilityRole="button"
+                    >
+                      <Text style={[styles.editButtonText, { color: palette.primary }]}>Edit</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
                 {medication.doses.length === 0 ? (
                   <Text style={[styles.sectionText, { color: palette.textMuted }]}>No doses configured.</Text>
@@ -97,21 +101,27 @@ export function MedicationDetailSheet({
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
                   <Text style={[styles.sectionHeading, { color: palette.textPrimary }]}>Upcoming doses</Text>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.recordNow,
-                      { backgroundColor: palette.primary },
-                      pressed && styles.recordNowPressed
-                    ]}
-                    onPress={onRecordNow}
-                    disabled={actionPending}
-                  >
-                    {actionPending ? (
-                      <ActivityIndicator color="#fff" size="small" />
-                    ) : (
-                      <Text style={styles.recordNowText}>Mark taken now</Text>
-                    )}
-                  </Pressable>
+                  {canManage ? (
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.recordNow,
+                        { backgroundColor: palette.primary },
+                        pressed && styles.recordNowPressed
+                      ]}
+                      onPress={onRecordNow}
+                      disabled={actionPending}
+                    >
+                      {actionPending ? (
+                        <ActivityIndicator color="#fff" size="small" />
+                      ) : (
+                        <Text style={styles.recordNowText}>Mark taken now</Text>
+                      )}
+                    </Pressable>
+                  ) : (
+                    <Text style={[styles.readOnlyMessage, { color: palette.textMuted }]}>
+                      Only the plan owner can update intakes.
+                    </Text>
+                  )}
                 </View>
                 {medication.upcomingIntakes.length === 0 ? (
                   <Text style={[styles.sectionText, { color: palette.textMuted }]}>No upcoming intakes.</Text>
@@ -123,30 +133,32 @@ export function MedicationDetailSheet({
                         {formatDisplayDate(intake.scheduledFor)} · {formatDisplayTime(intake.scheduledFor)}
                       </Text>
                       <Text style={[styles.rowMeta, { color: palette.textMuted }]}>Status: {intake.status}</Text>
-                      <View style={styles.intakeActions}>
-                        <Pressable
-                          style={({ pressed }) => [
-                            styles.intakeButton,
-                            { backgroundColor: palette.success },
-                            pressed && styles.intakeButtonPressed
-                          ]}
-                          onPress={() => onMarkTaken(intake.id)}
-                          disabled={actionPending}
-                        >
-                          <Text style={styles.intakeButtonText}>Mark taken</Text>
-                        </Pressable>
-                        <Pressable
-                          style={({ pressed }) => [
-                            styles.intakeButton,
-                            { backgroundColor: palette.warning },
-                            pressed && styles.intakeButtonPressed
-                          ]}
-                          onPress={() => onMarkSkipped(intake.id)}
-                          disabled={actionPending}
-                        >
-                          <Text style={styles.intakeButtonText}>Skip</Text>
-                        </Pressable>
-                      </View>
+                      {canManage ? (
+                        <View style={styles.intakeActions}>
+                          <Pressable
+                            style={({ pressed }) => [
+                              styles.intakeButton,
+                              { backgroundColor: palette.success },
+                              pressed && styles.intakeButtonPressed
+                            ]}
+                            onPress={() => onMarkTaken(intake.id)}
+                            disabled={actionPending}
+                          >
+                            <Text style={styles.intakeButtonText}>Mark taken</Text>
+                          </Pressable>
+                          <Pressable
+                            style={({ pressed }) => [
+                              styles.intakeButton,
+                              { backgroundColor: palette.warning },
+                              pressed && styles.intakeButtonPressed
+                            ]}
+                            onPress={() => onMarkSkipped(intake.id)}
+                            disabled={actionPending}
+                          >
+                            <Text style={styles.intakeButtonText}>Skip</Text>
+                          </Pressable>
+                        </View>
+                      ) : null}
                     </View>
                   ))
                 )}
@@ -296,6 +308,10 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600'
   },
+  readOnlyMessage: {
+    fontSize: 13,
+    fontStyle: 'italic'
+  },
   errorBanner: {
     marginTop: spacing(2),
     paddingVertical: spacing(1),
@@ -315,4 +331,3 @@ const styles = StyleSheet.create({
     fontWeight: '600'
   }
 });
-

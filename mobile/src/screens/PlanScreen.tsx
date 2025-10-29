@@ -37,6 +37,7 @@ import { useMedicationSummary } from './plan/medications/useMedicationSummary';
 import { MedicationSummaryList } from './plan/medications/MedicationSummaryList';
 import { MedicationDetailSheet } from './plan/medications/MedicationDetailSheet';
 import { MedicationFormSheet } from './plan/medications/MedicationFormSheet';
+import { useAuth } from '../auth/AuthContext';
 
 type DraftFormState = {
   amount: string;
@@ -66,6 +67,24 @@ export default function PlanScreen({ navigation }: Props) {
   const summary = useMemo(() => summarizePlan(plan ?? null), [plan]);
   const planRecipientId = plan?.recipient?.id ?? null;
   const pendingReviews = usePendingReviews();
+  const auth = useAuth();
+  const viewerCollaborator = useMemo(() => {
+    if (!plan || !auth.user) {
+      return null;
+    }
+    const byId = plan.collaborators.find(
+      (collab) => collab.userId === auth.user.id && collab.status === 'accepted'
+    );
+    if (byId) return byId;
+    if (auth.user.email) {
+      const email = String(auth.user.email).toLowerCase();
+      return plan.collaborators.find(
+        (collab) => collab.status === 'accepted' && collab.email.toLowerCase() === email
+      ) ?? null;
+    }
+    return null;
+  }, [auth.user, plan]);
+  const canManageMedications = viewerCollaborator ? viewerCollaborator.role === 'owner' : false;
   const [reviewModalVisible, setReviewModalVisible] = useState(false);
   const [selectedReview, setSelectedReview] = useState<PendingReviewItem | null>(null);
   const [draftForm, setDraftForm] = useState<DraftFormState>({
@@ -385,6 +404,10 @@ export default function PlanScreen({ navigation }: Props) {
 
   const handleMedicationMutator = useCallback(
     async (mutator: () => Promise<void>) => {
+      if (!canManageMedications) {
+        setMedicationActionError('Only the plan owner can update medications.');
+        return;
+      }
       setMedicationActionPending(true);
       setMedicationActionError(null);
       try {
@@ -396,21 +419,21 @@ export default function PlanScreen({ navigation }: Props) {
         setMedicationActionPending(false);
       }
     },
-    []
+    [canManageMedications]
   );
 
   const handleMarkIntake = useCallback(
     async (status: 'taken' | 'skipped', intakeId: number) => {
-      if (!selectedMedicationId) return;
+      if (!selectedMedicationId || !canManageMedications) return;
       await handleMedicationMutator(() =>
         medicationsState.updateIntakeStatus(selectedMedicationId, intakeId, status)
       );
     },
-    [handleMedicationMutator, medicationsState, selectedMedicationId]
+    [canManageMedications, handleMedicationMutator, medicationsState, selectedMedicationId]
   );
 
   const handleRecordNow = useCallback(async () => {
-    if (!selectedMedicationId) return;
+    if (!selectedMedicationId || !canManageMedications) return;
     await handleMedicationMutator(() =>
       medicationsState.recordIntake(selectedMedicationId, {
         doseId: null,
@@ -418,105 +441,118 @@ export default function PlanScreen({ navigation }: Props) {
         status: 'taken'
       })
     );
-  }, [handleMedicationMutator, medicationsState, selectedMedicationId]);
+  }, [canManageMedications, handleMedicationMutator, medicationsState, selectedMedicationId]);
 
-const openCreateMedication = useCallback(() => {
-  setMedicationFormMode('create');
-  setMedicationFormEditing(null);
-  setMedicationFormError(null);
-  setMedicationFormVisible(true);
-}, []);
-
-const closeMedicationForm = useCallback(() => {
-  setMedicationFormVisible(false);
-  setMedicationFormError(null);
-  setMedicationFormEditing(null);
-}, []);
-
-const openEditMedication = useCallback(() => {
-  if (!activeMedication) return;
-  setMedicationFormMode('edit');
-  setMedicationFormEditing(activeMedication);
-  setMedicationFormError(null);
-  setMedicationFormVisible(true);
-  setMedicationSheetVisible(false);
-}, [activeMedication]);
-
-const handleMedicationFormSubmit = useCallback(
-  async (values: { name: string; instructions: string; timeOfDay: string; timezone: string }) => {
-    if (!planRecipientId && medicationFormMode === 'create') {
-      setMedicationFormError('Recipient not loaded yet.');
+  const openCreateMedication = useCallback(() => {
+    if (!canManageMedications) {
+      toast.showToast('Only the plan owner can manage medications.');
       return;
     }
-    setMedicationFormSubmitting(true);
+    setMedicationFormMode('create');
+    setMedicationFormEditing(null);
     setMedicationFormError(null);
-    try {
-      if (medicationFormMode === 'create') {
-        const created = await medicationsState.createMedication({
-          recipientId: planRecipientId!,
-          name: values.name.trim(),
-          instructions: values.instructions.trim() || null,
-          doses: [
-            {
+    setMedicationFormVisible(true);
+  }, [canManageMedications, toast]);
+
+  const closeMedicationForm = useCallback(() => {
+    setMedicationFormVisible(false);
+    setMedicationFormError(null);
+    setMedicationFormEditing(null);
+  }, []);
+
+  const openEditMedication = useCallback(() => {
+    if (!canManageMedications || !activeMedication) {
+      if (!canManageMedications) {
+        toast.showToast('Only the plan owner can manage medications.');
+      }
+      return;
+    }
+    setMedicationFormMode('edit');
+    setMedicationFormEditing(activeMedication);
+    setMedicationFormError(null);
+    setMedicationFormVisible(true);
+    setMedicationSheetVisible(false);
+  }, [activeMedication, canManageMedications, toast]);
+
+  const handleMedicationFormSubmit = useCallback(
+    async (values: { name: string; instructions: string; timeOfDay: string; timezone: string }) => {
+      if (!canManageMedications) {
+        setMedicationFormError('Only the plan owner can manage medications.');
+        return;
+      }
+      if (!planRecipientId && medicationFormMode === 'create') {
+        setMedicationFormError('Recipient not loaded yet.');
+        return;
+      }
+      setMedicationFormSubmitting(true);
+      setMedicationFormError(null);
+      try {
+        if (medicationFormMode === 'create') {
+          const created = await medicationsState.createMedication({
+            recipientId: planRecipientId!,
+            name: values.name.trim(),
+            instructions: values.instructions.trim() || null,
+            doses: [
+              {
+                label: 'Primary',
+                timeOfDay: values.timeOfDay,
+                timezone: values.timezone,
+                reminderWindowMinutes: 120,
+                isActive: true
+              }
+            ]
+          });
+          closeMedicationForm();
+          setSelectedMedicationId(created.id);
+          setMedicationSheetVisible(true);
+        } else if (medicationFormMode === 'edit' && medicationFormEditing) {
+          const medicationId = medicationFormEditing.id;
+          const updates: any = {};
+          const trimmedName = values.name.trim();
+          if (trimmedName && trimmedName !== medicationFormEditing.name) {
+            updates.name = trimmedName;
+          }
+          const trimmedInstructions = values.instructions.trim();
+          if ((medicationFormEditing.instructions ?? '') !== trimmedInstructions) {
+            updates.instructions = trimmedInstructions;
+          }
+          if (Object.keys(updates).length > 0) {
+            await medicationsState.updateMedication(medicationId, updates);
+          }
+          const existingDose = medicationFormEditing.doses[0] ?? null;
+          if (existingDose) {
+            const doseUpdates: any = {};
+            if (existingDose.timeOfDay !== values.timeOfDay) {
+              doseUpdates.timeOfDay = values.timeOfDay;
+            }
+            if (existingDose.timezone !== values.timezone) {
+              doseUpdates.timezone = values.timezone;
+            }
+            if (Object.keys(doseUpdates).length > 0) {
+              await medicationsState.updateDose(medicationId, existingDose.id, doseUpdates);
+            }
+          } else {
+            await medicationsState.createDose(medicationId, {
               label: 'Primary',
               timeOfDay: values.timeOfDay,
               timezone: values.timezone,
               reminderWindowMinutes: 120,
               isActive: true
-            }
-          ]
-        });
-        closeMedicationForm();
-        setSelectedMedicationId(created.id);
-        setMedicationSheetVisible(true);
-      } else if (medicationFormMode === 'edit' && medicationFormEditing) {
-        const medicationId = medicationFormEditing.id;
-        const updates: any = {};
-        const trimmedName = values.name.trim();
-        if (trimmedName && trimmedName !== medicationFormEditing.name) {
-          updates.name = trimmedName;
-        }
-        const trimmedInstructions = values.instructions.trim();
-        if ((medicationFormEditing.instructions ?? '') !== trimmedInstructions) {
-          updates.instructions = trimmedInstructions;
-        }
-        if (Object.keys(updates).length > 0) {
-          await medicationsState.updateMedication(medicationId, updates);
-        }
-        const existingDose = medicationFormEditing.doses[0] ?? null;
-        if (existingDose) {
-          const doseUpdates: any = {};
-          if (existingDose.timeOfDay !== values.timeOfDay) {
-            doseUpdates.timeOfDay = values.timeOfDay;
+            });
           }
-          if (existingDose.timezone !== values.timezone) {
-            doseUpdates.timezone = values.timezone;
-          }
-          if (Object.keys(doseUpdates).length > 0) {
-            await medicationsState.updateDose(medicationId, existingDose.id, doseUpdates);
-          }
-        } else {
-          await medicationsState.createDose(medicationId, {
-            label: 'Primary',
-            timeOfDay: values.timeOfDay,
-            timezone: values.timezone,
-            reminderWindowMinutes: 120,
-            isActive: true
-          });
+          closeMedicationForm();
+          setSelectedMedicationId(medicationId);
+          setMedicationSheetVisible(true);
         }
-        closeMedicationForm();
-        setSelectedMedicationId(medicationId);
-        setMedicationSheetVisible(true);
+      } catch (error: any) {
+        const message = error?.response?.data?.error || error?.message || 'Unable to save medication right now.';
+        setMedicationFormError(message);
+      } finally {
+        setMedicationFormSubmitting(false);
       }
-    } catch (error: any) {
-      const message = error?.response?.data?.error || error?.message || 'Unable to save medication right now.';
-      setMedicationFormError(message);
-    } finally {
-      setMedicationFormSubmitting(false);
-    }
-  },
-  [medicationFormMode, medicationFormEditing, medicationsState, planRecipientId]
-);
+    },
+    [canManageMedications, closeMedicationForm, medicationFormEditing, medicationFormMode, medicationsState, planRecipientId]
+  );
 
   const formatDate = useCallback(
     (dateString: string) => formatDisplayDate(parseServerDate(dateString)),
@@ -579,15 +615,19 @@ const handleMedicationFormSubmit = useCallback(
                 <Text style={styles.sectionIcon}>💊</Text>
                 <Text style={styles.sectionTitle}>Medications</Text>
               </View>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.linkButton,
-                  pressed && styles.linkButtonPressed
-                ]}
-                onPress={openCreateMedication}
-              >
-                <Text style={[styles.linkButtonText, { color: palette.primary }]}>Add medication</Text>
-              </Pressable>
+              {canManageMedications ? (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.linkButton,
+                    pressed && styles.linkButtonPressed
+                  ]}
+                  onPress={openCreateMedication}
+                >
+                  <Text style={[styles.linkButtonText, { color: palette.primary }]}>Add medication</Text>
+                </Pressable>
+              ) : (
+                <Text style={[styles.readOnlyLabel, { color: palette.textMuted }]}>View only</Text>
+              )}
             </View>
             <MedicationSummaryList
               items={medicationSummary}
@@ -601,31 +641,41 @@ const handleMedicationFormSubmit = useCallback(
                 <Text style={styles.sectionIcon}>💊</Text>
                 <Text style={styles.sectionTitle}>Medications</Text>
               </View>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.linkButton,
-                  pressed && styles.linkButtonPressed
-                ]}
-                onPress={openCreateMedication}
-              >
-                <Text style={[styles.linkButtonText, { color: palette.primary }]}>Add medication</Text>
-              </Pressable>
+              {canManageMedications ? (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.linkButton,
+                    pressed && styles.linkButtonPressed
+                  ]}
+                  onPress={openCreateMedication}
+                >
+                  <Text style={[styles.linkButtonText, { color: palette.primary }]}>Add medication</Text>
+                </Pressable>
+              ) : (
+                <Text style={[styles.readOnlyLabel, { color: palette.textMuted }]}>View only</Text>
+              )}
             </View>
             <View style={styles.emptyCard}>
               <Text style={styles.emptyTitle}>No medications yet</Text>
               <Text style={styles.emptyText}>
-                When you add medications, they’ll show up here with upcoming doses and quick actions.
+                When the plan owner adds medications, they’ll show up here with upcoming doses and quick actions.
               </Text>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.primaryCta,
-                  { backgroundColor: palette.primary },
-                  pressed && styles.primaryCtaPressed
-                ]}
-                onPress={openCreateMedication}
-              >
-                <Text style={styles.primaryCtaText}>Add medication</Text>
-              </Pressable>
+              {canManageMedications ? (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.primaryCta,
+                    { backgroundColor: palette.primary },
+                    pressed && styles.primaryCtaPressed
+                  ]}
+                  onPress={openCreateMedication}
+                >
+                  <Text style={styles.primaryCtaText}>Add medication</Text>
+                </Pressable>
+              ) : (
+                <Text style={[styles.readOnlyHelper, { color: palette.textMuted }]}>
+                  Need changes? Ask the plan owner to add the prescription.
+                </Text>
+              )}
             </View>
           </View>
         )}
@@ -659,12 +709,12 @@ const handleMedicationFormSubmit = useCallback(
                 {summary.dateRange
                   ? `${formatDate(summary.dateRange.start)} – ${formatDate(summary.dateRange.end)}`
                   : 'Connect your inbox to build a plan.'}
+              </Text>
+            </View>
+            <Text style={styles.heroMeta}>
+              {summary.appointmentCount} appointments • {summary.billsDueCount} bills due
             </Text>
           </View>
-          <Text style={styles.heroMeta}>
-              {summary.appointmentCount} appointments • {summary.billsDueCount} bills due
-          </Text>
-        </View>
         </View>
 
         <View style={styles.section}>
@@ -852,6 +902,7 @@ const handleMedicationFormSubmit = useCallback(
       <MedicationDetailSheet
         visible={medicationSheetVisible}
         medication={activeMedication}
+        canManage={canManageMedications}
         onClose={closeMedicationDetail}
         onMarkTaken={(intakeId) => handleMarkIntake('taken', intakeId)}
         onMarkSkipped={(intakeId) => handleMarkIntake('skipped', intakeId)}
@@ -1237,6 +1288,15 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
     linkButtonText: {
       fontSize: 13,
       fontWeight: '600'
+    },
+    readOnlyLabel: {
+      fontSize: 13,
+      fontWeight: '500'
+    },
+    readOnlyHelper: {
+      marginTop: spacing(1),
+      fontSize: 13,
+      textAlign: 'center'
     },
     sectionDivider: {
       height: 1,
