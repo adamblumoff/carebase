@@ -27,10 +27,10 @@ npm run test:contracts      # cross-workspace contract tests
 - Keep code self-contained; route files should delegate to controllers/services.
 
 ## Testing Guidelines
-- Backend: `tsx --test` (Node test runner) + pg-mem for integration (`*.test.ts`).
-- Mobile: Vitest + `@testing-library/react-native` (`*.vitest.test.tsx`). Presenters/helpers are isolated for testing; RN screens remain excluded from coverage thresholds.
-- Contract tests ensure API payloads align with shared types (`tests/src/plan.contract.test.ts`).
-- `npm run coverage` runs backend + mobile coverage. Mobile coverage thresholds enforce ≥65% statements/lines (branches 55%, functions 65%) for logic modules.
+- Backend: Vitest (unit + integration) with pg-mem (`*.vitest.test.ts`). Contract suites (`tests/`) run under the same runner.
+- Mobile: Vitest + React Testing Library (`*.vitest.test.tsx`). Presenters/helpers, medication summary/detail UI, notification hooks, and API shims are covered; full RN screens stay excluded from coverage thresholds.
+- Contract tests ensure API payloads align with shared types (`tests/src/plan.contract.vitest.test.ts`).
+- `npm run coverage` runs backend + mobile coverage. Mobile thresholds enforce ≥65% statements/lines (branches 55%, functions 65%) for logic modules.
 
 ## Commit & Pull Request Guidelines
 - Commit messages: short, imperative (“Add backend env toggle helpers” style). Commit after each logical change.
@@ -49,3 +49,4 @@ npm run test:contracts      # cross-workspace contract tests
 - Mobile access tokens now live in SecureStore when available. Ensure Expo envs include the Google client IDs and keep `expo-secure-store` installed; AsyncStorage is used automatically when SecureStore isn't supported.
 - Database migrations run from a single source of truth (`backend/src/db/schema.sql`). After any schema edit, run `npm run db:migrate --workspace=backend` locally (uses `.env.development.local`). Before deploying, execute the same command with production env vars (Railway CLI or job) so staging and production pick up the change.
 - Clerk performance tuning: use a long-lived JWT template (e.g. `carebase-backend`) and expose it via `CLERK_JWT_TEMPLATE_NAME` on the backend plus `EXPO_PUBLIC_CLERK_JWT_TEMPLATE` on mobile. Without it the backend cache misses and every request stalls on Clerk.
+- Medication notifications: Expo push handles primary reminders; the mobile app mirrors the next few intakes into local notifications (6-hour window, two-minute catch-up for overdue doses). These are cleared automatically whenever the plan refreshes. During QA, run the dev client (not Expo Go) so notification permissions and categories register correctly.

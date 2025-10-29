@@ -75,9 +75,10 @@ npm run env:mobile:prod      # Expo → carebase.dev
 2. API routers delegate to controllers in `backend/src/controllers`, which now act as thin HTTP wrappers.
 3. Database queries live under `backend/src/db/queries/` (with a barrel file at `backend/src/db/queries.ts`) and share the same connection pool exported by `db/client.ts`.
 4. Domain/business logic belongs in `backend/src/services/`:
-   - `planService.ts` builds plan payloads consumed by `/api/plan`.
-   - `appointmentService.ts`/`billService.ts` encapsulate owner vs collaborator behavior (including Google-sync side effects).
-   - `googleIntegrationService.ts` handles OAuth URL creation, token exchange, manual sync, and disconnect flows.
+- `planService.ts` builds plan payloads consumed by `/api/plan`.
+- `appointmentService.ts`/`billService.ts` encapsulate owner vs collaborator behavior (including Google-sync side effects).
+- `medicationService.ts` manages CRUD, intake acknowledgements, refill projection writes, and owner collaborator enforcement. Controller wiring lives under `controllers/api/medications.ts`; contract coverage sits in `tests/src/medications.contract.vitest.test.ts`.
+- `googleIntegrationService.ts` handles OAuth URL creation, token exchange, manual sync, and disconnect flows.
 5. Route input validation uses zod via `utils/validation.ts`; controllers call `validateBody/validateParams`, and throw `HttpError` subclasses (`UnauthorizedError`, `ValidationError`, `NotFoundError`, etc.) handled uniformly by `utils/httpHandler.ts`.
 
 ### Email Ingestion
@@ -113,8 +114,9 @@ npm run env:mobile:prod      # Expo → carebase.dev
 - Deep links: invite acceptance (`carebase://invite?token=...`) and Google Calendar callback (`carebase://integrations/google?...`).
 
 ### Navigation & Screens
-- React Navigation native stack in `src/navigation/AppNavigator.tsx`.
-- Key screens: `PlanScreen`, `AppointmentDetailScreen`, `BillDetailScreen`, `SettingsScreen`.
+- React Navigation native stack in `src/navigation/AppNavigator.tsx` (registered via `navigationRef` so notifications can deep-link into the plan).
+- Key screens: `PlanScreen`, `AppointmentDetailScreen`, `BillDetailScreen`, `SettingsScreen`, `CameraScreen`.
+- The plan screen hosts the medication summary list, detail sheet, and add/edit flow. Owners can launch OCR via the camera intent; collaborators see the same rows but without quick actions.
 - Settings hosts collaborator management, Google Calendar controls, and logout.
 
 ### Theming & UI
@@ -123,15 +125,17 @@ npm run env:mobile:prod      # Expo → carebase.dev
 
 ### API Layer
 - `src/api/client.ts` configures Axios client with baseURL from env and bearer token interceptor (reads `AsyncStorage`).
-- Individual feature APIs live under `src/api/` (collaborators, Google integration, etc.).
+- Feature-specific wrappers live under `src/api/` (plan, collaborators, medications, Google integration, uploads). Medication APIs now expose CRUD helpers for doses, intakes, and refill projections.
 
 ### Utilities
 - Shared date helpers (`src/utils/date.ts`) centralize parsing/formatting used across Plan and Appointment screens.
+- `src/notifications/useNotifications.ts` registers Expo notification handlers, requests permissions, and routes medication reminders to the Plan screen.
+- `src/notifications/localMedicationReminders.ts` mirrors upcoming medication intakes into local notifications as a fail-safe when push delivery is delayed.
 
 ### Testing
-- Jest + `@testing-library/react-native`.
-- Suite covers bootstrap (`App.test.tsx`), settings flows, and Google integration hook.
-- Use `npm run test --workspace=mobile` or `npm run test:coverage --workspace=mobile`.
+- Vitest + React Testing Library (web renderer).
+- Suites cover bootstrap (`App.tsx` providers), settings flows, notification hooks, medication summary/detail components, medication API shims, and local reminder utilities.
+- Use `npm run test --workspace=mobile` (or `vitest --run --reporter=verbose` inside the workspace).
 
 ---
 

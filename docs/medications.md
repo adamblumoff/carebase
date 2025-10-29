@@ -3,10 +3,10 @@
 _Drafted October 28, 2025_
 
 ## Scope Summary
-- Introduce owner-managed medications with fixed daily dose schedules.
-- Persist inventory details (quantity on hand, refill threshold, preferred pharmacy) to project refill dates.
-- Deliver Expo push notifications at scheduled dose times, nag every 120 minutes until acknowledged, send an end-of-day reminder, and continue daily notifications until the dose is marked taken or skipped.
-- Support both manual form entry and OCR-based ingestion of prescription labels; collaborators receive read-only access.
+- Owners can create, edit, and archive medications with fixed daily dose schedules. Collaborators continue to receive read-only access on web + mobile.
+- Each medication tracks inventory metadata (quantity on hand, refill threshold, preferred pharmacy) to project refill dates that surface in the plan payload.
+- Deliver Expo push notifications at scheduled dose times, nag every 120 minutes while doses remain pending, follow up with an end-of-day reminder, and continue daily escalations until the intake is marked taken or skipped. Mobile now also schedules a local fallback reminder so the user still sees a prompt if push delivery fails.
+- Manual and OCR-based ingestion both land on the plan screen’s medication form. The backend returns structured drafts from `/api/upload/photo?intent=medication` which the mobile client pre-fills for confirmation.
 
 ## Domain Entities
 
@@ -54,6 +54,7 @@ Recipient 1─* Medication 1─* MedicationDose
 2. **Nag Loop** – Repeat every 120 minutes until `MedicationIntake.status` becomes `taken` or `skipped`. Respect waking hours (7am–10pm local) to avoid overnight nags.
 3. **End-of-Day Summary** – If still pending by 9pm local, send a “still outstanding” notification.
 4. **Next-Day Escalation** – Each morning at 9am, re-emphasize missed doses until acknowledged; ingest acknowledgement to cancel future repeats.
+5. **Local Fallback (mobile)** – When the plan loads, the mobile client mirrors the next few intakes with local notifications (6‑hour window, two-minute catch-up for overdue doses) so the user still receives a reminder if Expo push fails or the device is offline. Local notifications are marked with `data.carebase.localMedicationReminder = true` and cleared whenever medication data refreshes.
 
 State machine sketch:
 
@@ -69,13 +70,11 @@ pending → (EOD job) → overdue → (daily reminder) → overdue (loop) until 
 - Backend enforcement via owner-scoped guard that references `CollaboratorRole`.
 
 ## OCR Workflow
-1. Owner launches “Scan Prescription” from mobile.
-2. Photo uploaded to existing `/api/upload/photo` endpoint with `intent=medication`.
-3. Backend routes image to medication label parser:
-   - Extracts key/value pairs (med name, dosage, instructions, quantity, refills, prescriber).
-   - Returns structured draft payload.
-4. Mobile surfaces editable confirmation form; final “Save” invokes `POST /api/medications`.
-5. Unrecognized fields fall back to manual entry.
+1. Owner launches “Scan Prescription” from the plan screen (camera intent `medication`).
+2. Mobile uploads the photo to `/api/upload/photo?intent=medication&timezone=<IANA>` as multipart form data.
+3. Backend extracts OCR text, runs `extractMedicationDraft`, and returns `{ medicationDraft, ocr.preview }` without writing storage objects. Failures fall back to manual entry with an inline toast.
+4. Mobile opens the medication form pre-filled with the draft. Users can adjust fields before submitting `POST /api/medications`.
+5. When the OCR draft is dismissed or saved, route params clear so subsequent launches return to manual entry.
 
 ## API Surface (Draft)
 - `POST /api/medications` – create medication + schedule.
@@ -85,8 +84,10 @@ pending → (EOD job) → overdue → (daily reminder) → overdue (loop) until 
 - `PATCH /api/medications/:id/archive`
 - `POST /api/medications/:id/doses`
 - `PATCH /api/medications/:id/doses/:doseId`
-- `POST /api/medications/:id/intakes` – mark taken/skipped.
-- `POST /api/upload/medication-label` – specialized OCR (tbd, may reuse existing upload with query param).
+- `POST /api/medications/:id/intakes` – mark taken/skipped (mobile uses `status=taken` for “Mark now” with a generated `scheduledFor`).
+- `PATCH /api/medications/:id/intakes/:intakeId` – update intake status (e.g., mark skipped).
+- `POST /api/medications/:id/refill` / `DELETE /api/medications/:id/refill` – set or clear projections.
+- `/api/upload/photo?intent=medication` – existing upload endpoint with `intent`/`timezone` query parameters.
 
 ## Non-Goals (Phase 1)
 - Analytics dashboards (missed-dose trends, streaks).
@@ -96,11 +97,9 @@ pending → (EOD job) → overdue → (daily reminder) → overdue (loop) until 
 - HIPAA-specific audit trail enhancements beyond existing standards.
 
 ## Outstanding Questions
-- Confirm target timezone per recipient; fallback to account default if missing.
-- Verify Expo push quota for worst-case nag loop across user base.
-- Determine storage for prescription images (reuse `uploads/` bucket?) and retention timeline.
+- Long-term retention policy for OCR images (currently skipped because medication intent does not persist the raw text file; confirm compliance expectations).
+- Decide whether local reminders should respect per-medication quiet hours in future phases.
 
 ## Next Steps
-- TODO: Schedule product/compliance review of reminder cadence and stored fields.
-- TODO: Align with ops/support on escalation messaging and runbook updates.
-- TODO: Finalize acceptance criteria before beginning schema work (Milestone 1).
+- Milestone 5 QA: run backend and contract suites, validate medication flows on physical devices (OCR, intake, notification handshake), document any manual verification steps.
+- Gather feedback from internal testers on reminder cadence/local fallback usefulness before enabling the production feature flag.
