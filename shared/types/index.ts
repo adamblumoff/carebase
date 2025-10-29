@@ -332,6 +332,68 @@ export interface BillUpdateRequest {
 
 export type BillUpdateData = BillUpdateRequest;
 
+export interface MedicationDoseInput {
+  label?: string | null;
+  timeOfDay: string;
+  timezone: string;
+  reminderWindowMinutes?: number;
+  isActive?: boolean;
+}
+
+export interface MedicationDoseUpdateInput {
+  label?: string | null;
+  timeOfDay?: string;
+  timezone?: string;
+  reminderWindowMinutes?: number;
+  isActive?: boolean;
+}
+
+export interface MedicationCreateRequest {
+  recipientId: number;
+  name: string;
+  strengthValue?: number | null;
+  strengthUnit?: string | null;
+  form?: string | null;
+  instructions?: string | null;
+  notes?: string | null;
+  prescribingProvider?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  quantityOnHand?: number | null;
+  refillThreshold?: number | null;
+  preferredPharmacy?: string | null;
+  doses?: MedicationDoseInput[];
+}
+
+export interface MedicationUpdateRequest {
+  name?: string;
+  strengthValue?: number | null;
+  strengthUnit?: string | null;
+  form?: string | null;
+  instructions?: string | null;
+  notes?: string | null;
+  prescribingProvider?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  quantityOnHand?: number | null;
+  refillThreshold?: number | null;
+  preferredPharmacy?: string | null;
+}
+
+export interface MedicationDoseRequest {
+  dose: MedicationDoseInput;
+}
+
+export interface MedicationDoseUpdateRequest {
+  dose: MedicationDoseUpdateInput;
+}
+
+export interface MedicationIntakeRecordRequest {
+  doseId?: number | null;
+  scheduledFor: string;
+  status: MedicationIntakeStatus;
+}
+
 export interface ReclassifyRequest {
   newType: ItemType;
 }
