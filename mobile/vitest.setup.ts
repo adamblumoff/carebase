@@ -31,22 +31,49 @@ vi.mock('expo-linking', () => ({
   getInitialURL: vi.fn(async () => null)
 }));
 
-vi.mock('expo-constants', () => ({
-  default: {
-    expoConfig: { extra: {} }
-  }
-}));
+vi.mock('expo-constants', () => {
+  let appOwnership = 'standalone';
+  return {
+    __esModule: true,
+    default: {
+      expoConfig: { extra: {} },
+      get appOwnership() {
+        return appOwnership;
+      }
+    },
+    __setAppOwnership: (value: string) => {
+      appOwnership = value;
+    }
+  };
+});
 
 vi.mock('expo-notifications', () => {
-  const remove = vi.fn();
+  const defaultPermission = {
+    status: 'undetermined',
+    granted: false,
+    canAskAgain: true,
+    expires: 'never'
+  } as const;
+  const grantedPermission = {
+    status: 'granted',
+    granted: true,
+    canAskAgain: true,
+    expires: 'never'
+  } as const;
+
+  const getPermissionsAsync = vi.fn(async () => ({ ...defaultPermission }));
+  const requestPermissionsAsync = vi.fn(async () => ({ ...grantedPermission }));
+
   return {
     __esModule: true,
     setNotificationHandler: vi.fn(),
-    addNotificationReceivedListener: vi.fn(() => ({ remove })),
-    addNotificationResponseReceivedListener: vi.fn(() => ({ remove })),
+    addNotificationReceivedListener: vi.fn(() => ({ remove: vi.fn() })),
+    addNotificationResponseReceivedListener: vi.fn(() => ({ remove: vi.fn() })),
     getLastNotificationResponseAsync: vi.fn(async () => null),
     setNotificationCategoryAsync: vi.fn(async () => {}),
     setNotificationChannelAsync: vi.fn(async () => {}),
+    getPermissionsAsync,
+    requestPermissionsAsync,
     AndroidImportance: { MAX: 5 }
   };
 });
