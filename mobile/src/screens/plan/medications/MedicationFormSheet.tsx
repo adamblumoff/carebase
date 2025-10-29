@@ -16,11 +16,17 @@ import {
 import type { MedicationWithDetails } from '@carebase/shared';
 import { useTheme, spacing, radius } from '../../../theme';
 
+export interface DoseFormValue {
+  id?: number;
+  label: string;
+  timeOfDay: string;
+  timezone: string;
+}
+
 export interface MedicationFormValues {
   name: string;
   instructions: string;
-  timeOfDay: string;
-  timezone: string;
+  doses: DoseFormValue[];
 }
 
 function buildInitialValues(medication: MedicationWithDetails | null, defaultTimezone: string): MedicationFormValues {
@@ -28,16 +34,35 @@ function buildInitialValues(medication: MedicationWithDetails | null, defaultTim
     return {
       name: '',
       instructions: '',
-      timeOfDay: '08:00',
-      timezone: defaultTimezone
+      doses: [
+        {
+          label: '',
+          timeOfDay: '08:00',
+          timezone: defaultTimezone
+        }
+      ]
     };
   }
-  const firstDose = medication.doses[0] ?? null;
+  const mappedDoses =
+    medication.doses.length > 0
+      ? medication.doses.map((dose) => ({
+          id: dose.id,
+          label: dose.label ?? '',
+          timeOfDay: dose.timeOfDay,
+          timezone: dose.timezone
+        }))
+      : [
+          {
+            label: '',
+            timeOfDay: '08:00',
+            timezone: defaultTimezone
+          }
+        ];
+
   return {
     name: medication.name,
     instructions: medication.instructions ?? '',
-    timeOfDay: firstDose?.timeOfDay ?? '08:00',
-    timezone: firstDose?.timezone ?? defaultTimezone
+    doses: mappedDoses
   };
 }
 
@@ -53,7 +78,16 @@ interface MedicationFormSheetProps {
   ctaLabel?: string;
 }
 
-export type MedicationFormValidationErrors = Partial<Record<keyof MedicationFormValues, string>>;
+export interface DoseFormValidationErrors {
+  label?: string;
+  timeOfDay?: string;
+  timezone?: string;
+}
+
+export interface MedicationFormValidationErrors {
+  name?: string;
+  doses?: DoseFormValidationErrors[];
+}
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -82,23 +116,38 @@ export function validateMedicationForm(values: MedicationFormValues): {
 } {
   const trimmedName = values.name.trim();
   const trimmedInstructions = values.instructions.trim();
-  const trimmedTime = values.timeOfDay.trim();
-  const trimmedTimezone = values.timezone.trim();
+  const normalizedDoses = values.doses.map((dose) => ({
+    id: dose.id,
+    label: dose.label.trim(),
+    timeOfDay: dose.timeOfDay.trim(),
+    timezone: dose.timezone.trim()
+  }));
 
   const errors: MedicationFormValidationErrors = {};
+  const doseErrors: DoseFormValidationErrors[] = [];
 
   if (!trimmedName) {
     errors.name = 'Enter a medication name.';
   }
 
-  const timeError = validateTimeOfDay(trimmedTime);
-  if (timeError) {
-    errors.timeOfDay = timeError;
-  }
-
-  const timezoneError = validateTimezone(trimmedTimezone);
-  if (timezoneError) {
-    errors.timezone = timezoneError;
+  if (normalizedDoses.length === 0) {
+    errors.doses = [{ timeOfDay: 'Add at least one dose.' }];
+  } else {
+    normalizedDoses.forEach((dose) => {
+      const currentErrors: DoseFormValidationErrors = {};
+      const timeError = validateTimeOfDay(dose.timeOfDay);
+      if (timeError) {
+        currentErrors.timeOfDay = timeError;
+      }
+      const timezoneError = validateTimezone(dose.timezone);
+      if (timezoneError) {
+        currentErrors.timezone = timezoneError;
+      }
+      doseErrors.push(currentErrors);
+    });
+    if (doseErrors.some((entry) => Object.keys(entry).length > 0)) {
+      errors.doses = doseErrors;
+    }
   }
 
   return {
@@ -106,8 +155,7 @@ export function validateMedicationForm(values: MedicationFormValues): {
     normalized: {
       name: trimmedName,
       instructions: trimmedInstructions,
-      timeOfDay: trimmedTime,
-      timezone: trimmedTimezone
+      doses: normalizedDoses
     }
   };
 }
@@ -133,21 +181,76 @@ export function MedicationFormSheet({
     setFieldErrors({});
   }, [medication, defaultTimezone, visible]);
 
-  const canSubmit = values.name.trim().length > 0 && !submitting;
+  const canSubmit = values.name.trim().length > 0 && values.doses.length > 0 && !submitting;
 
-  const handleChange = (field: keyof MedicationFormValues, next: string) => {
+  const handleFieldChange = (field: 'name' | 'instructions', next: string) => {
     setValues((current) => ({ ...current, [field]: next }));
+    if (field === 'name') {
+      setFieldErrors((prev) => {
+        if (!prev.name) return prev;
+        const { name, ...rest } = prev;
+        return rest;
+      });
+    }
+  };
+
+  const handleDoseChange = (index: number, field: 'label' | 'timeOfDay' | 'timezone', next: string) => {
+    setValues((current) => {
+      const doses = current.doses.map((dose, idx) => (idx === index ? { ...dose, [field]: next } : dose));
+      return { ...current, doses };
+    });
     setFieldErrors((prev) => {
-      if (!prev[field]) return prev;
-      const nextErrors = { ...prev };
-      delete nextErrors[field];
-      return nextErrors;
+      if (!prev.doses) return prev;
+      const dosesErrors = [...prev.doses];
+      if (!dosesErrors[index]) return prev;
+      const updatedDoseErrors = { ...dosesErrors[index] };
+      delete (updatedDoseErrors as any)[field];
+      dosesErrors[index] = updatedDoseErrors;
+      if (dosesErrors.every((error) => !error || Object.keys(error).length === 0)) {
+        const { doses, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, doses: dosesErrors };
+    });
+  };
+
+  const handleAddDose = () => {
+    setValues((current) => ({
+      ...current,
+      doses: [
+        ...current.doses,
+        {
+          label: '',
+          timeOfDay: '08:00',
+          timezone: current.doses[current.doses.length - 1]?.timezone ?? defaultTimezone
+        }
+      ]
+    }));
+  };
+
+  const handleRemoveDose = (index: number) => {
+    setValues((current) => {
+      if (current.doses.length <= 1) {
+        return current;
+      }
+      const doses = current.doses.filter((_, idx) => idx !== index);
+      return { ...current, doses };
+    });
+    setFieldErrors((prev) => {
+      if (!prev.doses) return prev;
+      const dosesErrors = prev.doses.filter((_, idx) => idx !== index);
+      if (dosesErrors.every((error) => !error || Object.keys(error).length === 0)) {
+        const { doses, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, doses: dosesErrors };
     });
   };
 
   const handleSubmit = async () => {
     const result = validateMedicationForm(values);
-    if (Object.keys(result.errors).length > 0) {
+    const hasErrors = Boolean(result.errors.name) || Boolean(result.errors.doses);
+    if (hasErrors) {
       setFieldErrors(result.errors);
       return;
     }
@@ -156,6 +259,10 @@ export function MedicationFormSheet({
   };
 
   useEffect(() => {
+    if (!visible) {
+      setKeyboardPadding(0);
+      return () => {};
+    }
     const handleShow = (event: KeyboardEvent) => {
       setKeyboardPadding(event.endCoordinates?.height ?? 0);
     };
@@ -168,7 +275,7 @@ export function MedicationFormSheet({
       showListener.remove();
       hideListener.remove();
     };
-  }, []);
+  }, [visible]);
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -195,7 +302,7 @@ export function MedicationFormSheet({
               <Text style={[styles.label, { color: palette.textSecondary }]}>Name</Text>
               <TextInput
                 value={values.name}
-                onChangeText={(text) => handleChange('name', text)}
+                onChangeText={(text) => handleFieldChange('name', text)}
                 placeholder="e.g. Lipitor"
                 style={[
                   styles.input,
@@ -214,53 +321,121 @@ export function MedicationFormSheet({
               <Text style={[styles.label, { color: palette.textSecondary }]}>Instructions</Text>
               <TextInput
                 value={values.instructions}
-                onChangeText={(text) => handleChange('instructions', text)}
+                onChangeText={(text) => handleFieldChange('instructions', text)}
                 placeholder="Add instructions (optional)"
                 style={[styles.input, styles.inputMultiline, { borderColor: palette.border, color: palette.textPrimary }]}
                 placeholderTextColor={palette.textMuted}
-              multiline
+                multiline
               />
 
-              <Text style={[styles.sectionHeading, { color: palette.textPrimary }]}>Primary dose</Text>
+              <Text style={[styles.sectionHeading, { color: palette.textPrimary }]}>Dose schedule</Text>
 
-              <Text style={[styles.label, { color: palette.textSecondary }]}>Time of day (HH:mm)</Text>
-              <TextInput
-                value={values.timeOfDay}
-                onChangeText={(text) => handleChange('timeOfDay', text)}
-                placeholder="08:00"
-                style={[
-                  styles.input,
-                  {
-                    borderColor: fieldErrors.timeOfDay ? palette.danger : palette.border,
-                    color: palette.textPrimary
-                  }
+              {values.doses.map((dose, index) => {
+                const doseError = fieldErrors.doses?.[index];
+                return (
+                  <View
+                    key={dose.id ?? `dose-${index}`}
+                    style={[
+                      styles.doseCard,
+                      {
+                        borderColor: palette.border,
+                        backgroundColor: palette.surface
+                      }
+                    ]}
+                  >
+                    <View style={styles.doseHeader}>
+                      <Text style={[styles.doseTitle, { color: palette.textPrimary }]}>
+                        {dose.label.trim() !== '' ? dose.label : `Dose ${index + 1}`}
+                      </Text>
+                      {values.doses.length > 1 ? (
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.removeDoseButton,
+                            pressed && styles.removeDoseButtonPressed
+                          ]}
+                          onPress={() => handleRemoveDose(index)}
+                          accessibilityRole="button"
+                        >
+                          <Text style={[styles.removeDoseText, { color: palette.danger }]}>Remove</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+
+                    <Text style={[styles.label, styles.doseSubLabel, { color: palette.textSecondary }]}>
+                      Label (optional)
+                    </Text>
+                    <TextInput
+                      value={dose.label}
+                      onChangeText={(text) => handleDoseChange(index, 'label', text)}
+                      placeholder={`Dose ${index + 1}`}
+                      style={[
+                        styles.input,
+                        styles.doseInput,
+                        {
+                          borderColor: palette.border,
+                          color: palette.textPrimary
+                        }
+                      ]}
+                      placeholderTextColor={palette.textMuted}
+                    />
+
+                    <Text style={[styles.label, styles.doseSubLabel, { color: palette.textSecondary }]}>
+                      Time of day (HH:mm)
+                    </Text>
+                    <TextInput
+                      value={dose.timeOfDay}
+                      onChangeText={(text) => handleDoseChange(index, 'timeOfDay', text)}
+                      placeholder="08:00"
+                      style={[
+                        styles.input,
+                        styles.doseInput,
+                        {
+                          borderColor: doseError?.timeOfDay ? palette.danger : palette.border,
+                          color: palette.textPrimary
+                        }
+                      ]}
+                      placeholderTextColor={palette.textMuted}
+                      autoCapitalize="none"
+                      keyboardType="numeric"
+                    />
+                    {doseError?.timeOfDay ? (
+                      <Text style={[styles.inputErrorText, { color: palette.danger }]}>{doseError.timeOfDay}</Text>
+                    ) : null}
+
+                    <Text style={[styles.label, styles.doseSubLabel, { color: palette.textSecondary }]}>Timezone</Text>
+                    <TextInput
+                      value={dose.timezone}
+                      onChangeText={(text) => handleDoseChange(index, 'timezone', text)}
+                      placeholder="America/New_York"
+                      style={[
+                        styles.input,
+                        styles.doseInput,
+                        {
+                          borderColor: doseError?.timezone ? palette.danger : palette.border,
+                          color: palette.textPrimary
+                        }
+                      ]}
+                      placeholderTextColor={palette.textMuted}
+                      autoCapitalize="words"
+                    />
+                    {doseError?.timezone ? (
+                      <Text style={[styles.inputErrorText, { color: palette.danger }]}>{doseError.timezone}</Text>
+                    ) : null}
+                  </View>
+                );
+              })}
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.addDoseButton,
+                  { borderColor: palette.primary },
+                  pressed && styles.addDoseButtonPressed
                 ]}
-                placeholderTextColor={palette.textMuted}
-                autoCapitalize="none"
-                keyboardType="numeric"
-              />
-              {fieldErrors.timeOfDay ? (
-                <Text style={[styles.inputErrorText, { color: palette.danger }]}>{fieldErrors.timeOfDay}</Text>
-              ) : null}
-
-              <Text style={[styles.label, { color: palette.textSecondary }]}>Timezone</Text>
-              <TextInput
-                value={values.timezone}
-                onChangeText={(text) => handleChange('timezone', text)}
-                placeholder="America/New_York"
-                style={[
-                  styles.input,
-                  {
-                    borderColor: fieldErrors.timezone ? palette.danger : palette.border,
-                    color: palette.textPrimary
-                  }
-                ]}
-                placeholderTextColor={palette.textMuted}
-                autoCapitalize="words"
-              />
-              {fieldErrors.timezone ? (
-                <Text style={[styles.inputErrorText, { color: palette.danger }]}>{fieldErrors.timezone}</Text>
-              ) : null}
+                onPress={handleAddDose}
+                accessibilityRole="button"
+              >
+                <Text style={[styles.addDoseText, { color: palette.primary }]}>Add another dose</Text>
+              </Pressable>
 
               {error ? (
                 <View style={[styles.errorBanner, { backgroundColor: palette.dangerSoft }]}>
@@ -365,6 +540,58 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     marginTop: spacing(3)
+  },
+  doseCard: {
+    borderWidth: 1,
+    borderRadius: radius.md,
+    padding: spacing(2),
+    marginTop: spacing(2),
+    gap: spacing(1.5)
+  },
+  doseHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  doseTitle: {
+    fontSize: 15,
+    fontWeight: '600'
+  },
+  removeDoseButton: {
+    paddingHorizontal: spacing(1),
+    paddingVertical: spacing(0.5),
+    borderRadius: radius.sm
+  },
+  removeDoseButtonPressed: {
+    opacity: 0.7
+  },
+  removeDoseText: {
+    fontSize: 13,
+    fontWeight: '600'
+  },
+  doseSubLabel: {
+    marginTop: spacing(1)
+  },
+  doseInput: {
+    marginTop: spacing(0.75)
+  },
+  addDoseButton: {
+    marginTop: spacing(2),
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    paddingVertical: spacing(1),
+    alignItems: 'center'
+  },
+  addDoseButtonPressed: {
+    opacity: 0.8
+  },
+  addDoseText: {
+    fontWeight: '600',
+    fontSize: 14
+  },
+  inputErrorText: {
+    fontSize: 12,
+    marginTop: spacing(0.5)
   },
   actions: {
     flexDirection: 'row',

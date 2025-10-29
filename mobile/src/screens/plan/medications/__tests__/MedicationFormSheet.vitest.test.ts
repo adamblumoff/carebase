@@ -1,11 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { validateMedicationForm, type MedicationFormValues } from '../MedicationFormSheet';
+import {
+  validateMedicationForm,
+  type MedicationFormValues,
+  type DoseFormValue
+} from '../MedicationFormSheet';
+
+const buildDose = (overrides: Partial<DoseFormValue> = {}): DoseFormValue => ({
+  id: 10,
+  label: 'Morning',
+  timeOfDay: '08:00',
+  timezone: 'America/New_York',
+  ...overrides
+});
 
 const buildValues = (overrides: Partial<MedicationFormValues> = {}): MedicationFormValues => ({
   name: 'Lipitor',
   instructions: 'Take once daily',
-  timeOfDay: '08:00',
-  timezone: 'America/New_York',
+  doses: [buildDose()],
   ...overrides
 });
 
@@ -15,8 +26,14 @@ describe('validateMedicationForm', () => {
       buildValues({
         name: '  Lipitor  ',
         instructions: ' Take with water ',
-        timeOfDay: '08:00',
-        timezone: 'America/Chicago'
+        doses: [
+          buildDose({
+            id: 42,
+            label: ' Morning ',
+            timeOfDay: '08:30',
+            timezone: 'America/Chicago'
+          })
+        ]
       })
     );
 
@@ -24,8 +41,14 @@ describe('validateMedicationForm', () => {
     expect(normalized).toEqual({
       name: 'Lipitor',
       instructions: 'Take with water',
-      timeOfDay: '08:00',
-      timezone: 'America/Chicago'
+      doses: [
+        {
+          id: 42,
+          label: 'Morning',
+          timeOfDay: '08:30',
+          timezone: 'America/Chicago'
+        }
+      ]
     });
   });
 
@@ -34,13 +57,30 @@ describe('validateMedicationForm', () => {
     expect(errors.name).toBe('Enter a medication name.');
   });
 
-  it('flags invalid time format', () => {
-    const { errors } = validateMedicationForm(buildValues({ timeOfDay: '8:30' }));
-    expect(errors.timeOfDay).toBe('Enter time as HH:mm (24-hour).');
+  it('flags invalid dose time format', () => {
+    const { errors } = validateMedicationForm(
+      buildValues({
+        doses: [
+          buildDose({ timeOfDay: '8:30' })
+        ]
+      })
+    );
+    expect(errors.doses?.[0]?.timeOfDay).toBe('Enter time as HH:mm (24-hour).');
   });
 
   it('flags invalid timezone', () => {
-    const { errors } = validateMedicationForm(buildValues({ timezone: 'Mars/Olympus' }));
-    expect(errors.timezone).toBe('Enter a valid IANA timezone (e.g. America/Chicago).');
+    const { errors } = validateMedicationForm(
+      buildValues({
+        doses: [
+          buildDose({ timezone: 'Mars/Olympus' })
+        ]
+      })
+    );
+    expect(errors.doses?.[0]?.timezone).toBe('Enter a valid IANA timezone (e.g. America/Chicago).');
+  });
+
+  it('requires at least one dose', () => {
+    const { errors } = validateMedicationForm(buildValues({ doses: [] }));
+    expect(errors.doses?.[0]?.timeOfDay).toBe('Add at least one dose.');
   });
 });

@@ -36,7 +36,11 @@ import { useMedications } from '../hooks/useMedications';
 import { useMedicationSummary } from './plan/medications/useMedicationSummary';
 import { MedicationSummaryList } from './plan/medications/MedicationSummaryList';
 import { MedicationDetailSheet } from './plan/medications/MedicationDetailSheet';
-import { MedicationFormSheet, type MedicationFormValues } from './plan/medications/MedicationFormSheet';
+import {
+  MedicationFormSheet,
+  type MedicationFormValues,
+  type DoseFormValue
+} from './plan/medications/MedicationFormSheet';
 import { useAuth } from '../auth/AuthContext';
 
 type DraftFormState = {
@@ -487,20 +491,21 @@ export default function PlanScreen({ navigation }: Props) {
       setMedicationFormSubmitting(true);
       setMedicationFormError(null);
       try {
+        const trimmedInstructions = values.instructions.trim();
+        const sanitizedDoses = values.doses.map((dose) => ({
+          label: dose.label.trim() || null,
+          timeOfDay: dose.timeOfDay,
+          timezone: dose.timezone,
+          reminderWindowMinutes: 120,
+          isActive: true
+        }));
+
         if (medicationFormMode === 'create') {
           const created = await medicationsState.createMedication({
             recipientId: planRecipientId!,
             name: values.name.trim(),
-            instructions: values.instructions.trim() || null,
-            doses: [
-              {
-                label: 'Primary',
-                timeOfDay: values.timeOfDay,
-                timezone: values.timezone,
-                reminderWindowMinutes: 120,
-                isActive: true
-              }
-            ]
+            instructions: trimmedInstructions || null,
+            doses: sanitizedDoses
           });
           closeMedicationForm();
           setSelectedMedicationId(created.id);
@@ -512,34 +517,60 @@ export default function PlanScreen({ navigation }: Props) {
           if (trimmedName && trimmedName !== medicationFormEditing.name) {
             updates.name = trimmedName;
           }
-          const trimmedInstructions = values.instructions.trim();
           if ((medicationFormEditing.instructions ?? '') !== trimmedInstructions) {
             updates.instructions = trimmedInstructions;
           }
           if (Object.keys(updates).length > 0) {
             await medicationsState.updateMedication(medicationId, updates);
           }
-          const existingDose = medicationFormEditing.doses[0] ?? null;
-          if (existingDose) {
+
+          const existingDoses = medicationFormEditing.doses;
+          const existingById = new Map(existingDoses.map((dose) => [dose.id, dose]));
+          const formDosesWithId = values.doses.filter(
+            (dose): dose is DoseFormValue & { id: number } => dose.id != null
+          );
+
+          // Delete removed doses
+          const removedDoseIds = existingDoses
+            .map((dose) => dose.id)
+            .filter((id) => !formDosesWithId.some((formDose) => formDose.id === id));
+          for (const doseId of removedDoseIds) {
+            await medicationsState.deleteDose(medicationId, doseId);
+          }
+
+          // Update existing doses
+          for (const dose of formDosesWithId) {
+            const original = existingById.get(dose.id);
+            if (!original) continue;
             const doseUpdates: any = {};
-            if (existingDose.timeOfDay !== values.timeOfDay) {
-              doseUpdates.timeOfDay = values.timeOfDay;
+            const trimmedLabel = dose.label.trim();
+            const originalLabel = (original.label ?? '').trim();
+            if (trimmedLabel !== originalLabel) {
+              doseUpdates.label = trimmedLabel || null;
             }
-            if (existingDose.timezone !== values.timezone) {
-              doseUpdates.timezone = values.timezone;
+            if (original.timeOfDay !== dose.timeOfDay) {
+              doseUpdates.timeOfDay = dose.timeOfDay;
+            }
+            if (original.timezone !== dose.timezone) {
+              doseUpdates.timezone = dose.timezone;
             }
             if (Object.keys(doseUpdates).length > 0) {
-              await medicationsState.updateDose(medicationId, existingDose.id, doseUpdates);
+              await medicationsState.updateDose(medicationId, dose.id, doseUpdates);
             }
-          } else {
+          }
+
+          // Create new doses
+          const newDoses = values.doses.filter((dose) => dose.id == null);
+          for (const dose of newDoses) {
             await medicationsState.createDose(medicationId, {
-              label: 'Primary',
-              timeOfDay: values.timeOfDay,
-              timezone: values.timezone,
+              label: dose.label.trim() || null,
+              timeOfDay: dose.timeOfDay,
+              timezone: dose.timezone,
               reminderWindowMinutes: 120,
               isActive: true
             });
           }
+
           closeMedicationForm();
           setSelectedMedicationId(medicationId);
           setMedicationSheetVisible(true);
