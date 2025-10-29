@@ -18,7 +18,21 @@ const client = apiClient as unknown as {
   delete: ReturnType<typeof vi.fn>;
 };
 
-const { fetchMedications, fetchMedication, createMedication, updateMedication } = await import('../medications');
+const {
+  fetchMedications,
+  fetchMedication,
+  createMedication,
+  updateMedication,
+  archiveMedication,
+  unarchiveMedication,
+  createMedicationDose,
+  updateMedicationDose,
+  deleteMedicationDose,
+  recordMedicationIntake,
+  updateMedicationIntakeStatus,
+  setMedicationRefillProjection,
+  clearMedicationRefillProjection
+} = await import('../medications');
 
 function createMedicationPayload(): MedicationWithDetails {
   const now = new Date();
@@ -55,13 +69,19 @@ describe('medications API client', () => {
   it('fetches medications with query params', async () => {
     client.get.mockResolvedValueOnce({ data: { medications: [createMedicationPayload()] } });
 
-    const response = await fetchMedications({ includeArchived: true, intakeLimit: 5, statuses: ['taken'] });
+    const response = await fetchMedications({
+      includeArchived: true,
+      intakeLimit: 5,
+      intakeLookbackDays: 3,
+      statuses: ['taken', 'skipped']
+    });
 
     expect(client.get).toHaveBeenCalledWith('/api/medications', {
       params: {
         includeArchived: 'true',
         intakeLimit: '5',
-        statuses: 'taken'
+        intakeLookbackDays: '3',
+        statuses: 'taken,skipped'
       }
     });
     expect(response.medications).toHaveLength(1);
@@ -85,5 +105,64 @@ describe('medications API client', () => {
 
     await updateMedication(1, { preferredPharmacy: 'Walgreens' });
     expect(client.patch).toHaveBeenCalledWith('/api/medications/1', { preferredPharmacy: 'Walgreens' });
+  });
+
+  it('archives and unarchives medications', async () => {
+    client.patch.mockResolvedValue({ data: createMedicationPayload() });
+
+    await archiveMedication(2);
+    expect(client.patch).toHaveBeenCalledWith('/api/medications/2/archive');
+
+    await unarchiveMedication(2);
+    expect(client.patch).toHaveBeenCalledWith('/api/medications/2/unarchive');
+  });
+
+  it('manages medication doses', async () => {
+    client.post.mockResolvedValue({ data: createMedicationPayload() });
+    client.patch.mockResolvedValue({ data: createMedicationPayload() });
+    client.delete.mockResolvedValue({ data: createMedicationPayload() });
+
+    await createMedicationDose(1, { label: 'Morning', timeOfDay: '08:00', timezone: 'America/Chicago' });
+    expect(client.post).toHaveBeenCalledWith('/api/medications/1/doses', {
+      label: 'Morning',
+      timeOfDay: '08:00',
+      timezone: 'America/Chicago'
+    });
+
+    await updateMedicationDose(1, 9, { label: 'Evening', timeOfDay: '20:00', timezone: 'America/New_York' });
+    expect(client.patch).toHaveBeenCalledWith('/api/medications/1/doses/9', {
+      label: 'Evening',
+      timeOfDay: '20:00',
+      timezone: 'America/New_York'
+    });
+
+    await deleteMedicationDose(1, 9);
+    expect(client.delete).toHaveBeenCalledWith('/api/medications/1/doses/9');
+  });
+
+  it('records and updates medication intakes', async () => {
+    client.post.mockResolvedValue({ data: createMedicationPayload() });
+    client.patch.mockResolvedValue({ data: createMedicationPayload() });
+
+    await recordMedicationIntake(1, {
+      doseId: 9,
+      scheduledFor: new Date().toISOString(),
+      status: 'taken'
+    });
+    expect(client.post).toHaveBeenCalledWith('/api/medications/1/intakes', expect.any(Object));
+
+    await updateMedicationIntakeStatus(1, 55, 'skipped');
+    expect(client.patch).toHaveBeenCalledWith('/api/medications/1/intakes/55', { status: 'skipped' });
+  });
+
+  it('sets and clears refill projections', async () => {
+    client.post.mockResolvedValue({ data: createMedicationPayload() });
+    client.delete.mockResolvedValue({ data: createMedicationPayload() });
+
+    await setMedicationRefillProjection(5, '2025-05-01');
+    expect(client.post).toHaveBeenCalledWith('/api/medications/5/refill', { expectedRunOutOn: '2025-05-01' });
+
+    await clearMedicationRefillProjection(5);
+    expect(client.delete).toHaveBeenCalledWith('/api/medications/5/refill');
   });
 });
