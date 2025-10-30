@@ -3,6 +3,7 @@ import type {
   Medication,
   MedicationDose,
   MedicationIntake,
+  MedicationIntakeStatus,
   MedicationRefillProjection,
   User
 } from '@carebase/shared';
@@ -26,6 +27,7 @@ const queriesMock: QueryMocks = {
   listMedicationIntakes: vi.fn(),
   listMedicationOccurrences: vi.fn(),
   listMedicationIntakeEvents: vi.fn(),
+  insertMedicationIntakeEvent: vi.fn(),
   listMedicationsForRecipient: vi.fn(),
   resolveRecipientContextForUser: vi.fn(),
   touchPlanForUser: vi.fn(),
@@ -144,6 +146,15 @@ function resetMocks(): void {
   queriesMock.createAuditLog.mockResolvedValue({ id: 900 });
   queriesMock.getMedicationIntake.mockResolvedValue(null);
   queriesMock.deleteMedicationIntake.mockResolvedValue(null);
+  queriesMock.insertMedicationIntakeEvent.mockResolvedValue({
+    id: 1,
+    intakeId: 300,
+    medicationId: 100,
+    doseId: 200,
+    eventType: 'taken',
+    occurredAt: now,
+    actorUserId: 10
+  });
 }
 
 beforeEach(() => {
@@ -343,11 +354,11 @@ describe('deleteMedicationForOwner', () => {
     const dose = createDose();
     const intake = createIntake();
 
-    queriesMock.resolveRecipientContextForUser.mockResolvedValueOnce({
+    queriesMock.resolveRecipientContextForUser.mockResolvedValue({
       recipient: { id: medication.recipientId, userId: user.id, displayName: 'Alex', createdAt: now },
       collaborator: null
     });
-    queriesMock.getMedicationForRecipient.mockResolvedValueOnce(medication);
+    queriesMock.getMedicationForRecipient.mockImplementation(async () => medication);
     queriesMock.listMedicationDoses.mockResolvedValueOnce([dose]);
     queriesMock.listMedicationIntakes
       .mockResolvedValueOnce([intake])
@@ -418,14 +429,45 @@ describe('recordMedicationIntake', () => {
   it('records intake for owner and hydrates response', async () => {
     const user = createUser();
     const medication = createMedication();
+    const occurrencePending = {
+      intakeId: 300,
+      medicationId: medication.id,
+      doseId: 200,
+      occurrenceDate: now,
+      status: 'pending' as MedicationIntakeStatus,
+      acknowledgedAt: null,
+      acknowledgedByUserId: null,
+      overrideCount: 0
+    };
+    const occurrenceTaken = {
+      ...occurrencePending,
+      status: 'taken' as MedicationIntakeStatus,
+      acknowledgedAt: new Date('2025-03-01T13:00:00.000Z'),
+      acknowledgedByUserId: user.id
+    };
+    const intakeBefore = createIntake({ id: 300, doseId: 200, status: 'pending', acknowledgedAt: null, actorUserId: null, overrideCount: 0 });
+    const intakeAfter = createIntake({ id: 300, doseId: 200, status: 'taken', acknowledgedAt: new Date('2025-03-01T13:00:00.000Z'), actorUserId: user.id, overrideCount: 0 });
+    const eventRecord = {
+      id: 1,
+      intakeId: 300,
+      medicationId: medication.id,
+      doseId: 200,
+      eventType: 'taken' as const,
+      occurredAt: new Date('2025-03-01T13:00:00.000Z'),
+      actorUserId: user.id
+    };
 
-    queriesMock.resolveRecipientContextForUser.mockResolvedValueOnce({
+    queriesMock.resolveRecipientContextForUser.mockResolvedValue({
       recipient: { id: medication.recipientId, userId: user.id, displayName: 'Alex', createdAt: now },
       collaborator: null
     });
-    queriesMock.getMedicationForRecipient.mockResolvedValueOnce(medication);
-    queriesMock.getMedicationForRecipient.mockResolvedValueOnce(medication);
-    queriesMock.createMedicationIntake.mockResolvedValueOnce(createIntake());
+    queriesMock.getMedicationForRecipient.mockImplementation(async () => medication);
+    queriesMock.listMedicationOccurrences.mockResolvedValueOnce([occurrencePending]);
+    queriesMock.getMedicationIntake.mockResolvedValueOnce(intakeBefore);
+    queriesMock.updateMedicationIntake.mockResolvedValueOnce(intakeAfter);
+    queriesMock.insertMedicationIntakeEvent.mockResolvedValueOnce(eventRecord);
+    queriesMock.listMedicationOccurrences.mockResolvedValueOnce([occurrenceTaken]);
+    queriesMock.listMedicationIntakeEvents.mockResolvedValueOnce([eventRecord]);
 
     const result = await recordMedicationIntake(user, medication.id, {
       doseId: 200,
@@ -434,7 +476,12 @@ describe('recordMedicationIntake', () => {
     });
 
     expect(result.recipientId).toBe(medication.recipientId);
-    expect(queriesMock.createMedicationIntake).toHaveBeenCalled();
+    expect(queriesMock.updateMedicationIntake).toHaveBeenCalledWith(
+      300,
+      medication.id,
+      expect.objectContaining({ status: 'taken', overrideCount: 0 })
+    );
+    expect(queriesMock.insertMedicationIntakeEvent).toHaveBeenCalledWith(300, medication.id, 200, 'taken', user.id);
     expect(queriesMock.touchPlanForUser).toHaveBeenCalledWith(user.id);
   });
 

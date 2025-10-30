@@ -25,6 +25,7 @@ import {
   getMedicationIntake,
   getMedicationForRecipient,
   getMedicationRefillProjection,
+  insertMedicationIntakeEvent,
   listMedicationDoses,
   listMedicationIntakeEvents,
   listMedicationIntakes,
@@ -72,6 +73,9 @@ interface MedicationListOptions {
 interface MedicationDetailOptions extends MedicationListOptions {}
 
 const ALLOWED_STATUSES: MedicationIntakeStatus[] = ['pending', 'taken', 'skipped', 'expired'];
+const OVERRIDE_WARNING_THRESHOLD = 1;
+
+type IntakeEventType = 'taken' | 'skipped' | 'undo' | 'override';
 
 async function resolveContext(user: User): Promise<MedicationContext> {
   const context = await resolveRecipientContextForUser(user.id);
@@ -318,23 +322,15 @@ function buildIntakeWriteData(payload: MedicationIntakeRecordRequest, userId: nu
   if (doseId !== null && (typeof doseId !== 'number' || !Number.isInteger(doseId) || doseId <= 0)) {
     throw new ValidationError({ field: 'doseId', issue: 'invalid_integer' });
   }
+  const occurrenceDate = toOccurrenceDate(scheduledFor);
   return {
     doseId,
     scheduledFor,
     acknowledgedAt: status === 'taken' || status === 'skipped' ? new Date() : null,
     status,
-    actorUserId: userId
-  };
-}
-
-function buildIntakeUpdateData(status: MedicationIntakeStatus, userId: number): MedicationIntakeUpdateData {
-  if (!ALLOWED_STATUSES.includes(status)) {
-    throw new ValidationError({ field: 'status', issue: 'unsupported' });
-  }
-  return {
-    status,
-    acknowledgedAt: status === 'taken' || status === 'skipped' ? new Date() : null,
-    actorUserId: userId
+    actorUserId: userId,
+    occurrenceDate,
+    overrideCount: 0
   };
 }
 
@@ -346,6 +342,10 @@ function buildIntakeQueryOptions(options: MedicationListOptions | undefined) {
   const since = new Date(Date.now() - lookbackDays * DAY_IN_MS);
   const statuses = normalizeStatuses(options?.statuses);
   return { limit, since, statuses };
+}
+
+function toOccurrenceDate(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
 
 function groupEventsByIntake(events: MedicationIntakeEvent[]): Map<number, MedicationIntakeEvent[]> {
@@ -374,9 +374,16 @@ function buildOccurrences(
     status: summary.status,
     acknowledgedAt: summary.acknowledgedAt,
     acknowledgedByUserId: summary.acknowledgedByUserId,
-    overrideCount: summary.overrideCount,
+    overrideCount: summary.overrideCount ?? 0,
     history: historyByIntake.get(summary.intakeId) ?? []
   }));
+}
+
+function findOccurrenceForDose(
+  summaries: MedicationOccurrenceSummary[],
+  doseId: number | null
+): MedicationOccurrenceSummary | undefined {
+  return summaries.find((summary) => summary.doseId === doseId);
 }
 
 type MedicationIntakeList = Awaited<ReturnType<typeof listMedicationIntakes>>;
@@ -742,6 +749,84 @@ export async function deleteMedicationIntakeForOwner(
   };
 }
 
+async function writeIntakeEvent(
+  intakeId: number,
+  medicationId: number,
+  doseId: number | null,
+  eventType: IntakeEventType,
+  actorUserId: number | null
+): Promise<void> {
+  await insertMedicationIntakeEvent(intakeId, medicationId, doseId, eventType, actorUserId);
+}
+
+async function setDoseStatus(
+  user: User,
+  medicationId: number,
+  intakeId: number,
+  status: MedicationIntakeStatus,
+  options: { allowOverride?: boolean; context?: MedicationContext } = {}
+): Promise<MedicationWithDetails> {
+  const context = options.context ?? await resolveContext(user);
+  ensureOwner(context);
+
+  const medication = await getMedicationForRecipient(medicationId, context.recipientId);
+  if (!medication) {
+    throw new NotFoundError('Medication not found');
+  }
+
+  const existingIntake = await getMedicationIntake(intakeId, medicationId);
+  if (!existingIntake) {
+    throw new NotFoundError('Intake not found');
+  }
+
+  if (status === 'pending') {
+    const updated = await updateMedicationIntake(intakeId, medicationId, {
+      status,
+      acknowledgedAt: null,
+      actorUserId: user.id,
+      overrideCount: 0
+    });
+    if (!updated) {
+      throw new NotFoundError('Intake not found');
+    }
+    await writeIntakeEvent(intakeId, medicationId, existingIntake.doseId, 'undo', user.id);
+    await touchPlanForUser(context.ownerUserId);
+    return hydrateMedication(medicationId, context);
+  }
+
+  const isOverride = existingIntake.status !== 'pending' && existingIntake.status === status;
+  const shouldIncrementOverride = isOverride && (options.allowOverride ?? true);
+
+  if (isOverride && !options.allowOverride) {
+    throw new ValidationError({ field: 'status', issue: 'override_not_allowed' });
+  }
+
+  const baseOverrideCount = existingIntake.overrideCount ?? 0;
+  let nextOverrideCount = baseOverrideCount;
+  if (shouldIncrementOverride) {
+    nextOverrideCount = baseOverrideCount + 1;
+  } else if (existingIntake.status !== status) {
+    nextOverrideCount = 0;
+  }
+
+  const updateData: MedicationIntakeUpdateData = {
+    status,
+    acknowledgedAt: status === 'taken' || status === 'skipped' ? new Date() : null,
+    actorUserId: user.id,
+    overrideCount: nextOverrideCount
+  };
+
+  const updated = await updateMedicationIntake(intakeId, medicationId, updateData);
+  if (!updated) {
+    throw new NotFoundError('Intake not found');
+  }
+
+  const eventType: IntakeEventType = shouldIncrementOverride ? 'override' : status === 'taken' ? 'taken' : 'skipped';
+  await writeIntakeEvent(intakeId, medicationId, existingIntake.doseId, eventType, user.id);
+  await touchPlanForUser(context.ownerUserId);
+  return hydrateMedication(medicationId, context);
+}
+
 export async function recordMedicationIntake(
   user: User,
   medicationId: number,
@@ -749,12 +834,39 @@ export async function recordMedicationIntake(
 ): Promise<MedicationWithDetails> {
   const context = await resolveContext(user);
   ensureOwner(context);
+
   const medication = await getMedicationForRecipient(medicationId, context.recipientId);
   if (!medication) {
     throw new NotFoundError('Medication not found');
   }
+
   const writeData = buildIntakeWriteData(payload, user.id);
-  await createMedicationIntake(medicationId, writeData);
+  const occurrenceDate = writeData.occurrenceDate ?? toOccurrenceDate(writeData.scheduledFor);
+
+  const occurrenceSummaries = await listMedicationOccurrences(medicationId, {
+    since: occurrenceDate,
+    until: occurrenceDate
+  });
+
+  const matching = findOccurrenceForDose(occurrenceSummaries, writeData.doseId ?? null);
+  if (matching) {
+    return setDoseStatus(user, medicationId, matching.intakeId, payload.status, {
+      allowOverride: true,
+      context
+    });
+  }
+
+  const created = await createMedicationIntake(medicationId, {
+    ...writeData,
+    occurrenceDate,
+    overrideCount: 0
+  });
+
+  if (payload.status === 'taken' || payload.status === 'skipped') {
+    const eventType: IntakeEventType = payload.status === 'taken' ? 'taken' : 'skipped';
+    await writeIntakeEvent(created.id, medicationId, created.doseId, eventType, user.id);
+  }
+
   await touchPlanForUser(context.ownerUserId);
   return hydrateMedication(medicationId, context);
 }
@@ -765,19 +877,7 @@ export async function updateMedicationIntakeStatus(
   intakeId: number,
   status: MedicationIntakeStatus
 ): Promise<MedicationWithDetails> {
-  const context = await resolveContext(user);
-  ensureOwner(context);
-  const medication = await getMedicationForRecipient(medicationId, context.recipientId);
-  if (!medication) {
-    throw new NotFoundError('Medication not found');
-  }
-  const updateData = buildIntakeUpdateData(status, user.id);
-  const updated = await updateMedicationIntake(intakeId, medicationId, updateData);
-  if (!updated) {
-    throw new NotFoundError('Intake not found');
-  }
-  await touchPlanForUser(context.ownerUserId);
-  return hydrateMedication(medicationId, context);
+  return setDoseStatus(user, medicationId, intakeId, status, { allowOverride: true });
 }
 
 export async function setMedicationRefillProjection(

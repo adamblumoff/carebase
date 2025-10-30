@@ -118,12 +118,15 @@ export interface MedicationIntakeWriteData {
   acknowledgedAt?: Date | null;
   status: MedicationIntakeStatus;
   actorUserId?: number | null;
+  occurrenceDate?: Date;
+  overrideCount?: number;
 }
 
 export interface MedicationIntakeUpdateData {
   acknowledgedAt?: Date | null;
   status?: MedicationIntakeStatus;
   actorUserId?: number | null;
+  overrideCount?: number;
 }
 
 function normalizeOptionalText(value: string | null | undefined): string | null {
@@ -200,7 +203,7 @@ function toIntake(row: MedicationIntakeRow): MedicationIntake {
     status: row.status,
     actorUserId: row.actor_user_id,
     occurrenceDate: row.occurrence_date,
-    overrideCount: row.override_count,
+    overrideCount: row.override_count ?? 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -543,8 +546,17 @@ export async function createMedicationIntake(
   data: MedicationIntakeWriteData
 ): Promise<MedicationIntake> {
   const result = await db.query<MedicationIntakeRow>(
-    `INSERT INTO medication_intakes (medication_id, dose_id, scheduled_for, acknowledged_at, status, actor_user_id)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO medication_intakes (
+        medication_id,
+        dose_id,
+        scheduled_for,
+        acknowledged_at,
+        status,
+        actor_user_id,
+        occurrence_date,
+        override_count
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING *`,
     [
       medicationId,
@@ -552,7 +564,9 @@ export async function createMedicationIntake(
       data.scheduledFor,
       data.acknowledgedAt ?? null,
       data.status,
-      data.actorUserId ?? null
+      data.actorUserId ?? null,
+      (data.occurrenceDate ?? data.scheduledFor),
+      data.overrideCount ?? 0
     ]
   );
   return toIntake(result.rows[0]!);
@@ -577,6 +591,10 @@ export async function updateMedicationIntake(
   if (data.actorUserId !== undefined) {
     updates.push(`actor_user_id = $${updates.length + 1}`);
     params.push(data.actorUserId);
+  }
+  if (data.overrideCount !== undefined) {
+    updates.push(`override_count = $${updates.length + 1}`);
+    params.push(data.overrideCount);
   }
 
   if (updates.length === 0) {
