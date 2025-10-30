@@ -23,6 +23,8 @@ const {
   getMedicationIntake,
   updateMedicationIntake,
   listMedicationIntakes,
+  listMedicationOccurrences,
+  listMedicationIntakeEvents,
   upsertMedicationRefillProjection,
   getMedicationRefillProjection
 } = await import('../medications.js');
@@ -247,6 +249,30 @@ describe('medication intake queries', () => {
 
     const [, deleteParams] = dbMocks.query.mock.calls[1] as [string, unknown[]];
     expect(deleteParams).toEqual([baseIntakeRow.id, baseIntakeRow.medication_id]);
+  });
+
+  it('lists occurrences and events', async () => {
+    dbMocks.query
+      .mockResolvedValueOnce({ rows: [baseIntakeRow], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [
+        {
+          id: 1,
+          intake_id: baseIntakeRow.id,
+          medication_id: baseIntakeRow.medication_id,
+          dose_id: baseIntakeRow.dose_id,
+          event_type: 'taken',
+          occurred_at: new Date('2025-01-03T08:05:00Z'),
+          actor_user_id: baseIntakeRow.actor_user_id
+        }
+      ], rowCount: 1 });
+
+    const occurrences = await listMedicationOccurrences(baseIntakeRow.medication_id);
+    expect(occurrences[0]?.occurrenceDate).toEqual(baseIntakeRow.occurrence_date);
+    expect(dbMocks.query.mock.calls[0]?.[0]).toContain('FROM medication_intakes');
+
+    const events = await listMedicationIntakeEvents([baseIntakeRow.id]);
+    expect(events[0]?.eventType).toBe('taken');
+    expect(dbMocks.query.mock.calls[1]?.[0]).toContain('FROM medication_intake_events');
   });
 });
 

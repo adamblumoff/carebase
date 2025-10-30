@@ -54,6 +54,27 @@ interface MedicationIntakeRow {
   updated_at: Date;
 }
 
+interface MedicationOccurrenceRow {
+  id: number;
+  medication_id: number;
+  dose_id: number | null;
+  occurrence_date: Date;
+  status: MedicationIntakeStatus;
+  acknowledged_at: Date | null;
+  actor_user_id: number | null;
+  override_count: number;
+}
+
+interface MedicationIntakeEventRow {
+  id: number;
+  intake_id: number;
+  medication_id: number;
+  dose_id: number | null;
+  event_type: 'taken' | 'skipped' | 'undo' | 'override';
+  occurred_at: Date;
+  actor_user_id: number | null;
+}
+
 interface MedicationRefillProjectionRow {
   medication_id: number;
   expected_run_out_on: Date | null;
@@ -187,6 +208,31 @@ function toIntake(row: MedicationIntakeRow): MedicationIntake {
 
 export function medicationIntakeRowToMedicationIntake(row: MedicationIntakeRow): MedicationIntake {
   return toIntake(row);
+}
+
+function toOccurrenceSummary(row: MedicationOccurrenceRow): MedicationOccurrenceSummary {
+  return {
+    intakeId: row.id,
+    medicationId: row.medication_id,
+    doseId: row.dose_id,
+    occurrenceDate: row.occurrence_date,
+    status: row.status,
+    acknowledgedAt: row.acknowledged_at,
+    acknowledgedByUserId: row.actor_user_id,
+    overrideCount: row.override_count
+  };
+}
+
+function toIntakeEvent(row: MedicationIntakeEventRow): MedicationIntakeEvent {
+  return {
+    id: row.id,
+    intakeId: row.intake_id,
+    medicationId: row.medication_id,
+    doseId: row.dose_id,
+    eventType: row.event_type,
+    occurredAt: row.occurred_at,
+    actorUserId: row.actor_user_id
+  };
 }
 
 function toProjection(row: MedicationRefillProjectionRow): MedicationRefillProjection {
@@ -584,6 +630,65 @@ export async function listMedicationIntakes(
     params
   );
   return result.rows.map((row) => toIntake(row));
+}
+
+export async function listMedicationOccurrences(
+  medicationId: number,
+  options: { since?: Date; until?: Date } = {}
+): Promise<MedicationOccurrenceSummary[]> {
+  const conditions = ['medication_id = $1'];
+  const params: unknown[] = [medicationId];
+
+  if (options.since) {
+    conditions.push(`occurrence_date >= $${params.length + 1}`);
+    params.push(options.since);
+  }
+
+  if (options.until) {
+    conditions.push(`occurrence_date <= $${params.length + 1}`);
+    params.push(options.until);
+  }
+
+  const sql = `SELECT id, medication_id, dose_id, occurrence_date, status, acknowledged_at, actor_user_id, override_count
+               FROM medication_intakes
+               WHERE ${conditions.join(' AND ')}
+               ORDER BY occurrence_date DESC, id DESC`;
+
+  const result = await db.query<MedicationOccurrenceRow>(sql, params);
+  return result.rows.map((row) => toOccurrenceSummary(row));
+}
+
+export async function listMedicationIntakeEvents(intakeIds: number[]): Promise<MedicationIntakeEvent[]> {
+  if (intakeIds.length === 0) {
+    return [];
+  }
+
+  const result = await db.query<MedicationIntakeEventRow>(
+    `SELECT id, intake_id, medication_id, dose_id, event_type, occurred_at, actor_user_id
+       FROM medication_intake_events
+       WHERE intake_id = ANY($1)
+       ORDER BY occurred_at ASC, id ASC`,
+    [intakeIds]
+  );
+
+  return result.rows.map((row) => toIntakeEvent(row));
+}
+
+export async function insertMedicationIntakeEvent(
+  intakeId: number,
+  medicationId: number,
+  doseId: number | null,
+  eventType: 'taken' | 'skipped' | 'undo' | 'override',
+  actorUserId: number | null
+): Promise<MedicationIntakeEvent> {
+  const result = await db.query<MedicationIntakeEventRow>(
+    `INSERT INTO medication_intake_events (intake_id, medication_id, dose_id, event_type, actor_user_id)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING id, intake_id, medication_id, dose_id, event_type, occurred_at, actor_user_id`,
+    [intakeId, medicationId, doseId, eventType, actorUserId]
+  );
+
+  return toIntakeEvent(result.rows[0]!);
 }
 
 export async function getMedicationIntake(intakeId: number, medicationId: number): Promise<MedicationIntake | null> {
