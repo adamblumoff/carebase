@@ -6,11 +6,12 @@ import type {
   MedicationIntakeRecordRequest,
   MedicationIntakeStatus,
   MedicationUpdateRequest,
-  MedicationWithDetails
+  MedicationWithDetails,
+  MedicationDeleteResponse,
+  MedicationIntakeDeleteResponse
 } from '@carebase/shared';
 import {
   fetchMedications,
-  fetchMedication,
   createMedication as createMedicationApi,
   updateMedication as updateMedicationApi,
   archiveMedication as archiveMedicationApi,
@@ -18,7 +19,9 @@ import {
   createMedicationDose as createMedicationDoseApi,
   updateMedicationDose as updateMedicationDoseApi,
   deleteMedicationDose as deleteMedicationDoseApi,
+  deleteMedication as deleteMedicationApi,
   recordMedicationIntake as recordMedicationIntakeApi,
+  deleteMedicationIntake as deleteMedicationIntakeApi,
   updateMedicationIntakeStatus as updateMedicationIntakeStatusApi,
   setMedicationRefillProjection as setMedicationRefillProjectionApi,
   clearMedicationRefillProjection as clearMedicationRefillProjectionApi,
@@ -47,6 +50,8 @@ interface UseMedicationsResult {
   updateIntakeStatus: (id: number, intakeId: number, status: MedicationIntakeStatus) => Promise<MedicationWithDetails>;
   setRefillProjection: (id: number, expectedRunOutOn: string | null) => Promise<MedicationWithDetails>;
   clearRefillProjection: (id: number) => Promise<MedicationWithDetails>;
+  deleteMedication: (id: number) => Promise<MedicationDeleteResponse>;
+  deleteIntake: (id: number, intakeId: number) => Promise<MedicationIntakeDeleteResponse>;
 }
 
 const RELEVANT_ITEM_TYPES: PlanItemDelta['itemType'][] = ['plan', 'appointment', 'bill'];
@@ -117,26 +122,43 @@ export function useMedications(options?: UseMedicationsOptions): UseMedicationsR
     setMedications((current) => current.filter((med) => med.id !== id));
   }, []);
 
-  const mutationWrapper = useCallback(
-    async (
-      action: () => Promise<MedicationWithDetails>,
-      onSuccess?: (med: MedicationWithDetails) => void
-    ) => {
+  const runAction = useCallback(
+    async <T>(action: () => Promise<T>, onSuccess?: (result: T) => void): Promise<T> => {
       try {
-        const medication = await action();
-        if (onSuccess) {
-          onSuccess(medication);
-        } else {
-          mutateState(medication);
-        }
-        return medication;
+        const result = await action();
+        onSuccess?.(result);
+        return result;
       } catch (err: any) {
         const message = err?.response?.data?.error || err?.message || 'Unable to update medication right now.';
         setError(message);
         throw err;
       }
     },
-    [mutateState]
+    [setError]
+  );
+
+  const mutationWrapper = useCallback(
+    async (
+      action: () => Promise<MedicationWithDetails>,
+      onSuccess?: (med: MedicationWithDetails) => void
+    ) => runAction(action, onSuccess ?? mutateState),
+    [mutateState, runAction]
+  );
+
+  const deleteMedication = useCallback(
+    async (id: number) =>
+      runAction(() => deleteMedicationApi(id), () => {
+        removeMedication(id);
+      }),
+    [removeMedication, runAction]
+  );
+
+  const deleteIntake = useCallback(
+    async (id: number, intakeId: number) =>
+      runAction(() => deleteMedicationIntakeApi(id, intakeId), (result) => {
+        mutateState(result.medication);
+      }),
+    [mutateState, runAction]
   );
 
   const api = useMemo(() => ({
@@ -162,8 +184,10 @@ export function useMedications(options?: UseMedicationsOptions): UseMedicationsR
     setRefillProjection: (id: number, expectedRunOutOn: string | null) =>
       mutationWrapper(() => setMedicationRefillProjectionApi(id, expectedRunOutOn)),
     clearRefillProjection: (id: number) =>
-      mutationWrapper(() => clearMedicationRefillProjectionApi(id))
-  }), [loadMedications, mutationWrapper, mutateState]);
+      mutationWrapper(() => clearMedicationRefillProjectionApi(id)),
+    deleteMedication,
+    deleteIntake
+  }), [loadMedications, mutationWrapper, mutateState, deleteMedication, deleteIntake]);
 
   return {
     medications,

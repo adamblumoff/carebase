@@ -23,6 +23,8 @@ interface MedicationDetailSheetProps {
   onMarkSkipped: (intakeId: number) => Promise<void>;
   onRecordNow: () => Promise<void>;
   onEdit: () => void;
+  onDeleteMedication: () => Promise<void>;
+  onDeleteIntake: (intakeId: number) => Promise<void>;
   actionPending: boolean;
   actionError: string | null;
 }
@@ -36,6 +38,8 @@ export function MedicationDetailSheet({
   onMarkSkipped,
   onRecordNow,
   onEdit,
+  onDeleteMedication,
+  onDeleteIntake,
   actionPending,
   actionError
 }: MedicationDetailSheetProps) {
@@ -148,37 +152,52 @@ export function MedicationDetailSheet({
                   <Text style={[styles.sectionText, { color: palette.textMuted }]}>No upcoming intakes.</Text>
                 ) : (
                   sortedIntakes.slice(0, 5).map((intake) => (
-                    <View key={intake.id} style={[styles.intakeCard, { borderColor: palette.border }]}
-                    >
+                    <View key={intake.id} style={[styles.intakeCard, { borderColor: palette.border }]}>
                       <Text style={[styles.rowTitle, { color: palette.textPrimary }]}>
                         {formatDisplayDate(intake.scheduledFor)} · {formatDisplayTime(intake.scheduledFor)}
                       </Text>
                       <Text style={[styles.rowMeta, { color: palette.textMuted }]}>Status: {intake.status}</Text>
                       {canManage ? (
-                        <View style={styles.intakeActions}>
+                        <>
+                          <View style={styles.intakeActions}>
+                            <Pressable
+                              style={({ pressed }) => [
+                                styles.intakeButton,
+                                { backgroundColor: palette.success },
+                                pressed && styles.intakeButtonPressed,
+                                actionPending && styles.disabledAction
+                              ]}
+                              onPress={() => onMarkTaken(intake.id)}
+                              disabled={actionPending}
+                            >
+                              <Text style={styles.intakeButtonText}>Mark taken</Text>
+                            </Pressable>
+                            <Pressable
+                              style={({ pressed }) => [
+                                styles.intakeButton,
+                                { backgroundColor: palette.warning },
+                                pressed && styles.intakeButtonPressed,
+                                actionPending && styles.disabledAction
+                              ]}
+                              onPress={() => onMarkSkipped(intake.id)}
+                              disabled={actionPending}
+                            >
+                              <Text style={styles.intakeButtonText}>Skip</Text>
+                            </Pressable>
+                          </View>
                           <Pressable
                             style={({ pressed }) => [
-                              styles.intakeButton,
-                              { backgroundColor: palette.success },
-                              pressed && styles.intakeButtonPressed
+                              styles.intakeDeleteButton,
+                              pressed && styles.intakeDeleteButtonPressed,
+                              actionPending && styles.disabledAction
                             ]}
-                            onPress={() => onMarkTaken(intake.id)}
+                            onPress={() => onDeleteIntake(intake.id)}
                             disabled={actionPending}
+                            accessibilityRole="button"
                           >
-                            <Text style={styles.intakeButtonText}>Mark taken</Text>
+                            <Text style={[styles.intakeDeleteText, { color: palette.danger }]}>Delete entry</Text>
                           </Pressable>
-                          <Pressable
-                            style={({ pressed }) => [
-                              styles.intakeButton,
-                              { backgroundColor: palette.warning },
-                              pressed && styles.intakeButtonPressed
-                            ]}
-                            onPress={() => onMarkSkipped(intake.id)}
-                            disabled={actionPending}
-                          >
-                            <Text style={styles.intakeButtonText}>Skip</Text>
-                          </Pressable>
-                        </View>
+                        </>
                       ) : null}
                     </View>
                   ))
@@ -190,6 +209,24 @@ export function MedicationDetailSheet({
                 >
                   <Text style={[styles.errorText, { color: palette.danger }]}>{actionError}</Text>
                 </View>
+              ) : null}
+
+              {canManage ? (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.deleteMedicationButton,
+                    { borderColor: palette.danger },
+                    pressed && styles.deleteMedicationButtonPressed,
+                    actionPending && styles.disabledAction
+                  ]}
+                  onPress={onDeleteMedication}
+                  disabled={actionPending}
+                  accessibilityRole="button"
+                >
+                  <Text style={[styles.deleteMedicationText, { color: palette.danger }]}>
+                    Delete medication
+                  </Text>
+                </Pressable>
               ) : null}
 
               <Pressable style={styles.closeButton} onPress={onClose} accessibilityRole="button">
@@ -317,6 +354,22 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600'
   },
+  disabledAction: {
+    opacity: 0.5
+  },
+  intakeDeleteButton: {
+    marginTop: spacing(0.5),
+    alignSelf: 'flex-start',
+    paddingVertical: spacing(0.5),
+    paddingHorizontal: spacing(0.5)
+  },
+  intakeDeleteButtonPressed: {
+    opacity: 0.7
+  },
+  intakeDeleteText: {
+    fontSize: 13,
+    fontWeight: '600'
+  },
   recordNow: {
     borderRadius: radius.sm,
     paddingVertical: spacing(1),
@@ -343,8 +396,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 13
   },
-  closeButton: {
+  deleteMedicationButton: {
     marginTop: spacing(3),
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    paddingVertical: spacing(1),
+    alignItems: 'center'
+  },
+  deleteMedicationButtonPressed: {
+    opacity: 0.85
+  },
+  deleteMedicationText: {
+    fontSize: 14,
+    fontWeight: '600'
+  },
+  closeButton: {
+    marginTop: spacing(2),
     alignItems: 'center'
   },
   closeButtonText: {

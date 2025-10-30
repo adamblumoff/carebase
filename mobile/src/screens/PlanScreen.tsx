@@ -415,7 +415,7 @@ export default function PlanScreen({ navigation, route }: Props) {
   }, []);
 
   const handleMedicationMutator = useCallback(
-    async (mutator: () => Promise<void>) => {
+    async (mutator: () => Promise<unknown>) => {
       if (!canManageMedications) {
         setMedicationActionError('Only the plan owner can update medications.');
         return;
@@ -454,6 +454,80 @@ export default function PlanScreen({ navigation, route }: Props) {
       })
     );
   }, [canManageMedications, handleMedicationMutator, medicationsState, selectedMedicationId]);
+
+  const handleDeleteMedication = useCallback(() => {
+    if (!selectedMedicationId || !canManageMedications) return;
+    const medicationId = selectedMedicationId;
+    const medicationLabel = activeMedication?.name ?? 'Medication';
+    Alert.alert(
+      'Delete medication?',
+      `This will permanently remove ${medicationLabel} and its history. This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete medication',
+          style: 'destructive',
+          onPress: () => {
+            void handleMedicationMutator(async () => {
+              await medicationsState.deleteMedication(medicationId);
+              closeMedicationDetail();
+              toast.showToast(`${medicationLabel} deleted`);
+            });
+          }
+        }
+      ]
+    );
+  }, [
+    activeMedication,
+    canManageMedications,
+    closeMedicationDetail,
+    handleMedicationMutator,
+    medicationsState,
+    selectedMedicationId,
+    toast
+  ]);
+
+  const handleDeleteIntake = useCallback(
+    (intakeId: number) => {
+      if (!selectedMedicationId || !canManageMedications) return;
+      const medicationId = selectedMedicationId;
+      const medicationLabel = activeMedication?.name ?? 'Medication';
+      const intake =
+        activeMedication?.upcomingIntakes.find((entry) => entry.id === intakeId) ?? null;
+      const dateLabel = intake ? formatDisplayDate(intake.scheduledFor) : '';
+      const timeLabel = intake ? formatDisplayTime(intake.scheduledFor) : '';
+      const scheduledLabel =
+        intake && dateLabel
+          ? `${dateLabel}${timeLabel ? ` at ${timeLabel}` : ''}`
+          : 'this entry';
+
+      Alert.alert(
+        'Delete intake entry?',
+        `Remove the record for ${scheduledLabel}? This cannot be undone.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete entry',
+            style: 'destructive',
+            onPress: () => {
+              void handleMedicationMutator(async () => {
+                await medicationsState.deleteIntake(medicationId, intakeId);
+                toast.showToast(`${medicationLabel} entry deleted`);
+              });
+            }
+          }
+        ]
+      );
+    },
+    [
+      activeMedication,
+      canManageMedications,
+      handleMedicationMutator,
+      medicationsState,
+      selectedMedicationId,
+      toast
+    ]
+  );
 
   const openCreateMedication = useCallback((draft?: MedicationDraft | null) => {
     if (!canManageMedications) {
@@ -1016,6 +1090,8 @@ export default function PlanScreen({ navigation, route }: Props) {
         onMarkSkipped={(intakeId) => handleMarkIntake('skipped', intakeId)}
         onRecordNow={handleRecordNow}
         onEdit={openEditMedication}
+        onDeleteMedication={handleDeleteMedication}
+        onDeleteIntake={handleDeleteIntake}
         actionPending={medicationActionPending}
         actionError={medicationActionError}
       />

@@ -5,7 +5,9 @@ import type {
   MedicationIntakeRecordRequest,
   MedicationIntakeStatus,
   MedicationUpdateRequest,
-  MedicationWithDetails
+  MedicationWithDetails,
+  MedicationDeleteResponse,
+  MedicationIntakeDeleteResponse
 } from '@carebase/shared';
 import apiClient from './client';
 import { API_ENDPOINTS } from '../config/apiEndpoints';
@@ -90,12 +92,25 @@ export async function deleteMedicationDose(id: number, doseId: number): Promise<
   return response.data as MedicationWithDetails;
 }
 
+export async function deleteMedication(id: number): Promise<MedicationDeleteResponse> {
+  const response = await apiClient.delete(API_ENDPOINTS.medications.remove(id));
+  return response.data as MedicationDeleteResponse;
+}
+
 export async function recordMedicationIntake(
   id: number,
   payload: MedicationIntakeRecordRequest
 ): Promise<MedicationWithDetails> {
   const response = await apiClient.post(API_ENDPOINTS.medications.intakes(id), payload);
   return response.data as MedicationWithDetails;
+}
+
+export async function deleteMedicationIntake(
+  id: number,
+  intakeId: number
+): Promise<MedicationIntakeDeleteResponse> {
+  const response = await apiClient.delete(API_ENDPOINTS.medications.intake(id, intakeId));
+  return response.data as MedicationIntakeDeleteResponse;
 }
 
 export async function updateMedicationIntakeStatus(

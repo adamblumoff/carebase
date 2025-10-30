@@ -79,6 +79,8 @@ describe('MedicationDetailSheet', () => {
     const onMarkSkipped = vi.fn();
     const onRecordNow = vi.fn();
     const onEdit = vi.fn();
+    const onDeleteMedication = vi.fn();
+    const onDeleteIntake = vi.fn();
 
     renderWithTheme(
       <MedicationDetailSheet
@@ -90,6 +92,8 @@ describe('MedicationDetailSheet', () => {
         onMarkSkipped={async (id) => onMarkSkipped(id)}
         onRecordNow={async () => onRecordNow()}
         onEdit={onEdit}
+        onDeleteMedication={async () => onDeleteMedication()}
+        onDeleteIntake={async (id) => onDeleteIntake(id)}
         actionPending={false}
         actionError={null}
       />
@@ -110,6 +114,12 @@ describe('MedicationDetailSheet', () => {
 
     fireEvent.click(screen.getByText('Edit'));
     expect(onEdit).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText('Delete entry'));
+    expect(onDeleteIntake).toHaveBeenCalledWith(201);
+
+    fireEvent.click(screen.getByText('Delete medication'));
+    expect(onDeleteMedication).toHaveBeenCalled();
 
     fireEvent.click(screen.getByText('Close'));
     expect(onClose).toHaveBeenCalled();

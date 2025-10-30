@@ -28,7 +28,9 @@ const {
   createMedicationDose,
   updateMedicationDose,
   deleteMedicationDose,
+  deleteMedication,
   recordMedicationIntake,
+  deleteMedicationIntake,
   updateMedicationIntakeStatus,
   setMedicationRefillProjection,
   clearMedicationRefillProjection
@@ -153,6 +155,24 @@ describe('medications API client', () => {
 
     await updateMedicationIntakeStatus(1, 55, 'skipped');
     expect(client.patch).toHaveBeenCalledWith('/api/medications/1/intakes/55', { status: 'skipped' });
+  });
+
+  it('deletes medications and intake entries', async () => {
+    client.delete.mockResolvedValueOnce({ data: { deletedMedicationId: 5, auditLogId: 101 } });
+
+    await deleteMedication(5);
+    expect(client.delete).toHaveBeenNthCalledWith(1, '/api/medications/5');
+
+    client.delete.mockResolvedValueOnce({
+      data: {
+        medication: createMedicationPayload(),
+        deletedIntakeId: 9,
+        auditLogId: 102
+      }
+    });
+
+    await deleteMedicationIntake(5, 9);
+    expect(client.delete).toHaveBeenNthCalledWith(2, '/api/medications/5/intakes/9');
   });
 
   it('sets and clears refill projections', async () => {

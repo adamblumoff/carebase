@@ -25,6 +25,7 @@ export const API_ENDPOINTS = {
     create: '/api/medications',
     detail: (id: number) => `/api/medications/${id}`,
     update: (id: number) => `/api/medications/${id}`,
+    remove: (id: number) => `/api/medications/${id}`,
     archive: (id: number) => `/api/medications/${id}/archive`,
     unarchive: (id: number) => `/api/medications/${id}/unarchive`,
     doses: (id: number) => `/api/medications/${id}/doses`,
