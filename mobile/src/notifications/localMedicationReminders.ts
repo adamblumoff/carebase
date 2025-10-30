@@ -105,7 +105,10 @@ async function scheduleReminder(candidate: ReminderCandidate): Promise<void> {
         [REMINDER_DATA_FLAG]: true
       }
     },
-    trigger: new Date(triggerTime)
+    trigger: {
+      type: 'date',
+      date: new Date(triggerTime)
+    }
   });
 }
 

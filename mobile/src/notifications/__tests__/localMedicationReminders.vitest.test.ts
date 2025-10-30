@@ -159,7 +159,8 @@ describe('syncLocalMedicationReminders', () => {
     await syncLocalMedicationReminders([medication]);
 
     const [request] = notifications.scheduleNotificationAsync.mock.calls[0];
-    const trigger = request.trigger as Date;
-    expect(trigger.getTime()).toBeGreaterThan(Date.now());
+    const trigger = request.trigger as { type: 'date'; date: Date };
+    expect(trigger.type).toBe('date');
+    expect(trigger.date.getTime()).toBeGreaterThan(Date.now());
   });
 });
