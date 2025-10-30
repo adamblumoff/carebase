@@ -319,6 +319,77 @@ describe('listMedicationsForUser', () => {
     expect(reminderSchedulerMocks.scheduleMedicationIntakeReminder).not.toHaveBeenCalled();
   });
 
+  it('cleans up conflicting intakes when rescheduling hits the unique constraint', async () => {
+    const user = createUser();
+    const medication = createMedication();
+    const dose = createDose({ id: 205, medicationId: medication.id, timezone: 'America/Chicago', timeOfDay: '08:00:00' });
+    const staleIntake = createIntake({
+      id: 900,
+      medicationId: medication.id,
+      doseId: dose.id,
+      scheduledFor: new Date('2025-01-02T17:00:00.000Z'),
+      acknowledgedAt: null,
+      status: 'pending',
+      actorUserId: null,
+      occurrenceDate: new Date('2025-01-02T00:00:00.000Z')
+    });
+    const canonicalIntake = createIntake({
+      id: 901,
+      medicationId: medication.id,
+      doseId: dose.id,
+      scheduledFor: new Date('2025-01-02T13:00:00.000Z'),
+      acknowledgedAt: null,
+      status: 'pending',
+      actorUserId: null,
+      occurrenceDate: new Date('2025-01-02T00:00:00.000Z')
+    });
+
+    vi.setSystemTime(new Date('2025-01-02T12:00:00.000Z'));
+
+    queriesMock.resolveRecipientContextForUser.mockResolvedValueOnce({
+      recipient: { id: medication.recipientId, userId: user.id, displayName: 'Alex', createdAt: now },
+      collaborator: null
+    });
+    queriesMock.listMedicationsForRecipient.mockResolvedValueOnce([medication]);
+    queriesMock.listMedicationDoses.mockResolvedValueOnce([dose]);
+    queriesMock.listMedicationIntakes.mockResolvedValueOnce([staleIntake]);
+    queriesMock.getMedicationRefillProjection.mockResolvedValueOnce(null);
+    queriesMock.listMedicationOccurrences.mockResolvedValueOnce([
+      {
+        intakeId: staleIntake.id,
+        medicationId: medication.id,
+        doseId: dose.id,
+        occurrenceDate: staleIntake.occurrenceDate,
+        status: staleIntake.status,
+        acknowledgedAt: staleIntake.acknowledgedAt,
+        acknowledgedByUserId: staleIntake.actorUserId,
+        overrideCount: staleIntake.overrideCount
+      }
+    ]);
+    queriesMock.listMedicationIntakeEvents.mockResolvedValueOnce([]);
+
+    const duplicateError = new Error('duplicate');
+    (duplicateError as any).code = '23505';
+    queriesMock.updateMedicationIntake
+      .mockRejectedValueOnce(duplicateError)
+      .mockResolvedValueOnce(canonicalIntake);
+
+    queriesMock.findMedicationIntakeByDoseAndDate
+      .mockResolvedValueOnce(canonicalIntake)
+      .mockResolvedValue(canonicalIntake);
+
+    queriesMock.deleteMedicationIntake.mockResolvedValueOnce(staleIntake);
+
+    const results = await listMedicationsForUser(user);
+
+    expect(results).toHaveLength(1);
+    const occurrences = results[0]?.occurrences ?? [];
+    expect(occurrences[0]?.intakeId).toBe(canonicalIntake.id);
+    expect(reminderSchedulerMocks.cancelMedicationRemindersForIntake).toHaveBeenCalledWith(staleIntake.id);
+    expect(queriesMock.deleteMedicationIntake).toHaveBeenCalledWith(staleIntake.id, medication.id);
+    expect(queriesMock.updateMedicationIntake).toHaveBeenCalledTimes(2);
+  });
+
   it('filters archived medications for collaborators', async () => {
     const user = createUser({ id: 11, email: 'collab@example.com' });
     const medication = createMedication({ archivedAt: new Date() });
