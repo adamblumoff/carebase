@@ -41,6 +41,10 @@ function toDate(value: Date | string): Date {
   return value instanceof Date ? value : new Date(value);
 }
 
+function toDateKey(value: Date | string): string {
+  return toDate(value).toISOString().slice(0, 10);
+}
+
 function buildOccurrenceSummary(
   medication: MedicationWithDetails,
   doseMap: Map<number, MedicationDose>
@@ -54,7 +58,15 @@ function buildOccurrenceSummary(
     .slice()
     .sort((a, b) => toDate(a.occurrenceDate).getTime() - toDate(b.occurrenceDate).getTime());
 
+  const todayKey = toDateKey(new Date());
+  const todays = occurrences.filter((occurrence) => toDateKey(occurrence.occurrenceDate) === todayKey);
+  const futurePending = occurrences.filter(
+    (occurrence) =>
+      toDateKey(occurrence.occurrenceDate) > todayKey && occurrence.status === 'pending'
+  );
+
   const summaries: MedicationSummaryOccurrence[] = [];
+  const summaryById = new Map<number, MedicationSummaryOccurrence>();
   let nextOccurrence: MedicationSummaryOccurrence | null = null;
   let isOverdue = false;
 
@@ -82,13 +94,20 @@ function buildOccurrenceSummary(
     }
 
     summaries.push(summary);
+    summaryById.set(occurrence.intakeId, summary);
   }
 
   const fallbackNext = summaries[0] ?? null;
   const primaryNext = nextOccurrence ?? fallbackNext;
 
+  const displaySource =
+    todays.length > 0 ? todays : futurePending.slice(0, OCCURRENCE_LIMIT);
+  const displaySummaries = displaySource
+    .map((occurrence) => summaryById.get(occurrence.intakeId))
+    .filter((summary): summary is MedicationSummaryOccurrence => Boolean(summary));
+
   return {
-    occurrences: summaries.slice(0, OCCURRENCE_LIMIT),
+    occurrences: displaySummaries.slice(0, OCCURRENCE_LIMIT),
     nextOccurrenceLabel: primaryNext?.label ?? medication.doses[0]?.label ?? null,
     nextOccurrenceTime: primaryNext?.scheduledFor ?? null,
     isOverdue

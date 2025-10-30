@@ -1,5 +1,5 @@
 import { renderHook } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MedicationDose, MedicationWithDetails } from '@carebase/shared';
 import { computeMedicationDailyCount, useMedicationSummary } from '../useMedicationSummary';
 
@@ -49,8 +49,17 @@ const buildMedication = (overrides: Partial<MedicationWithDetails> = {}): Medica
 };
 
 describe('useMedicationSummary', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-03-01T12:00:00Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('returns next occurrence time and overdue indicator', () => {
-    const future = new Date('2025-01-01T10:00:00Z');
+    const future = new Date('2025-03-01T15:00:00Z');
     const meds = [
       buildMedication({
         upcomingIntakes: [
@@ -62,7 +71,7 @@ describe('useMedicationSummary', () => {
             acknowledgedAt: null,
             status: 'expired',
             actorUserId: null,
-            occurrenceDate: new Date('2025-01-01T00:00:00Z') as unknown as Date,
+            occurrenceDate: new Date('2025-03-01T00:00:00Z') as unknown as Date,
             overrideCount: 0,
             createdAt: future,
             updatedAt: future
@@ -73,7 +82,7 @@ describe('useMedicationSummary', () => {
             intakeId: 10,
             medicationId: 1,
             doseId: 1,
-            occurrenceDate: new Date('2025-01-01T00:00:00Z') as unknown as Date,
+            occurrenceDate: new Date('2025-03-01T00:00:00Z') as unknown as Date,
             status: 'pending',
             acknowledgedAt: null,
             acknowledgedByUserId: null,
@@ -89,6 +98,74 @@ describe('useMedicationSummary', () => {
     expect(result.current[0]?.nextOccurrenceTime).toBe(future.toISOString());
     expect(result.current[0]?.isOverdue).toBe(true);
     expect(result.current[0]?.occurrences).toHaveLength(1);
+  });
+
+  it('hides future occurrences when today entries exist', () => {
+    const today = new Date('2025-03-01T08:00:00Z');
+    const tomorrow = new Date('2025-03-02T08:00:00Z');
+    const meds = [
+      buildMedication({
+        occurrences: [
+          {
+            intakeId: 1,
+            medicationId: 1,
+            doseId: 1,
+            occurrenceDate: today,
+            status: 'taken',
+            acknowledgedAt: today,
+            acknowledgedByUserId: 1,
+            overrideCount: 0,
+            history: []
+          },
+          {
+            intakeId: 2,
+            medicationId: 1,
+            doseId: 1,
+            occurrenceDate: tomorrow,
+            status: 'pending',
+            acknowledgedAt: null,
+            acknowledgedByUserId: null,
+            overrideCount: 0,
+            history: []
+          }
+        ],
+        upcomingIntakes: [],
+        doses: [buildDose()]
+      })
+    ];
+
+    const { result } = renderHook(() => useMedicationSummary(meds));
+
+    expect(result.current[0]?.occurrences).toHaveLength(1);
+    expect(result.current[0]?.occurrences[0]?.status).toBe('taken');
+  });
+
+  it('falls back to next pending occurrence when today has none', () => {
+    const tomorrow = new Date('2025-03-02T08:00:00Z');
+    const meds = [
+      buildMedication({
+        occurrences: [
+          {
+            intakeId: 2,
+            medicationId: 1,
+            doseId: 1,
+            occurrenceDate: tomorrow,
+            status: 'pending',
+            acknowledgedAt: null,
+            acknowledgedByUserId: null,
+            overrideCount: 0,
+            history: []
+          }
+        ],
+        upcomingIntakes: [],
+        doses: [buildDose()]
+      })
+    ];
+
+    const { result } = renderHook(() => useMedicationSummary(meds));
+
+    expect(result.current[0]?.occurrences).toHaveLength(1);
+    expect(result.current[0]?.occurrences[0]?.status).toBe('pending');
   });
 
   it('prefers the most recently updated dose label', () => {
