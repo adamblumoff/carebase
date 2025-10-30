@@ -664,6 +664,25 @@ export async function updateMedicationIntake(
   return result.rows[0] ? toIntake(result.rows[0]) : null;
 }
 
+export async function findMedicationIntakeByDoseAndDate(
+  medicationId: number,
+  doseId: number | null,
+  occurrenceDate: Date
+): Promise<MedicationIntake | null> {
+  const result = await db.query<MedicationIntakeRow>(
+    `SELECT *
+       FROM medication_intakes
+      WHERE medication_id = $1
+        AND COALESCE(dose_id, 0) = COALESCE($2, 0)
+        AND occurrence_date = $3
+      ORDER BY id DESC
+      LIMIT 1`,
+    [medicationId, doseId, occurrenceDate]
+  );
+
+  return result.rows[0] ? toIntake(result.rows[0]) : null;
+}
+
 export async function listMedicationIntakes(
   medicationId: number,
   options: { since?: Date; until?: Date; statuses?: MedicationIntakeStatus[]; limit?: number } = {}

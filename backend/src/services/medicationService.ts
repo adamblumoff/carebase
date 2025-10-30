@@ -43,7 +43,8 @@ import {
   ensureOwnerCollaborator,
   createAuditLog,
   getMedicationDoseById,
-  countMedicationIntakesByOccurrence
+  countMedicationIntakesByOccurrence,
+  findMedicationIntakeByDoseAndDate
 } from '../db/queries.js';
 import type {
   MedicationDoseUpdateData,
@@ -105,15 +106,15 @@ async function ensureTodayDoseOccurrences(
 
   const today = toOccurrenceDate(new Date());
   const todaysSummaries = occurrenceSummaries.filter((summary) => isSameOccurrenceDay(summary.occurrenceDate, today));
+  const occurrenceKey = (doseId: number | null) => `${medicationId}|${doseId ?? 0}|${today.getTime()}`;
+  const existingKeys = new Set<string>(todaysSummaries.map((summary) => occurrenceKey(summary.doseId ?? null)));
 
   const assignedDoseIds = new Set<number>();
   const unassigned: MedicationOccurrenceSummary[] = [];
 
   for (const summary of todaysSummaries) {
     if (summary.doseId != null) {
-      if (!assignedDoseIds.has(summary.doseId)) {
-        assignedDoseIds.add(summary.doseId);
-      }
+      assignedDoseIds.add(summary.doseId);
     } else {
       unassigned.push(summary);
     }
@@ -125,7 +126,27 @@ async function ensureTodayDoseOccurrences(
 
   for (const dose of sortedDoses) {
     const doseId = dose.id!;
-    if (assignedDoseIds.has(doseId)) {
+    const timezone = dose.timezone ?? defaultTimeZone;
+    const scheduledFor = combineDateWithTimeZone(today, dose.timeOfDay, timezone);
+    const occurrenceDate = toOccurrenceDate(scheduledFor);
+
+    const existing = todaysSummaries.find((summary) => summary.doseId === doseId);
+    if (existing) {
+      const matchingIntake = intakes.find((intake) => intake.id === existing.intakeId);
+      if (matchingIntake && matchingIntake.status === 'pending') {
+        const diffMs = Math.abs(matchingIntake.scheduledFor.getTime() - scheduledFor.getTime());
+        if (diffMs > 60 * 1000) {
+          await updateMedicationIntake(matchingIntake.id, medicationId, {
+            scheduledFor,
+            occurrenceDate
+          });
+          matchingIntake.scheduledFor = scheduledFor;
+          matchingIntake.occurrenceDate = occurrenceDate;
+          existing.occurrenceDate = occurrenceDate;
+          changed = true;
+        }
+      }
+      assignedDoseIds.add(doseId);
       continue;
     }
 
@@ -134,21 +155,38 @@ async function ensureTodayDoseOccurrences(
       await updateMedicationIntake(candidate.intakeId, medicationId, { doseId });
       candidate.doseId = doseId;
       assignedDoseIds.add(doseId);
+      existingKeys.add(occurrenceKey(doseId));
       changed = true;
       continue;
     }
 
-    const timezone = dose.timezone ?? defaultTimeZone;
-    const scheduledFor = combineDateWithTimeZone(new Date(), dose.timeOfDay, timezone);
-    const created = await createMedicationIntake(medicationId, {
-      doseId,
-      scheduledFor,
-      acknowledgedAt: null,
-      status: 'pending',
-      actorUserId: null,
-      occurrenceDate: toOccurrenceDate(scheduledFor),
-      overrideCount: 0
-    });
+    if (existingKeys.has(occurrenceKey(doseId))) {
+      continue;
+    }
+
+    let created: MedicationIntake | null = null;
+    let createdNew = false;
+    try {
+      created = await createMedicationIntake(medicationId, {
+        doseId,
+        scheduledFor,
+        acknowledgedAt: null,
+        status: 'pending',
+        actorUserId: null,
+        occurrenceDate,
+        overrideCount: 0
+      });
+      createdNew = true;
+    } catch (error: any) {
+      if (error?.code === '23505') {
+        created = await findMedicationIntakeByDoseAndDate(medicationId, doseId, occurrenceDate);
+        if (!created) {
+          continue;
+        }
+      } else {
+        throw error;
+      }
+    }
 
     occurrenceSummaries.push({
       intakeId: created.id,
@@ -163,22 +201,25 @@ async function ensureTodayDoseOccurrences(
     });
     intakes.push(created);
 
-    await scheduleMedicationIntakeReminder({
-      medicationId,
-      recipientId: context.recipientId,
-      intake: {
-        id: created.id,
-        scheduledFor: created.scheduledFor,
-        occurrenceDate: created.occurrenceDate
-      },
-      dose: {
-        id: doseId,
-        timezone,
-        reminderWindowMinutes: dose.reminderWindowMinutes
-      }
-    });
+    if (createdNew) {
+      await scheduleMedicationIntakeReminder({
+        medicationId,
+        recipientId: context.recipientId,
+        intake: {
+          id: created.id,
+          scheduledFor: created.scheduledFor,
+          occurrenceDate: created.occurrenceDate
+        },
+        dose: {
+          id: doseId,
+          timezone,
+          reminderWindowMinutes: dose.reminderWindowMinutes
+        }
+      });
+    }
 
     assignedDoseIds.add(doseId);
+    existingKeys.add(occurrenceKey(doseId));
     changed = true;
   }
 

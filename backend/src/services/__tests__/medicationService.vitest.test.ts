@@ -25,6 +25,7 @@ const queriesMock: QueryMocks = {
   getMedicationRefillProjection: vi.fn(),
   getMedicationDoseById: vi.fn(),
   countMedicationIntakesByOccurrence: vi.fn(),
+  findMedicationIntakeByDoseAndDate: vi.fn(),
   listMedicationDoses: vi.fn(),
   listMedicationIntakes: vi.fn(),
   listMedicationOccurrences: vi.fn(),
@@ -157,6 +158,7 @@ function resetMocks(): void {
   queriesMock.createAuditLog.mockResolvedValue({ id: 900 });
   queriesMock.getMedicationIntake.mockResolvedValue(null);
   queriesMock.deleteMedicationIntake.mockResolvedValue(null);
+  queriesMock.findMedicationIntakeByDoseAndDate.mockResolvedValue(null);
   queriesMock.createMedicationIntake.mockResolvedValue(createIntake({ id: 501, status: 'pending', acknowledgedAt: null, actorUserId: null }));
   queriesMock.updateMedicationIntake.mockResolvedValue(createIntake());
   queriesMock.insertMedicationIntakeEvent.mockResolvedValue({
@@ -286,6 +288,34 @@ describe('listMedicationsForUser', () => {
       })
     );
     expect(results[0]?.occurrences?.map((occ) => occ.doseId).sort()).toEqual([morningDose.id, nightDose.id]);
+  });
+
+  it('handles duplicate occurrence creation gracefully', async () => {
+    const user = createUser();
+    const medication = createMedication();
+    const morningDose = createDose({ id: 201, label: 'Morning', timeOfDay: '08:00:00' });
+
+    queriesMock.resolveRecipientContextForUser.mockResolvedValueOnce({
+      recipient: { id: medication.recipientId, userId: user.id, displayName: 'Alex', createdAt: now },
+      collaborator: null
+    });
+    queriesMock.listMedicationsForRecipient.mockResolvedValueOnce([medication]);
+    queriesMock.listMedicationDoses.mockResolvedValueOnce([morningDose]);
+    queriesMock.listMedicationIntakes.mockResolvedValueOnce([]);
+    queriesMock.getMedicationRefillProjection.mockResolvedValueOnce(null);
+    queriesMock.listMedicationOccurrences.mockResolvedValueOnce([]);
+
+    const duplicateError = new Error('duplicate');
+    (duplicateError as any).code = '23505';
+    queriesMock.createMedicationIntake.mockRejectedValueOnce(duplicateError);
+    const existingIntake = createIntake({ id: 777, doseId: morningDose.id, status: 'pending', acknowledgedAt: null, actorUserId: null, occurrenceDate: now });
+    queriesMock.findMedicationIntakeByDoseAndDate.mockResolvedValueOnce(existingIntake);
+    queriesMock.listMedicationIntakeEvents.mockResolvedValueOnce([]);
+
+    const results = await listMedicationsForUser(user);
+
+    expect(results[0]?.occurrences?.[0]?.doseId).toBe(morningDose.id);
+    expect(reminderSchedulerMocks.scheduleMedicationIntakeReminder).not.toHaveBeenCalled();
   });
 
   it('filters archived medications for collaborators', async () => {
