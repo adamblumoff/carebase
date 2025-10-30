@@ -3,7 +3,7 @@
 _Drafted October 28, 2025_
 
 ## Scope Summary
-- Owners can create, edit, and archive medications with fixed daily dose schedules. Collaborators continue to receive read-only access on web + mobile.
+- Owners can create, edit, delete, and archive medications with fixed daily dose schedules. Collaborators continue to receive read-only access on web + mobile.
 - Each medication tracks inventory metadata (quantity on hand, refill threshold, preferred pharmacy) to project refill dates that surface in the plan payload.
 - Deliver Expo push notifications at scheduled dose times, nag every 120 minutes while doses remain pending, follow up with an end-of-day reminder, and continue daily escalations until the intake is marked taken or skipped. Mobile now also schedules a local fallback reminder so the user still sees a prompt if push delivery fails.
 - Manual and OCR-based ingestion both land on the plan screen’s medication form. The backend returns structured drafts from `/api/upload/photo?intent=medication` which the mobile client pre-fills for confirmation.
@@ -66,6 +66,7 @@ pending → (EOD job) → overdue → (daily reminder) → overdue (loop) until 
 
 ## Permissions
 - Owners may create, update, archive medications, doses, and intakes.
+- Owners may permanently delete medications and individual intake rows; collaborators remain read-only.
 - Collaborators (contributors) receive read-only API responses; write attempts return HTTP 403.
 - Backend enforcement via owner-scoped guard that references `CollaboratorRole`.
 
@@ -76,16 +77,25 @@ pending → (EOD job) → overdue → (daily reminder) → overdue (loop) until 
 4. Mobile opens the medication form pre-filled with the draft. Users can adjust fields before submitting `POST /api/medications`.
 5. When the OCR draft is dismissed or saved, route params clear so subsequent launches return to manual entry.
 
+## Audit & Hard Delete Behavior
+- `DELETE /api/medications/:id` removes the medication, all doses, intakes, refill projections, queued reminders, and OCR drafts in a single transaction. The response includes `{ deletedMedicationId, auditLogId }`.
+- `DELETE /api/medications/:id/intakes/:intakeId` removes an individual intake (for accidental “Mark taken” taps) and returns the hydrated medication payload plus `{ deletedIntakeId, auditLogId }`.
+- Both operations create audit rows (`medication_deleted`, `medication_intake_deleted`) containing the acting user, recipient, and a snapshot of the removed data to support compliance reviews.
+- Mobile surfaces confirmation dialogs before issuing destructive requests and refreshes plan state using the response payloads.
+
 ## API Surface (Draft)
 - `POST /api/medications` – create medication + schedule.
 - `GET /api/medications` – list with doses, next intakes, refill projection.
 - `GET /api/medications/:id`
 - `PATCH /api/medications/:id`
+- `DELETE /api/medications/:id`
 - `PATCH /api/medications/:id/archive`
 - `POST /api/medications/:id/doses`
 - `PATCH /api/medications/:id/doses/:doseId`
+- `DELETE /api/medications/:id/doses/:doseId`
 - `POST /api/medications/:id/intakes` – mark taken/skipped (mobile uses `status=taken` for “Mark now” with a generated `scheduledFor`).
 - `PATCH /api/medications/:id/intakes/:intakeId` – update intake status (e.g., mark skipped).
+- `DELETE /api/medications/:id/intakes/:intakeId`
 - `POST /api/medications/:id/refill` / `DELETE /api/medications/:id/refill` – set or clear projections.
 - `/api/upload/photo?intent=medication` – existing upload endpoint with `intent`/`timezone` query parameters.
 
@@ -101,5 +111,5 @@ pending → (EOD job) → overdue → (daily reminder) → overdue (loop) until 
 - Decide whether local reminders should respect per-medication quiet hours in future phases.
 
 ## Next Steps
-- Milestone 5 QA: run backend and contract suites, validate medication flows on physical devices (OCR, intake, notification handshake), document any manual verification steps.
+- Milestone 5 QA: run backend and contract suites, validate medication flows on physical devices (OCR, intake, notification handshake), document any manual verification steps, and confirm delete endpoints write audit trail entries + cancel reminders.
 - Gather feedback from internal testers on reminder cadence/local fallback usefulness before enabling the production feature flag.

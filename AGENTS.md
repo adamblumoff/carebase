@@ -31,6 +31,7 @@ npm run test:contracts      # cross-workspace contract tests
 - Mobile: Vitest + React Testing Library (`*.vitest.test.tsx`). Presenters/helpers, medication summary/detail UI, notification hooks, and API shims are covered; full RN screens stay excluded from coverage thresholds.
 - Contract tests ensure API payloads align with shared types (`tests/src/plan.contract.vitest.test.ts`).
 - `npm run coverage` runs backend + mobile coverage. Mobile thresholds enforce ≥65% statements/lines (branches 55%, functions 65%) for logic modules.
+- Medication hard-delete flows now have backend + contract coverage (`tests/src/medications.contract.vitest.test.ts`) and mobile API/hook/UI tests. After touching destructive logic, run `npm run test:backend`, `npm run test:contracts`, and `npm run test --workspace=mobile` to confirm.
 
 ## Commit & Pull Request Guidelines
 - Commit messages: short, imperative (“Add backend env toggle helpers” style). Commit after each logical change.
@@ -50,3 +51,4 @@ npm run test:contracts      # cross-workspace contract tests
 - Database migrations run from a single source of truth (`backend/src/db/schema.sql`). After any schema edit, run `npm run db:migrate --workspace=backend` locally (uses `.env.development.local`). Before deploying, execute the same command with production env vars (Railway CLI or job) so staging and production pick up the change.
 - Clerk performance tuning: use a long-lived JWT template (e.g. `carebase-backend`) and expose it via `CLERK_JWT_TEMPLATE_NAME` on the backend plus `EXPO_PUBLIC_CLERK_JWT_TEMPLATE` on mobile. Without it the backend cache misses and every request stalls on Clerk.
 - Medication notifications: Expo push handles primary reminders; the mobile app mirrors the next few intakes into local notifications (6-hour window, two-minute catch-up for overdue doses). These are cleared automatically whenever the plan refreshes. During QA, run the dev client (not Expo Go) so notification permissions and categories register correctly.
+- Medication deletion is a hard delete. After exercising the feature locally, verify audit trails via `SELECT action, meta FROM audit WHERE action LIKE 'medication_%' ORDER BY id DESC LIMIT 5;` and confirm reminder jobs are cleared (no pending Expo/local reminders for the deleted medication).

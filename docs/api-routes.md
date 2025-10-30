@@ -1,6 +1,6 @@
 # API Route Registry
 
-Generated 2025-10-23T21:02:52.975Z
+Generated 2025-10-30T00:00:00.000Z
 
 ## Routers
 
@@ -16,6 +16,7 @@ Generated 2025-10-23T21:02:52.975Z
 | /api/collaborators | api | Care team collaborator APIs |
 | /api/review | api | Pending item review APIs |
 | /api/integrations/google | api | Google Calendar integration APIs |
+| /api/medications | api | Medication management APIs |
 
 ## Endpoints
 
@@ -46,3 +47,18 @@ Generated 2025-10-23T21:02:52.975Z
 | POST | /api/integrations/google/sync | Manually trigger Google Calendar sync |
 | POST | /api/integrations/google/webhook | Google Calendar change notifications webhook |
 | GET | /api/integrations/google/callback | OAuth callback endpoint for Google Calendar integration |
+| GET | /api/medications | List medications for active recipient |
+| POST | /api/medications | Create medication and optional doses |
+| GET | /api/medications/:id | Fetch medication with doses/intakes |
+| PATCH | /api/medications/:id | Update medication fields |
+| DELETE | /api/medications/:id | Hard delete medication, doses, and intakes |
+| PATCH | /api/medications/:id/archive | Archive medication |
+| PATCH | /api/medications/:id/unarchive | Unarchive medication |
+| POST | /api/medications/:id/doses | Add a dose to medication |
+| PATCH | /api/medications/:id/doses/:doseId | Update medication dose |
+| DELETE | /api/medications/:id/doses/:doseId | Delete medication dose |
+| POST | /api/medications/:id/intakes | Record medication intake |
+| PATCH | /api/medications/:id/intakes/:intakeId | Update intake status |
+| DELETE | /api/medications/:id/intakes/:intakeId | Delete medication intake |
+| POST | /api/medications/:id/refill | Set refill projection |
+| DELETE | /api/medications/:id/refill | Clear refill projection |

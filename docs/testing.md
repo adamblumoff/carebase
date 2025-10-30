@@ -60,4 +60,10 @@ _Note: We intentionally exclude React Native screen snapshot tests due to histor
 - Document expectations in CONTRIBUTING (tests + coverage deltas) when the shared coverage work lands.
 - Capture manual QA steps for Expo push/local reminder interplay so Milestone 5 smoke checks stay repeatable.
 
+## Manual QA Checklist (Medications)
+
+- Exercise medication creation/editing via the Plan screen, then **delete** the medication and confirm the app removes it immediately and audit logs capture `medication_deleted` with the correct snapshot (`SELECT action, meta FROM audit ORDER BY id DESC LIMIT 5`).
+- Record a “Mark taken now”, then delete the intake entry through the detail sheet dialog and verify the next-dose summary updates and an audit row `medication_intake_deleted` is logged.
+- After destructive operations, ensure Expo/local reminders no longer surface for the removed medication by forcing a plan refresh and checking the local reminder queue (`npm run test --workspace=mobile` covers scheduling logic; manual smoke confirms device behavior).
+
 Update this file whenever suites expand or coverage thresholds change.***
