@@ -682,111 +682,6 @@ export default function PlanScreen({ navigation, route }: Props) {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.primary} />
         }
       >
-        {medicationsState.loading ? (
-          <View style={styles.medicationLoading}>
-            <ActivityIndicator color={palette.primary} size="small" />
-            <Text style={styles.medicationLoadingText}>Loading medications…</Text>
-          </View>
-        ) : null}
-        {medicationsState.error ? (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorText}>{medicationsState.error}</Text>
-          </View>
-        ) : null}
-        {medicationSummary.length > 0 ? (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionTitleRow}>
-                <Text style={styles.sectionIcon}>💊</Text>
-                <Text style={styles.sectionTitle}>Medications</Text>
-              </View>
-              {canManageMedications ? (
-                <View style={styles.sectionActions}>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.linkButton,
-                      pressed && styles.linkButtonPressed
-                    ]}
-                    onPress={() => openCreateMedication()}
-                  >
-                    <Text style={[styles.linkButtonText, { color: palette.primary }]}>Add medication</Text>
-                  </Pressable>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.secondaryLinkButton,
-                      pressed && styles.linkButtonPressed
-                    ]}
-                    onPress={openMedicationScanner}
-                  >
-                    <Text style={[styles.secondaryLinkText, { color: palette.primary }]}>Scan prescription</Text>
-                  </Pressable>
-                </View>
-              ) : (
-                <Text style={[styles.readOnlyLabel, { color: palette.textMuted }]}>View only</Text>
-              )}
-            </View>
-            <MedicationSummaryList
-              items={medicationSummary}
-              onSelect={openMedicationDetail}
-            />
-          </View>
-        ) : medicationsState.loading ? null : (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionTitleRow}>
-                <Text style={styles.sectionIcon}>💊</Text>
-                <Text style={styles.sectionTitle}>Medications</Text>
-              </View>
-              {canManageMedications ? (
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.linkButton,
-                    pressed && styles.linkButtonPressed
-                  ]}
-                  onPress={() => openCreateMedication()}
-                >
-                  <Text style={[styles.linkButtonText, { color: palette.primary }]}>Add medication</Text>
-                </Pressable>
-              ) : (
-                <Text style={[styles.readOnlyLabel, { color: palette.textMuted }]}>View only</Text>
-              )}
-            </View>
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyTitle}>No medications yet</Text>
-              <Text style={styles.emptyText}>
-                When the plan owner adds medications, they’ll show up here with upcoming doses and quick actions.
-              </Text>
-              {canManageMedications ? (
-                <View style={styles.emptyActions}>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.primaryCta,
-                      { backgroundColor: palette.primary },
-                      pressed && styles.primaryCtaPressed
-                    ]}
-                    onPress={() => openCreateMedication()}
-                  >
-                    <Text style={styles.primaryCtaText}>Add manually</Text>
-                  </Pressable>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.primaryCta,
-                      styles.primaryCtaOutline,
-                      pressed && styles.primaryCtaPressed
-                    ]}
-                    onPress={openMedicationScanner}
-                  >
-                    <Text style={[styles.primaryCtaText, { color: palette.primary }]}>Scan prescription</Text>
-                  </Pressable>
-                </View>
-              ) : (
-                <Text style={[styles.readOnlyHelper, { color: palette.textMuted }]}>
-                  Need changes? Ask the plan owner to add the prescription.
-                </Text>
-              )}
-            </View>
-          </View>
-        )}
         <View style={styles.header}>
           <View style={styles.headerButtons}>
             <Pressable
@@ -959,6 +854,111 @@ export default function PlanScreen({ navigation, route }: Props) {
             ))
           )}
         </View>
+
+
+        {medicationsState.loading ? (
+          <View style={styles.medicationLoading}>
+            <ActivityIndicator color={palette.primary} size="small" />
+            <Text style={styles.medicationLoadingText}>Loading medications…</Text>
+          </View>
+        ) : null}
+        {medicationsState.error ? (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>{medicationsState.error}</Text>
+          </View>
+        ) : null}
+        {medicationSummary.length > 0 ? (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleRow}>
+                <Text style={styles.sectionIcon}>💊</Text>
+                <Text style={styles.sectionTitle}>Medications</Text>
+              </View>
+              {canManageMedications ? (
+                <View style={styles.sectionActions}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.linkButton,
+                      pressed && styles.linkButtonPressed
+                    ]}
+                    onPress={() => openCreateMedication()}
+                  >
+                    <Text style={[styles.linkButtonText, { color: palette.primary }]}>Add medication</Text>
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.secondaryLinkButton,
+                      pressed && styles.linkButtonPressed
+                    ]}
+                    onPress={openMedicationScanner}
+                  >
+                    <Text style={[styles.secondaryLinkText, { color: palette.primary }]}>Scan prescription</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Text style={[styles.readOnlyLabel, { color: palette.textMuted }]}>View only</Text>
+              )}
+            </View>
+            <MedicationSummaryList
+              items={medicationSummary}
+              onSelect={openMedicationDetail}
+            />
+          </View>
+        ) : medicationsState.loading ? null : (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleRow}>
+                <Text style={styles.sectionIcon}>💊</Text>
+                <Text style={styles.sectionTitle}>Medications</Text>
+              </View>
+              {canManageMedications ? (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.linkButton,
+                    pressed && styles.linkButtonPressed
+                  ]}
+                  onPress={() => openCreateMedication()}
+                >
+                  <Text style={[styles.linkButtonText, { color: palette.primary }]}>Add medication</Text>
+                </Pressable>
+              ) : (
+                <Text style={[styles.readOnlyLabel, { color: palette.textMuted }]}>View only</Text>
+              )}
+            </View>
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>No medications yet</Text>
+              <Text style={styles.emptyText}>
+                When the plan owner adds medications, they’ll show up here with upcoming doses and quick actions.
+              </Text>
+              {canManageMedications ? (
+                <View style={styles.emptyActions}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.primaryCta,
+                      { backgroundColor: palette.primary },
+                      pressed && styles.primaryCtaPressed
+                    ]}
+                    onPress={() => openCreateMedication()}
+                  >
+                    <Text style={styles.primaryCtaText}>Add manually</Text>
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.primaryCta,
+                      styles.primaryCtaOutline,
+                      pressed && styles.primaryCtaPressed
+                    ]}
+                    onPress={openMedicationScanner}
+                  >
+                    <Text style={[styles.primaryCtaText, { color: palette.primary }]}>Scan prescription</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Text style={[styles.readOnlyHelper, { color: palette.textMuted }]}>Need changes? Ask the plan owner to add the prescription.</Text>
+              )}
+            </View>
+          </View>
+        )}
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
