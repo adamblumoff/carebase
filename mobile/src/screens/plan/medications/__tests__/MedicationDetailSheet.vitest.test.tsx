@@ -203,4 +203,102 @@ describe('MedicationDetailSheet', () => {
     fireEvent.click(screen.getByText('Close'));
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('displays daily dose count pill states', () => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const baseMedication = buildMedication();
+    const commonProps = {
+      visible: true,
+      canManage: false,
+      onClose: vi.fn(),
+      onToggleOccurrence: async () => undefined,
+      onConfirmOverride: async () => undefined,
+      onUndoOccurrence: async () => undefined,
+      onRecordNow: async () => undefined,
+      onEdit: vi.fn(),
+      onDeleteMedication: async () => undefined,
+      onDeleteIntake: async () => undefined,
+      actionPending: false,
+      actionError: null
+    };
+
+    const pendingMedication: MedicationWithDetails = {
+      ...baseMedication,
+      occurrences: [
+        {
+          intakeId: 501,
+          medicationId: baseMedication.id,
+          doseId: 101,
+          occurrenceDate: today,
+          status: 'pending',
+          acknowledgedAt: null,
+          acknowledgedByUserId: null,
+          overrideCount: 0,
+          history: []
+        }
+      ],
+      upcomingIntakes: []
+    };
+
+    const utils = renderWithTheme(
+      <MedicationDetailSheet
+        medication={pendingMedication}
+        {...commonProps}
+      />
+    );
+
+    const pendingPill = screen.getByText('0/1');
+    expect(pendingPill.style.color).toBe('rgb(108, 143, 120)');
+    expect(pendingPill.parentElement?.style.backgroundColor).toBe('rgb(216, 235, 222)');
+
+    const takenMedication: MedicationWithDetails = {
+      ...pendingMedication,
+      occurrences: [
+        {
+          ...pendingMedication.occurrences[0]!,
+          status: 'taken',
+          acknowledgedAt: now,
+          acknowledgedByUserId: 3,
+          overrideCount: 0
+        }
+      ]
+    };
+
+    utils.rerender(
+      <ThemeProvider>
+        <MedicationDetailSheet
+          medication={takenMedication}
+          {...commonProps}
+        />
+      </ThemeProvider>
+    );
+
+    const takenPill = screen.getByText('1/1');
+    expect(takenPill.style.color).toBe('rgb(22, 163, 74)');
+    expect(takenPill.parentElement?.style.backgroundColor).toBe('rgb(220, 252, 231)');
+
+    const overrideMedication: MedicationWithDetails = {
+      ...takenMedication,
+      occurrences: [
+        {
+          ...takenMedication.occurrences[0]!,
+          overrideCount: 1
+        }
+      ]
+    };
+
+    utils.rerender(
+      <ThemeProvider>
+        <MedicationDetailSheet
+          medication={overrideMedication}
+          {...commonProps}
+        />
+      </ThemeProvider>
+    );
+
+    const overridePill = screen.getByText('2/1');
+    expect(overridePill.style.color).toBe('rgb(220, 38, 38)');
+    expect(overridePill.parentElement?.style.backgroundColor).toBe('rgb(254, 226, 226)');
+  });
 });

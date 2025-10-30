@@ -1,7 +1,7 @@
 import { renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { MedicationDose, MedicationWithDetails } from '@carebase/shared';
-import { useMedicationSummary } from '../useMedicationSummary';
+import { computeMedicationDailyCount, useMedicationSummary } from '../useMedicationSummary';
 
 const buildDose = (overrides: Partial<MedicationDose> = {}): MedicationDose => {
   const now = new Date();
@@ -134,5 +134,57 @@ describe('useMedicationSummary', () => {
     const { result } = renderHook(() => useMedicationSummary(meds));
 
     expect(result.current[0]?.nextOccurrenceLabel).toBe('Evening');
+  });
+});
+
+describe('computeMedicationDailyCount', () => {
+  it('returns expected, taken, and override counts for today', () => {
+    const today = new Date('2025-03-01T12:00:00Z');
+    const meds = buildMedication({
+      occurrences: [
+        {
+          intakeId: 1,
+          medicationId: 1,
+          doseId: 1,
+          occurrenceDate: today,
+          status: 'taken',
+          acknowledgedAt: today,
+          acknowledgedByUserId: 1,
+          overrideCount: 2,
+          history: []
+        },
+        {
+          intakeId: 2,
+          medicationId: 1,
+          doseId: 2,
+          occurrenceDate: today,
+          status: 'skipped',
+          acknowledgedAt: today,
+          acknowledgedByUserId: 1,
+          overrideCount: 0,
+          history: []
+        },
+        {
+          intakeId: 3,
+          medicationId: 1,
+          doseId: 1,
+          occurrenceDate: new Date('2025-02-28T12:00:00Z'),
+          status: 'taken',
+          acknowledgedAt: today,
+          acknowledgedByUserId: 1,
+          overrideCount: 0,
+          history: []
+        }
+      ],
+      doses: [buildDose({ id: 1 }), buildDose({ id: 2 })]
+    });
+
+    const summary = computeMedicationDailyCount(meds, today);
+
+    expect(summary.expectedCount).toBe(2);
+    expect(summary.takenCount).toBe(1);
+    expect(summary.overrideCount).toBe(2);
+    expect(summary.recordedCount).toBe(3);
+    expect(summary.skippedCount).toBe(1);
   });
 });

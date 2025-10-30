@@ -12,6 +12,7 @@ import {
 import type { MedicationDoseOccurrence, MedicationIntakeStatus, MedicationWithDetails } from '@carebase/shared';
 import { useTheme, spacing, radius } from '../../../theme';
 import { formatDisplayDate, formatDisplayTime, parseServerDate } from '../../../utils/date';
+import { computeMedicationDailyCount } from './useMedicationSummary';
 
 interface MedicationDetailSheetProps {
   visible: boolean;
@@ -67,17 +68,23 @@ export function MedicationDetailSheet({
   const {
     todayOccurrences,
     historyOccurrences,
-    upcomingById
+    upcomingById,
+    dailyCount,
+    activeDoseCount
   } = useMemo((): {
     todayOccurrences: MedicationDoseOccurrence[];
     historyOccurrences: MedicationDoseOccurrence[];
     upcomingById: Map<number, MedicationWithDetails['upcomingIntakes'][number]>;
+    dailyCount: ReturnType<typeof computeMedicationDailyCount> | null;
+    activeDoseCount: number;
   } => {
     if (!medication) {
       return {
         todayOccurrences: [],
         historyOccurrences: [],
-        upcomingById: new Map()
+        upcomingById: new Map(),
+        dailyCount: null,
+        activeDoseCount: 0
       };
     }
 
@@ -92,12 +99,61 @@ export function MedicationDetailSheet({
       .filter((occurrence) => toDateKey(occurrence.occurrenceDate) !== todayKey)
       .sort((a, b) => toDateKey(b.occurrenceDate).localeCompare(toDateKey(a.occurrenceDate)));
 
+    const activeDoseCount = medication.doses.filter((dose) => dose.isActive !== false).length || medication.doses.length;
+    const dailyCountSummary = computeMedicationDailyCount(medication);
+
     return {
       todayOccurrences: today,
       historyOccurrences: history,
-      upcomingById: upcomingMap
+      upcomingById: upcomingMap,
+      dailyCount: dailyCountSummary,
+      activeDoseCount
     };
   }, [medication]);
+
+  const renderDoseCountPill = () => {
+    if (!medication) {
+      return null;
+    }
+    const recorded = dailyCount?.recordedCount ?? 0;
+    const expectedBase = dailyCount?.expectedCount ?? 0;
+    let denominator = Math.max(expectedBase, activeDoseCount);
+
+    if (denominator === 0 && recorded > 0) {
+      denominator = recorded;
+    }
+
+    if (denominator === 0 && recorded === 0) {
+      return null;
+    }
+
+    const overrides = dailyCount?.overrideCount ?? 0;
+
+    let textColor = palette.textMuted;
+    let backgroundColor = palette.surfaceMuted;
+
+    if (recorded === 0) {
+      textColor = palette.textMuted;
+      backgroundColor = palette.surfaceMuted;
+    } else if (recorded > denominator) {
+      textColor = palette.danger;
+      backgroundColor = '#fee2e2';
+    } else if (recorded === denominator && denominator > 0 && overrides === 0) {
+      textColor = palette.success;
+      backgroundColor = '#dcfce7';
+    } else {
+      textColor = palette.warning;
+      backgroundColor = '#ffedd5';
+    }
+
+    return (
+      <View style={[styles.doseCountPill, { backgroundColor }]}>
+        <Text style={[styles.doseCountText, { color: textColor }]}>{recorded}/{denominator}</Text>
+      </View>
+    );
+  };
+
+  const doseCountPill = renderDoseCountPill();
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -158,22 +214,27 @@ export function MedicationDetailSheet({
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
                   <Text style={[styles.sectionHeading, { color: palette.textPrimary }]}>Today</Text>
-                  {canManage ? (
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.recordNow,
-                        { backgroundColor: palette.primary },
-                        pressed && styles.recordNowPressed
-                      ]}
-                      onPress={onRecordNow}
-                      disabled={actionPending}
-                    >
-                      {actionPending ? (
-                        <ActivityIndicator color="#fff" size="small" />
-                      ) : (
-                        <Text style={styles.recordNowText}>Mark taken now</Text>
-                      )}
-                    </Pressable>
+                  {(doseCountPill || canManage) ? (
+                    <View style={styles.sectionHeaderActions}>
+                      {doseCountPill}
+                      {canManage ? (
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.recordNow,
+                            { backgroundColor: palette.primary },
+                            pressed && styles.recordNowPressed
+                          ]}
+                          onPress={onRecordNow}
+                          disabled={actionPending}
+                        >
+                          {actionPending ? (
+                            <ActivityIndicator color="#fff" size="small" />
+                          ) : (
+                            <Text style={styles.recordNowText}>Mark taken now</Text>
+                          )}
+                        </Pressable>
+                      ) : null}
+                    </View>
                   ) : null}
                 </View>
                 {todayOccurrences.length === 0 ? (
@@ -460,6 +521,20 @@ const styles = StyleSheet.create({
   },
   recordNowText: {
     color: '#fff',
+    fontWeight: '600'
+  },
+  sectionHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing(1)
+  },
+  doseCountPill: {
+    paddingHorizontal: spacing(1.25),
+    paddingVertical: spacing(0.5),
+    borderRadius: radius.md
+  },
+  doseCountText: {
+    fontSize: 13,
     fontWeight: '600'
   },
   intakeCard: {

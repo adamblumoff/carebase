@@ -26,6 +26,15 @@ export interface MedicationSummaryItem {
   nextOccurrenceLabel: string | null;
   nextOccurrenceTime: string | null;
   isOverdue: boolean;
+  dailyCount: MedicationDailyCountSummary;
+}
+
+export interface MedicationDailyCountSummary {
+  expectedCount: number;
+  takenCount: number;
+  skippedCount: number;
+  overrideCount: number;
+  recordedCount: number;
 }
 
 function toDate(value: Date | string): Date {
@@ -110,9 +119,52 @@ export function useMedicationSummary(medications: MedicationWithDetails[]): Medi
         occurrences,
         nextOccurrenceLabel,
         nextOccurrenceTime,
-        isOverdue
+        isOverdue,
+        dailyCount: computeMedicationDailyCount(medication)
       };
     });
   }, [medications]);
 }
 
+function isSameDay(a: Date, b: Date): boolean {
+  return (
+    a.getUTCFullYear() === b.getUTCFullYear() &&
+    a.getUTCMonth() === b.getUTCMonth() &&
+    a.getUTCDate() === b.getUTCDate()
+  );
+}
+
+export function computeMedicationDailyCount(
+  medication: MedicationWithDetails,
+  referenceDate: Date = new Date()
+): MedicationDailyCountSummary {
+  const occurrences = medication.occurrences ?? [];
+  let expectedCount = 0;
+  let takenCount = 0;
+  let skippedCount = 0;
+  let overrideCount = 0;
+
+  for (const occurrence of occurrences) {
+    const occurrenceDate = toDate(occurrence.occurrenceDate);
+    if (!isSameDay(occurrenceDate, referenceDate)) {
+      continue;
+    }
+
+    expectedCount += 1;
+
+    if (occurrence.status === 'taken') {
+      takenCount += 1;
+      overrideCount += occurrence.overrideCount ?? 0;
+    } else if (occurrence.status === 'skipped') {
+      skippedCount += 1;
+    }
+  }
+
+  return {
+    expectedCount,
+    takenCount,
+    skippedCount,
+    overrideCount,
+    recordedCount: takenCount + overrideCount
+  };
+}
