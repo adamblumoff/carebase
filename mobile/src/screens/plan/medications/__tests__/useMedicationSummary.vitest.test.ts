@@ -42,13 +42,14 @@ const buildMedication = (overrides: Partial<MedicationWithDetails> = {}): Medica
     archivedAt: null,
     doses: [buildDose()],
     upcomingIntakes: [],
+    occurrences: [],
     refillProjection: null,
     ...overrides
   };
 };
 
 describe('useMedicationSummary', () => {
-  it('returns next intake time and overdue indicator', () => {
+  it('returns next occurrence time and overdue indicator', () => {
     const future = new Date('2025-01-01T10:00:00Z');
     const meds = [
       buildMedication({
@@ -66,15 +67,28 @@ describe('useMedicationSummary', () => {
             createdAt: future,
             updatedAt: future
           }
+        ],
+        occurrences: [
+          {
+            intakeId: 10,
+            medicationId: 1,
+            doseId: 1,
+            occurrenceDate: new Date('2025-01-01T00:00:00Z') as unknown as Date,
+            status: 'pending',
+            acknowledgedAt: null,
+            acknowledgedByUserId: null,
+            overrideCount: 0,
+            history: []
+          }
         ]
       })
     ];
 
     const { result } = renderHook(() => useMedicationSummary(meds));
 
-    expect(result.current[0]?.nextDoseTime).toBe(future.toISOString());
+    expect(result.current[0]?.nextOccurrenceTime).toBe(future.toISOString());
     expect(result.current[0]?.isOverdue).toBe(true);
-    expect(result.current[0]?.nextDoseLabel).toBe('Morning');
+    expect(result.current[0]?.occurrences).toHaveLength(1);
   });
 
   it('prefers the most recently updated dose label', () => {
@@ -100,12 +114,25 @@ describe('useMedicationSummary', () => {
             createdAt: newer,
             updatedAt: newer
           }
+        ],
+        occurrences: [
+          {
+            intakeId: 20,
+            medicationId: 1,
+            doseId: 2,
+            occurrenceDate: new Date('2025-01-02T00:00:00Z') as unknown as Date,
+            status: 'pending',
+            acknowledgedAt: null,
+            acknowledgedByUserId: null,
+            overrideCount: 0,
+            history: []
+          }
         ]
       })
     ];
 
     const { result } = renderHook(() => useMedicationSummary(meds));
 
-    expect(result.current[0]?.nextDoseLabel).toBe('Evening');
+    expect(result.current[0]?.nextOccurrenceLabel).toBe('Evening');
   });
 });

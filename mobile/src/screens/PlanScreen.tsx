@@ -27,7 +27,8 @@ import type {
   PendingReviewDraft,
   PendingReviewItem,
   MedicationWithDetails,
-  MedicationDraft
+  MedicationDraft,
+  MedicationIntakeStatus
 } from '@carebase/shared';
 import { useTheme, spacing, radius, type Palette, type Shadow } from '../theme';
 import { useToast } from '../ui/ToastProvider';
@@ -434,16 +435,6 @@ export default function PlanScreen({ navigation, route }: Props) {
     [canManageMedications]
   );
 
-  const handleMarkIntake = useCallback(
-    async (status: 'taken' | 'skipped', intakeId: number) => {
-      if (!selectedMedicationId || !canManageMedications) return;
-      await handleMedicationMutator(() =>
-        medicationsState.updateIntakeStatus(selectedMedicationId, intakeId, status)
-      );
-    },
-    [canManageMedications, handleMedicationMutator, medicationsState, selectedMedicationId]
-  );
-
   const handleRecordNow = useCallback(async () => {
     if (!selectedMedicationId || !canManageMedications) return;
     await handleMedicationMutator(() =>
@@ -527,6 +518,68 @@ export default function PlanScreen({ navigation, route }: Props) {
       selectedMedicationId,
       toast
     ]
+  );
+
+  const handleToggleOccurrence = useCallback(
+    (medicationId: number, intakeId: number, status?: MedicationIntakeStatus) =>
+      handleMedicationMutator(() =>
+        medicationsState.toggleOccurrenceStatus(medicationId, intakeId, status)
+      ),
+    [handleMedicationMutator, medicationsState]
+  );
+
+  const handleConfirmOccurrenceOverride = useCallback(
+    (medicationId: number, intakeId: number, status?: MedicationIntakeStatus) =>
+      handleMedicationMutator(() =>
+        medicationsState.confirmOverride(medicationId, intakeId, status)
+      ),
+    [handleMedicationMutator, medicationsState]
+  );
+
+  const handleUndoOccurrence = useCallback(
+    (medicationId: number, intakeId: number) =>
+      handleMedicationMutator(() => medicationsState.undoOccurrence(medicationId, intakeId)),
+    [handleMedicationMutator, medicationsState]
+  );
+
+  const toggleOccurrenceForSelected = useCallback(
+    (intakeId: number, status?: MedicationIntakeStatus) => {
+      if (!selectedMedicationId) return Promise.resolve();
+      return handleToggleOccurrence(selectedMedicationId, intakeId, status);
+    },
+    [handleToggleOccurrence, selectedMedicationId]
+  );
+
+  const confirmOverrideForSelected = useCallback(
+    (intakeId: number, status?: MedicationIntakeStatus) => {
+      if (!selectedMedicationId) return Promise.resolve();
+      return handleConfirmOccurrenceOverride(selectedMedicationId, intakeId, status);
+    },
+    [handleConfirmOccurrenceOverride, selectedMedicationId]
+  );
+
+  const undoOccurrenceForSelected = useCallback(
+    (intakeId: number) => {
+      if (!selectedMedicationId) return Promise.resolve();
+      return handleUndoOccurrence(selectedMedicationId, intakeId);
+    },
+    [handleUndoOccurrence, selectedMedicationId]
+  );
+
+  const handleToggleOccurrence = useCallback(
+    (medicationId: number, intakeId: number, status?: MedicationIntakeStatus) =>
+      handleMedicationMutator(() =>
+        medicationsState.toggleOccurrenceStatus(medicationId, intakeId, status)
+      ),
+    [handleMedicationMutator, medicationsState]
+  );
+
+  const handleConfirmOccurrenceOverride = useCallback(
+    (medicationId: number, intakeId: number, status?: MedicationIntakeStatus) =>
+      handleMedicationMutator(() =>
+        medicationsState.confirmOverride(medicationId, intakeId, status)
+      ),
+    [handleMedicationMutator, medicationsState]
   );
 
   const openCreateMedication = useCallback((draft?: MedicationDraft | null) => {
@@ -976,6 +1029,9 @@ export default function PlanScreen({ navigation, route }: Props) {
             <MedicationSummaryList
               items={medicationSummary}
               onSelect={openMedicationDetail}
+              onToggleOccurrence={handleToggleOccurrence}
+              onConfirmOverride={handleConfirmOccurrenceOverride}
+              canManage={canManageMedications}
             />
           </View>
         ) : medicationsState.loading ? null : (
@@ -1086,8 +1142,9 @@ export default function PlanScreen({ navigation, route }: Props) {
         medication={activeMedication}
         canManage={canManageMedications}
         onClose={closeMedicationDetail}
-        onMarkTaken={(intakeId) => handleMarkIntake('taken', intakeId)}
-        onMarkSkipped={(intakeId) => handleMarkIntake('skipped', intakeId)}
+        onToggleOccurrence={toggleOccurrenceForSelected}
+        onConfirmOverride={confirmOverrideForSelected}
+        onUndoOccurrence={undoOccurrenceForSelected}
         onRecordNow={handleRecordNow}
         onEdit={openEditMedication}
         onDeleteMedication={handleDeleteMedication}

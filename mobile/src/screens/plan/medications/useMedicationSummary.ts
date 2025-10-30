@@ -1,42 +1,118 @@
 import { useMemo } from 'react';
-import type { MedicationWithDetails } from '@carebase/shared';
+import type {
+  MedicationDose,
+  MedicationDoseOccurrence,
+  MedicationIntakeStatus,
+  MedicationWithDetails
+} from '@carebase/shared';
 import { parseServerDate } from '../../../utils/date';
+
+const OCCURRENCE_LIMIT = 3;
+
+export interface MedicationSummaryOccurrence {
+  intakeId: number;
+  label: string | null;
+  status: MedicationIntakeStatus;
+  scheduledFor: string | null;
+  timezone: string | null;
+  isOverdue: boolean;
+}
 
 export interface MedicationSummaryItem {
   id: number;
   name: string;
-  nextDoseLabel: string;
-  nextDoseTime: string | null;
-  isOverdue: boolean;
   isArchived: boolean;
+  occurrences: MedicationSummaryOccurrence[];
+  nextOccurrenceLabel: string | null;
+  nextOccurrenceTime: string | null;
+  isOverdue: boolean;
+}
+
+function toDate(value: Date | string): Date {
+  return value instanceof Date ? value : new Date(value);
+}
+
+function buildOccurrenceSummary(
+  medication: MedicationWithDetails,
+  doseMap: Map<number, MedicationDose>
+): {
+  occurrences: MedicationSummaryOccurrence[];
+  nextOccurrenceLabel: string | null;
+  nextOccurrenceTime: string | null;
+  isOverdue: boolean;
+} {
+  const occurrences = (medication.occurrences ?? [])
+    .slice()
+    .sort((a, b) => toDate(a.occurrenceDate).getTime() - toDate(b.occurrenceDate).getTime());
+
+  const summaries: MedicationSummaryOccurrence[] = [];
+  let nextOccurrence: MedicationSummaryOccurrence | null = null;
+  let isOverdue = false;
+
+  for (const occurrence of occurrences) {
+    const dose = occurrence.doseId != null ? doseMap.get(occurrence.doseId) ?? null : null;
+    const intake = medication.upcomingIntakes.find((item) => item.id === occurrence.intakeId) ?? null;
+    const scheduledFor = intake ? parseServerDate(intake.scheduledFor).toISOString() : null;
+    const overdue = intake ? intake.status === 'expired' : occurrence.status === 'expired';
+
+    if (overdue) {
+      isOverdue = true;
+    }
+
+    const summary: MedicationSummaryOccurrence = {
+      intakeId: occurrence.intakeId,
+      label: dose?.label ?? null,
+      status: occurrence.status,
+      scheduledFor,
+      timezone: dose?.timezone ?? null,
+      isOverdue: overdue
+    };
+
+    if (!nextOccurrence && occurrence.status === 'pending') {
+      nextOccurrence = summary;
+    }
+
+    summaries.push(summary);
+  }
+
+  const fallbackNext = summaries[0] ?? null;
+  const primaryNext = nextOccurrence ?? fallbackNext;
+
+  return {
+    occurrences: summaries.slice(0, OCCURRENCE_LIMIT),
+    nextOccurrenceLabel: primaryNext?.label ?? medication.doses[0]?.label ?? null,
+    nextOccurrenceTime: primaryNext?.scheduledFor ?? null,
+    isOverdue
+  };
 }
 
 export function useMedicationSummary(medications: MedicationWithDetails[]): MedicationSummaryItem[] {
   return useMemo(() => {
     return medications.map((medication) => {
-      const nextIntake = [...medication.upcomingIntakes]
-        .sort((a, b) => {
-          const first = parseServerDate(a.scheduledFor).getTime();
-          const second = parseServerDate(b.scheduledFor).getTime();
-          return second - first;
-        })[0] ?? null;
-      const nextDoseTime = nextIntake ? new Date(nextIntake.scheduledFor).toISOString() : null;
-      const isOverdue = nextIntake ? nextIntake.status === 'expired' : false;
-      const sortedDoses = [...medication.doses].sort((a, b) => {
-        if (a.updatedAt && b.updatedAt) {
-          return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      const doseMap = new Map<number, MedicationDose>();
+      medication.doses.forEach((dose) => {
+        if (dose.id != null) {
+          doseMap.set(dose.id, dose);
         }
-        return a.timeOfDay.localeCompare(b.timeOfDay);
       });
-      const doseLabel = sortedDoses[0]?.label ?? 'Dose';
+
+      const {
+        occurrences,
+        nextOccurrenceLabel,
+        nextOccurrenceTime,
+        isOverdue
+      } = buildOccurrenceSummary(medication, doseMap);
+
       return {
         id: medication.id,
         name: medication.name,
-        nextDoseLabel: doseLabel,
-        nextDoseTime,
-        isOverdue,
-        isArchived: Boolean(medication.archivedAt)
+        isArchived: Boolean(medication.archivedAt),
+        occurrences,
+        nextOccurrenceLabel,
+        nextOccurrenceTime,
+        isOverdue
       };
     });
   }, [medications]);
 }
+

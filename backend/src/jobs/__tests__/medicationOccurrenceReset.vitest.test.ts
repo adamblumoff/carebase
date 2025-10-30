@@ -15,6 +15,10 @@ const planMocks = vi.hoisted(() => ({
   touchPlanForUser: vi.fn()
 }));
 
+const reminderMocks = vi.hoisted(() => ({
+  scheduleMedicationIntakeReminder: vi.fn()
+}));
+
 vi.mock('../../db/queries.js', () => ({
   listActiveMedications: queryMocks.listActiveMedications,
   listMedicationDoses: queryMocks.listMedicationDoses,
@@ -28,6 +32,10 @@ vi.mock('../../db/queries/recipients.js', () => ({
 
 vi.mock('../../db/queries/plan.js', () => ({
   touchPlanForUser: planMocks.touchPlanForUser
+}));
+
+vi.mock('../../services/medicationReminderScheduler.js', () => ({
+  scheduleMedicationIntakeReminder: reminderMocks.scheduleMedicationIntakeReminder
 }));
 
 const { runMedicationOccurrenceReset } = await import('../medicationOccurrenceReset.js');
@@ -52,6 +60,7 @@ describe('runMedicationOccurrenceReset', () => {
     queryMocks.createMedicationIntake.mockReset();
     recipientMocks.findRecipientById.mockReset();
     planMocks.touchPlanForUser.mockReset();
+    reminderMocks.scheduleMedicationIntakeReminder.mockReset();
   });
 
   afterEach(() => {
@@ -131,6 +140,14 @@ describe('runMedicationOccurrenceReset', () => {
     expect(payload.occurrenceDate.toISOString()).toBe('2025-03-03T00:00:00.000Z');
     expect(payload.scheduledFor.toISOString()).toBe('2025-03-03T13:00:00.000Z');
     expect(planMocks.touchPlanForUser).toHaveBeenCalledWith(400);
+    expect(reminderMocks.scheduleMedicationIntakeReminder).toHaveBeenCalledTimes(1);
+    expect(reminderMocks.scheduleMedicationIntakeReminder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        medicationId: 10,
+        recipientId: 200,
+        intake: expect.objectContaining({ id: 101 })
+      })
+    );
   });
 
   it('skips creation when next occurrence already exists', async () => {
@@ -187,5 +204,6 @@ describe('runMedicationOccurrenceReset', () => {
 
     expect(queryMocks.createMedicationIntake).not.toHaveBeenCalled();
     expect(planMocks.touchPlanForUser).not.toHaveBeenCalled();
+    expect(reminderMocks.scheduleMedicationIntakeReminder).not.toHaveBeenCalled();
   });
 });

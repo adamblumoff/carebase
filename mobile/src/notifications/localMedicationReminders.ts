@@ -39,31 +39,32 @@ function buildReminderCandidates(medications: MedicationWithDetails[]): Reminder
       return;
     }
 
-    const eligibleIntakes = medication.upcomingIntakes
-      .filter((intake) => {
-        if (intake.acknowledgedAt) return false;
-        const scheduledAt = new Date(intake.scheduledFor).getTime();
-        if (!Number.isFinite(scheduledAt)) return false;
-        return scheduledAt <= cutoff;
-      })
-      .sort(
-        (a, b) =>
-          new Date(a.scheduledFor).getTime() - new Date(b.scheduledFor).getTime()
-      );
+    const pendingOccurrences = (medication.occurrences ?? [])
+      .filter((occurrence) => occurrence.status === 'pending')
+      .sort((a, b) => new Date(a.occurrenceDate).getTime() - new Date(b.occurrenceDate).getTime());
 
-    const nextIntake = eligibleIntakes[0];
-    if (!nextIntake) {
+    const nextOccurrence = pendingOccurrences[0];
+    if (!nextOccurrence) {
       return;
     }
 
-    const scheduledAtRaw = new Date(nextIntake.scheduledFor).getTime();
+    const matchingIntake = medication.upcomingIntakes.find((intake) => intake.id === nextOccurrence.intakeId);
+    if (!matchingIntake) {
+      return;
+    }
+
+    const scheduledAtRaw = new Date(matchingIntake.scheduledFor).getTime();
+    if (!Number.isFinite(scheduledAtRaw) || scheduledAtRaw > cutoff) {
+      return;
+    }
+
     const scheduledAt = Number.isFinite(scheduledAtRaw) ? scheduledAtRaw : now;
 
     reminders.push({
       medicationId: medication.id,
-      intakeId: nextIntake.id,
+      intakeId: matchingIntake.id,
       medicationName: medication.name,
-      doseLabel: findDoseLabel(medication.doses, nextIntake.doseId),
+      doseLabel: findDoseLabel(medication.doses, matchingIntake.doseId),
       scheduledFor: scheduledAt
     });
   });

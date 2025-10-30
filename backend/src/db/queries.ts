@@ -132,11 +132,14 @@ export {
   getMedicationById,
   getMedicationForRecipient,
   getMedicationIntake,
+  countMedicationIntakesByOccurrence,
+  getMedicationDoseById,
   getMedicationRefillProjection,
   listMedicationDoses,
   listMedicationIntakes,
   listMedicationOccurrences,
   listMedicationIntakeEvents,
+  listActiveMedications,
   insertMedicationIntakeEvent,
   listMedicationsForRecipient,
   unarchiveMedication,
@@ -152,6 +155,11 @@ export type {
   MedicationIntakeWriteData,
   MedicationIntakeUpdateData
 } from './queries/medications.js';
+export {
+  createMedicationReminderEvent,
+  cancelPendingMedicationRemindersForIntake,
+  getPendingMedicationReminderForIntake
+} from './queries/medicationReminders.js';
 
 export { createAuditLog, getLowConfidenceItems, reclassifyItem } from './queries/audit.js';
 export type { LowConfidenceItemRow } from './queries/audit.js';

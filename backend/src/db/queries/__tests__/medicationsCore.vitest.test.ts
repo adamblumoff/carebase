@@ -15,8 +15,10 @@ const {
   archiveMedication,
   deleteMedication,
   listMedicationsForRecipient,
+  listActiveMedications,
   createMedicationDose,
   updateMedicationDose,
+  getMedicationDoseById,
   listMedicationDoses,
   createMedicationIntake,
   deleteMedicationIntake,
@@ -26,7 +28,8 @@ const {
   listMedicationOccurrences,
   listMedicationIntakeEvents,
   upsertMedicationRefillProjection,
-  getMedicationRefillProjection
+  getMedicationRefillProjection,
+  countMedicationIntakesByOccurrence
 } = await import('../medications.js');
 
 const baseMedicationRow = {
@@ -95,6 +98,21 @@ describe('medication queries', () => {
       strengthValue: 5,
       notes: 'Morning dose'
     });
+  });
+
+  it('lists active medications', async () => {
+    dbMocks.query.mockResolvedValueOnce({ rows: [baseMedicationRow], rowCount: 1 });
+
+    const headers = await listActiveMedications();
+
+    expect(headers).toEqual([
+      {
+        id: baseMedicationRow.id,
+        recipientId: baseMedicationRow.recipient_id,
+        ownerId: baseMedicationRow.owner_id
+      }
+    ]);
+    expect(dbMocks.query).toHaveBeenCalledWith(expect.stringContaining('WHERE archived_at IS NULL'));
   });
 
   it('creates medication with normalized fields', async () => {
@@ -187,7 +205,9 @@ describe('medication dose queries', () => {
     dbMocks.query
       .mockResolvedValueOnce({ rows: [baseDoseRow], rowCount: 1 })
       .mockResolvedValueOnce({ rows: [{ ...baseDoseRow, reminder_window_minutes: 60 }], rowCount: 1 })
-      .mockResolvedValueOnce({ rows: [baseDoseRow], rowCount: 1 });
+      .mockResolvedValueOnce({ rows: [baseDoseRow], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [baseDoseRow], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 });
 
     const created = await createMedicationDose(42, {
       label: '  Breakfast ',
@@ -206,6 +226,17 @@ describe('medication dose queries', () => {
     const [listSql, listParams] = dbMocks.query.mock.calls[2] as [string, unknown[]];
     expect(listSql).toContain('SELECT * FROM medication_doses');
     expect(listParams).toEqual([42]);
+
+    const fetched = await getMedicationDoseById(baseDoseRow.id, baseDoseRow.medication_id);
+    expect(fetched?.id).toBe(baseDoseRow.id);
+    const [getSql, getParams] = dbMocks.query.mock.calls[3] as [string, unknown[]];
+    expect(getSql).toContain('FROM medication_doses');
+    expect(getParams).toEqual([baseDoseRow.id, baseDoseRow.medication_id]);
+
+    const missing = await getMedicationDoseById(999, baseDoseRow.medication_id);
+    expect(missing).toBeNull();
+    const [, missingParams] = dbMocks.query.mock.calls[4] as [string, unknown[]];
+    expect(missingParams).toEqual([999, baseDoseRow.medication_id]);
   });
 });
 
@@ -273,6 +304,27 @@ describe('medication intake queries', () => {
     const events = await listMedicationIntakeEvents([baseIntakeRow.id]);
     expect(events[0]?.eventType).toBe('taken');
     expect(dbMocks.query.mock.calls[1]?.[0]).toContain('FROM medication_intake_events');
+  });
+
+  it('counts intakes by occurrence and dose', async () => {
+    dbMocks.query.mockResolvedValueOnce({ rows: [{ count: 2 }], rowCount: 1 });
+
+    const count = await countMedicationIntakesByOccurrence(baseIntakeRow.medication_id, baseIntakeRow.dose_id, baseIntakeRow.occurrence_date);
+
+    expect(count).toBe(2);
+    const [sql, params] = dbMocks.query.mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain('COUNT(*)');
+    expect(sql).toContain('dose_id = $2');
+    expect(params).toEqual([baseIntakeRow.medication_id, baseIntakeRow.dose_id, baseIntakeRow.occurrence_date]);
+
+    dbMocks.query.mockClear();
+    dbMocks.query.mockResolvedValueOnce({ rows: [{ count: 1 }], rowCount: 1 });
+
+    const nullDoseCount = await countMedicationIntakesByOccurrence(baseIntakeRow.medication_id, null, baseIntakeRow.occurrence_date);
+    expect(nullDoseCount).toBe(1);
+    const [nullSql, nullParams] = dbMocks.query.mock.calls[0] as [string, unknown[]];
+    expect(nullSql).toContain('dose_id IS NULL');
+    expect(nullParams).toEqual([baseIntakeRow.medication_id, baseIntakeRow.occurrence_date]);
   });
 });
 

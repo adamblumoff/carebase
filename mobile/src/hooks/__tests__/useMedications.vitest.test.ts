@@ -29,7 +29,7 @@ const reminderMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../../auth/AuthContext', () => ({
-  useAuth: () => ({ status: 'signedIn' as const })
+  useAuth: () => ({ status: 'signedIn' as const, user: { id: 777 } })
 }));
 
 vi.mock('../../utils/realtime', () => ({
@@ -70,7 +70,8 @@ function createMedication(id = 1): MedicationWithDetails {
     archivedAt: null,
     doses: [],
     upcomingIntakes: [],
-    refillProjection: null
+    refillProjection: null,
+    occurrences: []
   };
 }
 
@@ -182,5 +183,89 @@ describe('useMedications', () => {
 
     expect(apiMocks.deleteMedicationIntake).toHaveBeenCalledWith(medication.id, 500);
     expect(result.current.medications[0]?.upcomingIntakes).toHaveLength(0);
+  });
+
+  it('optimistically toggles occurrence status', async () => {
+    const now = new Date();
+    const intakeId = 700;
+    const medication = createMedication(4);
+    medication.doses = [
+      {
+        id: 88,
+        medicationId: medication.id,
+        label: 'Morning',
+        timeOfDay: '08:00:00',
+        timezone: 'America/Chicago',
+        reminderWindowMinutes: 120,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now
+      }
+    ];
+    medication.upcomingIntakes = [
+      {
+        id: intakeId,
+        medicationId: medication.id,
+        doseId: 88,
+        scheduledFor: now,
+        acknowledgedAt: null,
+        status: 'pending',
+        actorUserId: null,
+        occurrenceDate: new Date(now.getFullYear(), now.getMonth(), now.getDate()) as unknown as Date,
+        overrideCount: 0,
+        createdAt: now,
+        updatedAt: now
+      }
+    ];
+    medication.occurrences = [
+      {
+        intakeId,
+        medicationId: medication.id,
+        doseId: 88,
+        occurrenceDate: new Date(now.getFullYear(), now.getMonth(), now.getDate()) as unknown as Date,
+        status: 'pending',
+        acknowledgedAt: null,
+        acknowledgedByUserId: null,
+        overrideCount: 0,
+        history: []
+      }
+    ];
+
+    const updatedMedication: MedicationWithDetails = {
+      ...medication,
+      upcomingIntakes: [
+        {
+          ...medication.upcomingIntakes[0]!,
+          status: 'taken',
+          acknowledgedAt: now,
+          actorUserId: 777
+        }
+      ],
+      occurrences: [
+        {
+          ...medication.occurrences![0]!,
+          status: 'taken',
+          acknowledgedAt: now,
+          acknowledgedByUserId: 777,
+          overrideCount: 0
+        }
+      ]
+    };
+
+    apiMocks.fetchMedications.mockResolvedValueOnce({ medications: [medication] });
+    apiMocks.updateMedicationIntakeStatus.mockResolvedValueOnce(updatedMedication);
+
+    const { result } = renderHook(() => useMedications());
+
+    await waitFor(() => {
+      expect(result.current.medications[0]?.occurrences?.[0]?.status).toBe('pending');
+    });
+
+    await act(async () => {
+      await result.current.toggleOccurrenceStatus(medication.id, intakeId, 'taken');
+    });
+
+    expect(apiMocks.updateMedicationIntakeStatus).toHaveBeenCalledWith(medication.id, intakeId, 'taken');
+    expect(result.current.medications[0]?.occurrences?.[0]?.status).toBe('taken');
   });
 });

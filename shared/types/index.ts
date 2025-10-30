@@ -299,6 +299,7 @@ export interface MedicationIntakePayload extends Omit<MedicationIntake, 'schedul
 }
 
 export interface MedicationDoseOccurrence {
+  intakeId: number;
   medicationId: number;
   doseId: number | null;
   occurrenceDate: Date;

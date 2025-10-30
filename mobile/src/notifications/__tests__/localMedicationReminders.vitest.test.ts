@@ -54,6 +54,19 @@ function buildMedication(overrides: Partial<MedicationWithDetails> = {}): Medica
         updatedAt: now
       }
     ],
+    occurrences: [
+      {
+        intakeId: 201,
+        medicationId: 1,
+        doseId: 101,
+        occurrenceDate: new Date(now.getFullYear(), now.getMonth(), now.getDate()) as unknown as Date,
+        status: 'pending',
+        acknowledgedAt: null,
+        acknowledgedByUserId: null,
+        overrideCount: 0,
+        history: []
+      }
+    ],
     refillProjection: null,
     ...overrides
   };
@@ -126,6 +139,19 @@ describe('syncLocalMedicationReminders', () => {
           overrideCount: 0,
           createdAt: past,
           updatedAt: past
+        }
+      ],
+      occurrences: [
+        {
+          intakeId: 300,
+          medicationId: 1,
+          doseId: 101,
+          occurrenceDate: new Date(past.getFullYear(), past.getMonth(), past.getDate()) as unknown as Date,
+          status: 'pending',
+          acknowledgedAt: null,
+          acknowledgedByUserId: null,
+          overrideCount: 0,
+          history: []
         }
       ]
     });

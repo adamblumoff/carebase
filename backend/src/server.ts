@@ -15,6 +15,7 @@ import { startGoogleSyncPolling } from './services/googleSync.js';
 import { getClerkClient } from './services/clerkAuthGateway.js';
 import { configureClerkJwks } from './services/clerkJwksManager.js';
 import { bootstrapDatabase } from './db/bootstrap.js';
+import { startMedicationOccurrenceResetJob } from './jobs/medicationOccurrenceReset.js';
 
 const app = express();
 const server = createServer(app);
@@ -96,6 +97,10 @@ initRealtime(io);
 // Start Google sync polling only when explicitly enabled.
 if (process.env.GOOGLE_SYNC_POLLING_ENABLED === 'true') {
   startGoogleSyncPolling();
+}
+
+if (process.env.MEDICATION_RESET_ENABLED !== 'false') {
+  startMedicationOccurrenceResetJob();
 }
 
 // Start server

@@ -39,7 +39,9 @@ import {
   updateMedicationIntake,
   upsertMedicationRefillProjection,
   ensureOwnerCollaborator,
-  createAuditLog
+  createAuditLog,
+  getMedicationDoseById,
+  countMedicationIntakesByOccurrence
 } from '../db/queries.js';
 import type {
   MedicationDoseUpdateData,
@@ -49,6 +51,11 @@ import type {
   MedicationWriteData
 } from '../db/queries.js';
 import { ForbiddenError, NotFoundError, ValidationError } from '../utils/errors.js';
+import {
+  cancelMedicationRemindersForIntake,
+  rescheduleMedicationIntakeReminder,
+  scheduleMedicationIntakeReminder
+} from './medicationReminderScheduler.js';
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_INTAKE_LOOKBACK_DAYS = 7;
@@ -368,6 +375,7 @@ function buildOccurrences(
   }
   const historyByIntake = groupEventsByIntake(events);
   return summaries.map((summary) => ({
+    intakeId: summary.intakeId,
     medicationId: summary.medicationId,
     doseId: summary.doseId,
     occurrenceDate: summary.occurrenceDate,
@@ -718,9 +726,48 @@ export async function deleteMedicationIntakeForOwner(
     throw new NotFoundError('Intake not found');
   }
 
+  await cancelMedicationRemindersForIntake(intakeId);
+
   const deletedIntake = await deleteMedicationIntake(intakeId, medicationId);
   if (!deletedIntake) {
     throw new NotFoundError('Intake not found');
+  }
+
+  let recreatedIntake: MedicationIntake | null = null;
+  const remainingCount = await countMedicationIntakesByOccurrence(
+    medicationId,
+    deletedIntake.doseId ?? null,
+    deletedIntake.occurrenceDate
+  );
+
+  if (remainingCount === 0) {
+    recreatedIntake = await createMedicationIntake(medicationId, {
+      doseId: deletedIntake.doseId ?? null,
+      scheduledFor: deletedIntake.scheduledFor,
+      status: 'pending',
+      acknowledgedAt: null,
+      actorUserId: null,
+      occurrenceDate: deletedIntake.occurrenceDate,
+      overrideCount: 0
+    });
+
+    const recreatedDose = recreatedIntake.doseId ? await getMedicationDoseById(recreatedIntake.doseId, medicationId) : null;
+    await scheduleMedicationIntakeReminder({
+      medicationId,
+      recipientId: context.recipientId,
+      intake: {
+        id: recreatedIntake.id,
+        scheduledFor: recreatedIntake.scheduledFor,
+        occurrenceDate: recreatedIntake.occurrenceDate
+      },
+      dose: recreatedDose
+        ? {
+            id: recreatedDose.id,
+            timezone: recreatedDose.timezone,
+            reminderWindowMinutes: recreatedDose.reminderWindowMinutes
+          }
+        : null
+    });
   }
 
   const auditRecord = (await createAuditLog(null, 'medication_intake_deleted', {
@@ -735,7 +782,8 @@ export async function deleteMedicationIntakeForOwner(
       acknowledgedAt: deletedIntake.acknowledgedAt,
       status: deletedIntake.status,
       actorUserId: deletedIntake.actorUserId
-    }
+    },
+    recreatedIntakeId: recreatedIntake?.id ?? null
   })) as { id: number };
 
   await touchPlanForUser(context.ownerUserId);
@@ -790,6 +838,17 @@ async function setDoseStatus(
       throw new NotFoundError('Intake not found');
     }
     await writeIntakeEvent(intakeId, medicationId, existingIntake.doseId, 'undo', user.id);
+    const dose = existingIntake.doseId ? await getMedicationDoseById(existingIntake.doseId, medicationId) : null;
+    await rescheduleMedicationIntakeReminder({
+      medicationId,
+      recipientId: context.recipientId,
+      intake: {
+        id: updated.id,
+        scheduledFor: updated.scheduledFor,
+        occurrenceDate: updated.occurrenceDate
+      },
+      dose
+    });
     await touchPlanForUser(context.ownerUserId);
     return hydrateMedication(medicationId, context);
   }
@@ -823,6 +882,9 @@ async function setDoseStatus(
 
   const eventType: IntakeEventType = shouldIncrementOverride ? 'override' : status === 'taken' ? 'taken' : 'skipped';
   await writeIntakeEvent(intakeId, medicationId, existingIntake.doseId, eventType, user.id);
+  if (status === 'taken' || status === 'skipped') {
+    await cancelMedicationRemindersForIntake(intakeId);
+  }
   await touchPlanForUser(context.ownerUserId);
   return hydrateMedication(medicationId, context);
 }
@@ -865,6 +927,18 @@ export async function recordMedicationIntake(
   if (payload.status === 'taken' || payload.status === 'skipped') {
     const eventType: IntakeEventType = payload.status === 'taken' ? 'taken' : 'skipped';
     await writeIntakeEvent(created.id, medicationId, created.doseId, eventType, user.id);
+  } else if (created.status === 'pending') {
+    const dose = created.doseId ? await getMedicationDoseById(created.doseId, medicationId) : null;
+    await scheduleMedicationIntakeReminder({
+      medicationId,
+      recipientId: context.recipientId,
+      intake: {
+        id: created.id,
+        scheduledFor: created.scheduledFor,
+        occurrenceDate: created.occurrenceDate
+      },
+      dose
+    });
   }
 
   await touchPlanForUser(context.ownerUserId);

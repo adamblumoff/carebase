@@ -18,6 +18,7 @@ const renderWithTheme = (ui: React.ReactNode) =>
 
 const buildMedication = (): MedicationWithDetails => {
   const now = new Date();
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   return {
     id: 10,
     recipientId: 5,
@@ -63,6 +64,74 @@ const buildMedication = (): MedicationWithDetails => {
         overrideCount: 0,
         createdAt: now,
         updatedAt: now
+      },
+      {
+        id: 203,
+        medicationId: 10,
+        doseId: 101,
+        scheduledFor: new Date(now.getTime() + 2 * 60 * 60 * 1000) as unknown as Date,
+        acknowledgedAt: now,
+        status: 'taken',
+        actorUserId: 3,
+        occurrenceDate: new Date(now.getFullYear(), now.getMonth(), now.getDate()) as unknown as Date,
+        overrideCount: 0,
+        createdAt: now,
+        updatedAt: now
+      }
+    ],
+    occurrences: [
+      {
+        intakeId: 201,
+        medicationId: 10,
+        doseId: 101,
+        occurrenceDate: new Date(now.getFullYear(), now.getMonth(), now.getDate()) as unknown as Date,
+        status: 'pending',
+        acknowledgedAt: null,
+        acknowledgedByUserId: null,
+        overrideCount: 0,
+        history: []
+      },
+      {
+        intakeId: 203,
+        medicationId: 10,
+        doseId: 101,
+        occurrenceDate: new Date(now.getFullYear(), now.getMonth(), now.getDate()) as unknown as Date,
+        status: 'taken',
+        acknowledgedAt: now,
+        acknowledgedByUserId: 3,
+        overrideCount: 0,
+        history: [
+          {
+            id: 2,
+            intakeId: 203,
+            medicationId: 10,
+            doseId: 101,
+            eventType: 'taken',
+            occurredAt: now,
+            actorUserId: 3
+          }
+        ]
+      },
+      {
+        intakeId: 202,
+        medicationId: 10,
+        doseId: 101,
+        occurrenceDate: new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate()) as unknown as Date,
+        status: 'taken',
+        acknowledgedAt: now,
+        acknowledgedByUserId: 3,
+        overrideCount: 0,
+        history: [
+          {
+            id: 1,
+            intakeId: 202,
+            medicationId: 10,
+            doseId: 101,
+            eventType: 'taken',
+            occurredAt: now,
+            actorUserId: 3
+          }
+        ]
       }
     ],
     refillProjection: null
@@ -77,8 +146,9 @@ describe('MedicationDetailSheet', () => {
   it('renders medication details and triggers callbacks', () => {
     const medication = buildMedication();
     const onClose = vi.fn();
-    const onMarkTaken = vi.fn();
-    const onMarkSkipped = vi.fn();
+    const onToggleOccurrence = vi.fn().mockResolvedValue(undefined);
+    const onConfirmOverride = vi.fn().mockResolvedValue(undefined);
+    const onUndoOccurrence = vi.fn().mockResolvedValue(undefined);
     const onRecordNow = vi.fn();
     const onEdit = vi.fn();
     const onDeleteMedication = vi.fn();
@@ -90,8 +160,9 @@ describe('MedicationDetailSheet', () => {
         medication={medication}
         canManage
         onClose={onClose}
-        onMarkTaken={async (id) => onMarkTaken(id)}
-        onMarkSkipped={async (id) => onMarkSkipped(id)}
+        onToggleOccurrence={async (id, status) => onToggleOccurrence(id, status)}
+        onConfirmOverride={async (id, status) => onConfirmOverride(id, status)}
+        onUndoOccurrence={async (id) => onUndoOccurrence(id)}
         onRecordNow={async () => onRecordNow()}
         onEdit={onEdit}
         onDeleteMedication={async () => onDeleteMedication()}
@@ -109,16 +180,22 @@ describe('MedicationDetailSheet', () => {
     expect(onRecordNow).toHaveBeenCalled();
 
     fireEvent.click(screen.getByText('Mark taken'));
-    expect(onMarkTaken).toHaveBeenCalledWith(201);
+    expect(onToggleOccurrence).toHaveBeenCalledWith(201, 'taken');
 
     fireEvent.click(screen.getByText('Skip'));
-    expect(onMarkSkipped).toHaveBeenCalledWith(201);
+    expect(onToggleOccurrence).toHaveBeenCalledWith(201, 'skipped');
 
     fireEvent.click(screen.getByText('Edit'));
     expect(onEdit).toHaveBeenCalled();
 
-    fireEvent.click(screen.getByText('Delete entry'));
+    fireEvent.click(screen.getAllByText('Delete entry')[0]);
     expect(onDeleteIntake).toHaveBeenCalledWith(201);
+
+    fireEvent.click(screen.getAllByText('Undo')[0]);
+    expect(onUndoOccurrence).toHaveBeenCalledWith(203);
+
+    fireEvent.click(screen.getByText('Override'));
+    expect(onConfirmOverride).toHaveBeenCalledWith(203, 'taken');
 
     fireEvent.click(screen.getByText('Delete medication'));
     expect(onDeleteMedication).toHaveBeenCalled();

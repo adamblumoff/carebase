@@ -234,6 +234,48 @@ CREATE TABLE IF NOT EXISTS medication_intakes (
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE medication_intakes
+  ADD COLUMN IF NOT EXISTS occurrence_date DATE;
+
+ALTER TABLE medication_intakes
+  ADD COLUMN IF NOT EXISTS override_count INTEGER DEFAULT 0;
+
+UPDATE medication_intakes
+SET occurrence_date = COALESCE(occurrence_date, scheduled_for::date),
+    override_count = COALESCE(override_count, 0)
+WHERE occurrence_date IS NULL OR override_count IS NULL;
+
+ALTER TABLE medication_intakes
+  ALTER COLUMN occurrence_date SET NOT NULL,
+  ALTER COLUMN occurrence_date SET DEFAULT CURRENT_DATE;
+
+ALTER TABLE medication_intakes
+  ALTER COLUMN override_count SET NOT NULL,
+  ALTER COLUMN override_count SET DEFAULT 0;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_medication_intakes_occurrence_unique
+  ON medication_intakes (medication_id, COALESCE(dose_id, 0), occurrence_date);
+
+CREATE TABLE IF NOT EXISTS medication_reminder_events (
+  id SERIAL PRIMARY KEY,
+  medication_id INTEGER NOT NULL REFERENCES medications(id) ON DELETE CASCADE,
+  dose_id INTEGER REFERENCES medication_doses(id) ON DELETE SET NULL,
+  intake_id INTEGER REFERENCES medication_intakes(id) ON DELETE CASCADE,
+  recipient_id INTEGER NOT NULL REFERENCES recipients(id) ON DELETE CASCADE,
+  event_kind VARCHAR(20) NOT NULL CHECK (event_kind IN ('initial', 'nag', 'final', 'follow_up')),
+  status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'cancelled')),
+  scheduled_for TIMESTAMPTZ NOT NULL,
+  sent_at TIMESTAMPTZ,
+  attempt INTEGER NOT NULL DEFAULT 0,
+  context JSONB,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_medication_reminder_events_status ON medication_reminder_events(status);
+CREATE INDEX IF NOT EXISTS idx_medication_reminder_events_intake ON medication_reminder_events(intake_id);
+CREATE INDEX IF NOT EXISTS idx_medication_reminder_events_schedule ON medication_reminder_events(scheduled_for);
+
 CREATE TABLE IF NOT EXISTS medication_intake_events (
   id SERIAL PRIMARY KEY,
   intake_id INTEGER NOT NULL REFERENCES medication_intakes(id) ON DELETE CASCADE,

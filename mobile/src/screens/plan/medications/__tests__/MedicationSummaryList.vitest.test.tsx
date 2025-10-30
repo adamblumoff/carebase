@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { MedicationSummaryList } from '../MedicationSummaryList';
 import type { MedicationSummaryItem } from '../useMedicationSummary';
 import { ThemeProvider } from '../../../../theme';
+import type { MedicationIntakeStatus } from '@carebase/shared';
 
 const renderWithTheme = (ui: React.ReactNode) =>
   render(<ThemeProvider>{ui}</ThemeProvider>);
@@ -11,26 +12,47 @@ const renderWithTheme = (ui: React.ReactNode) =>
 describe('MedicationSummaryList', () => {
   it('renders medication cards and emits selection', () => {
     const onSelect = vi.fn();
+    const onToggle = vi.fn().mockResolvedValue(undefined);
+    const onConfirmOverride = vi.fn().mockResolvedValue(undefined);
     const items: MedicationSummaryItem[] = [
       {
         id: 1,
         name: 'Lipitor',
-        nextDoseLabel: 'Morning',
-        nextDoseTime: new Date('2025-01-01T15:00:00Z').toISOString(),
+        nextOccurrenceLabel: 'Morning',
+        nextOccurrenceTime: new Date('2025-01-01T15:00:00Z').toISOString(),
         isOverdue: true,
-        isArchived: false
+        isArchived: false,
+        occurrences: [
+          {
+            intakeId: 10,
+            label: 'Morning',
+            status: 'pending',
+            scheduledFor: new Date('2025-01-01T15:00:00Z').toISOString(),
+            timezone: 'America/Chicago',
+            isOverdue: true
+          }
+        ]
       },
       {
         id: 2,
         name: 'Metformin',
-        nextDoseLabel: 'Evening',
-        nextDoseTime: null,
+        nextOccurrenceLabel: 'Evening',
+        nextOccurrenceTime: null,
         isOverdue: false,
-        isArchived: false
+        isArchived: false,
+        occurrences: []
       }
     ];
 
-    renderWithTheme(<MedicationSummaryList items={items} onSelect={onSelect} />);
+    renderWithTheme(
+      <MedicationSummaryList
+        items={items}
+        onSelect={onSelect}
+        onToggleOccurrence={onToggle}
+        onConfirmOverride={onConfirmOverride}
+        canManage
+      />
+    );
 
     expect(screen.getByText('Lipitor')).toBeTruthy();
     expect(screen.getByText('Overdue')).toBeTruthy();
@@ -39,5 +61,9 @@ describe('MedicationSummaryList', () => {
 
     fireEvent.click(screen.getByText('Lipitor'));
     expect(onSelect).toHaveBeenCalledWith(1);
+
+    const chipButton = screen.getByTestId('medication-chip-1-10');
+    fireEvent.click(chipButton);
+    expect(onToggle).toHaveBeenCalledWith(1, 10, 'taken');
   });
 });

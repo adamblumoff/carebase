@@ -456,6 +456,25 @@ export async function listMedicationsForRecipient(
   return result.rows.map((row) => toMedication(row));
 }
 
+interface MedicationHeader {
+  id: number;
+  recipientId: number;
+  ownerId: number;
+}
+
+export async function listActiveMedications(): Promise<MedicationHeader[]> {
+  const result = await db.query<MedicationRow>(
+    `SELECT id, recipient_id, owner_id
+       FROM medications
+      WHERE archived_at IS NULL`
+  );
+  return result.rows.map((row) => ({
+    id: row.id,
+    recipientId: row.recipient_id,
+    ownerId: row.owner_id
+  }));
+}
+
 export async function createMedicationDose(
   medicationId: number,
   data: MedicationDoseWriteData
@@ -521,6 +540,19 @@ export async function updateMedicationDose(
      WHERE id = $${params.length - 1} AND medication_id = $${params.length}
      RETURNING *`,
     params
+  );
+  return result.rows[0] ? toDose(result.rows[0]) : null;
+}
+
+export async function getMedicationDoseById(
+  doseId: number,
+  medicationId: number
+): Promise<MedicationDose | null> {
+  const result = await db.query<MedicationDoseRow>(
+    `SELECT *
+     FROM medication_doses
+     WHERE id = $1 AND medication_id = $2`,
+    [doseId, medicationId]
   );
   return result.rows[0] ? toDose(result.rows[0]) : null;
 }
@@ -717,6 +749,34 @@ export async function getMedicationIntake(intakeId: number, medicationId: number
     [intakeId, medicationId]
   );
   return result.rows[0] ? toIntake(result.rows[0]) : null;
+}
+
+export async function countMedicationIntakesByOccurrence(
+  medicationId: number,
+  doseId: number | null,
+  occurrenceDate: Date
+): Promise<number> {
+  if (doseId == null) {
+    const result = await db.query<{ count: number }>(
+      `SELECT COUNT(*)::int AS count
+         FROM medication_intakes
+        WHERE medication_id = $1
+          AND dose_id IS NULL
+          AND occurrence_date = $2`,
+      [medicationId, occurrenceDate]
+    );
+    return result.rows[0]?.count ?? 0;
+  }
+
+  const result = await db.query<{ count: number }>(
+    `SELECT COUNT(*)::int AS count
+       FROM medication_intakes
+      WHERE medication_id = $1
+        AND dose_id = $2
+        AND occurrence_date = $3`,
+    [medicationId, doseId, occurrenceDate]
+  );
+  return result.rows[0]?.count ?? 0;
 }
 
 export async function deleteMedicationIntake(intakeId: number, medicationId: number): Promise<MedicationIntake | null> {

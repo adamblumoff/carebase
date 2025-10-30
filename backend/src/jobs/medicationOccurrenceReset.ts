@@ -9,6 +9,7 @@ import {
 import { findRecipientById } from '../db/queries/recipients.js';
 import { touchPlanForUser } from '../db/queries/plan.js';
 import { combineDateWithTimeZone } from '../utils/timezone.js';
+import { scheduleMedicationIntakeReminder } from '../services/medicationReminderScheduler.js';
 
 const RESET_WINDOW_MINUTES = 60;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -126,6 +127,22 @@ export async function runMedicationOccurrenceReset(): Promise<void> {
         });
 
         intakeIndex.set(nextKey, created);
+        await scheduleMedicationIntakeReminder({
+          medicationId: medication.id,
+          recipientId: medication.recipientId,
+          intake: {
+            id: created.id,
+            scheduledFor: created.scheduledFor,
+            occurrenceDate: created.occurrenceDate
+          },
+          dose: matchingDose
+            ? {
+                id: matchingDose.id,
+                timezone: matchingDose.timezone,
+                reminderWindowMinutes: matchingDose.reminderWindowMinutes
+              }
+            : null
+        });
         console.log('[MedicationReset] Created next occurrence', {
           medicationId: medication.id,
           previousIntakeId: intake.id,
