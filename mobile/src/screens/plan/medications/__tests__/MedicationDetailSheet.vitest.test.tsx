@@ -59,6 +59,8 @@ const buildMedication = (): MedicationWithDetails => {
         acknowledgedAt: null,
         status: 'expired',
         actorUserId: null,
+        occurrenceDate: new Date(now.getFullYear(), now.getMonth(), now.getDate()) as unknown as Date,
+        overrideCount: 0,
         createdAt: now,
         updatedAt: now
       }

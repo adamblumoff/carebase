@@ -226,11 +226,26 @@ CREATE TABLE IF NOT EXISTS medication_intakes (
   dose_id INTEGER REFERENCES medication_doses(id) ON DELETE SET NULL,
   scheduled_for TIMESTAMPTZ NOT NULL,
   acknowledged_at TIMESTAMPTZ,
-  status VARCHAR(10) NOT NULL CHECK (status IN ('taken', 'skipped', 'expired')),
+  status VARCHAR(10) NOT NULL CHECK (status IN ('pending', 'taken', 'skipped', 'expired')),
   actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  occurrence_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  override_count INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS medication_intake_events (
+  id SERIAL PRIMARY KEY,
+  intake_id INTEGER NOT NULL REFERENCES medication_intakes(id) ON DELETE CASCADE,
+  medication_id INTEGER NOT NULL REFERENCES medications(id) ON DELETE CASCADE,
+  dose_id INTEGER REFERENCES medication_doses(id) ON DELETE SET NULL,
+  event_type VARCHAR(20) NOT NULL CHECK (event_type IN ('taken', 'skipped', 'undo', 'override')),
+  occurred_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_medication_intake_events_intake ON medication_intake_events(intake_id);
+CREATE INDEX IF NOT EXISTS idx_medication_intake_events_medication ON medication_intake_events(medication_id);
 
 -- Medication refill forecasts helper table
 CREATE TABLE IF NOT EXISTS medication_refill_forecasts (

@@ -114,11 +114,11 @@ export const medicationDoseUpdateSchema = z.object({
 export const medicationIntakeCreateSchema = z.object({
   doseId: z.union([positiveId, z.null()]).optional(),
   scheduledFor: optionalIsoDateTime,
-  status: z.enum(['taken', 'skipped', 'expired'])
+  status: z.enum(['pending', 'taken', 'skipped', 'expired'])
 });
 
 export const medicationIntakeStatusSchema = z.object({
-  status: z.enum(['taken', 'skipped', 'expired'])
+  status: z.enum(['pending', 'taken', 'skipped', 'expired'])
 });
 
 export const medicationRefillPayloadSchema = z.object({

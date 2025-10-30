@@ -68,6 +68,8 @@ const baseIntakeRow = {
   acknowledged_at: new Date('2025-01-03T08:05:00Z'),
   status: 'taken' as const,
   actor_user_id: 3,
+  occurrence_date: new Date('2025-01-03T00:00:00Z'),
+  override_count: 0,
   created_at: new Date('2025-01-03T08:05:00Z'),
   updated_at: new Date('2025-01-03T08:05:00Z')
 };

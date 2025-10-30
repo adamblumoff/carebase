@@ -201,7 +201,7 @@ export interface BillPayload extends Omit<Bill, 'statementDate' | 'dueDate' | 'c
 
 // ========== MEDICATIONS ==========
 
-export type MedicationIntakeStatus = 'taken' | 'skipped' | 'expired';
+export type MedicationIntakeStatus = 'pending' | 'taken' | 'skipped' | 'expired';
 
 export interface Medication {
   id: number;
@@ -244,8 +244,20 @@ export interface MedicationIntake {
   acknowledgedAt: Date | null;
   status: MedicationIntakeStatus;
   actorUserId: number | null;
+  occurrenceDate: Date;
+  overrideCount: number;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface MedicationIntakeEvent {
+  id: number;
+  intakeId: number;
+  medicationId: number;
+  doseId: number | null;
+  eventType: 'taken' | 'skipped' | 'undo' | 'override';
+  occurredAt: Date;
+  actorUserId: number | null;
 }
 
 export interface MedicationRefillProjection {
@@ -270,14 +282,27 @@ export interface MedicationDosePayload extends Omit<MedicationDose, 'createdAt' 
 export interface MedicationIntakePayload extends Omit<MedicationIntake, 'scheduledFor' | 'acknowledgedAt' | 'createdAt' | 'updatedAt'> {
   scheduledFor: string;
   acknowledgedAt: string | null;
+  occurrenceDate: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface MedicationDoseOccurrence {
+  medicationId: number;
+  doseId: number | null;
+  occurrenceDate: Date;
+  status: MedicationIntakeStatus;
+  acknowledgedAt: Date | null;
+  acknowledgedByUserId: number | null;
+  overrideCount: number;
+  history: MedicationIntakeEvent[];
 }
 
 export interface MedicationWithDetails extends Medication {
   doses: MedicationDose[];
   upcomingIntakes: MedicationIntake[];
   refillProjection: MedicationRefillProjection | null;
+  occurrences?: MedicationDoseOccurrence[];
 }
 
 export interface MedicationDeleteResponse {

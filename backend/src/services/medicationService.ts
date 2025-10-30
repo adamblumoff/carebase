@@ -65,7 +65,7 @@ interface MedicationListOptions {
 
 interface MedicationDetailOptions extends MedicationListOptions {}
 
-const ALLOWED_STATUSES: MedicationIntakeStatus[] = ['taken', 'skipped', 'expired'];
+const ALLOWED_STATUSES: MedicationIntakeStatus[] = ['pending', 'taken', 'skipped', 'expired'];
 
 async function resolveContext(user: User): Promise<MedicationContext> {
   const context = await resolveRecipientContextForUser(user.id);
@@ -315,7 +315,7 @@ function buildIntakeWriteData(payload: MedicationIntakeRecordRequest, userId: nu
   return {
     doseId,
     scheduledFor,
-    acknowledgedAt: status === 'expired' ? null : new Date(),
+    acknowledgedAt: status === 'taken' || status === 'skipped' ? new Date() : null,
     status,
     actorUserId: userId
   };
@@ -327,7 +327,7 @@ function buildIntakeUpdateData(status: MedicationIntakeStatus, userId: number): 
   }
   return {
     status,
-    acknowledgedAt: status === 'expired' ? null : new Date(),
+    acknowledgedAt: status === 'taken' || status === 'skipped' ? new Date() : null,
     actorUserId: userId
   };
 }

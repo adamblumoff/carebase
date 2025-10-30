@@ -48,6 +48,8 @@ interface MedicationIntakeRow {
   acknowledged_at: Date | null;
   status: MedicationIntakeStatus;
   actor_user_id: number | null;
+  occurrence_date: Date;
+  override_count: number;
   created_at: Date;
   updated_at: Date;
 }
@@ -176,6 +178,8 @@ function toIntake(row: MedicationIntakeRow): MedicationIntake {
     acknowledgedAt: row.acknowledged_at,
     status: row.status,
     actorUserId: row.actor_user_id,
+    occurrenceDate: row.occurrence_date,
+    overrideCount: row.override_count,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };

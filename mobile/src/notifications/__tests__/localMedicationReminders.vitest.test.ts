@@ -48,6 +48,8 @@ function buildMedication(overrides: Partial<MedicationWithDetails> = {}): Medica
         acknowledgedAt: null,
         status: 'expired',
         actorUserId: null,
+        occurrenceDate: new Date(now.getFullYear(), now.getMonth(), now.getDate()) as unknown as Date,
+        overrideCount: 0,
         createdAt: now,
         updatedAt: now
       }
@@ -120,6 +122,8 @@ describe('syncLocalMedicationReminders', () => {
           acknowledgedAt: null,
           status: 'expired',
           actorUserId: null,
+          occurrenceDate: new Date(past.getFullYear(), past.getMonth(), past.getDate()) as unknown as Date,
+          overrideCount: 0,
           createdAt: past,
           updatedAt: past
         }

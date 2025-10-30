@@ -114,6 +114,8 @@ function createIntake(overrides: Partial<MedicationIntake> = {}): MedicationInta
     acknowledgedAt: new Date('2025-01-02T13:05:00.000Z'),
     status: 'taken',
     actorUserId: 10,
+    occurrenceDate: new Date('2025-01-02T00:00:00.000Z'),
+    overrideCount: 0,
     createdAt: now,
     updatedAt: now,
     ...overrides

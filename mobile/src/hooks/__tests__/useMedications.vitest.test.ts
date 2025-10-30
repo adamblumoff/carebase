@@ -154,6 +154,8 @@ describe('useMedications', () => {
         acknowledgedAt: null,
         status: 'taken',
         actorUserId: null,
+        occurrenceDate: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
+        overrideCount: 0,
         createdAt: now,
         updatedAt: now
       }

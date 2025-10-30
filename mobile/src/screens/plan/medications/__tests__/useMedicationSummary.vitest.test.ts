@@ -61,6 +61,8 @@ describe('useMedicationSummary', () => {
             acknowledgedAt: null,
             status: 'expired',
             actorUserId: null,
+            occurrenceDate: new Date('2025-01-01T00:00:00Z') as unknown as Date,
+            overrideCount: 0,
             createdAt: future,
             updatedAt: future
           }
@@ -93,6 +95,8 @@ describe('useMedicationSummary', () => {
             acknowledgedAt: null,
             status: 'expired',
             actorUserId: null,
+            occurrenceDate: new Date('2025-01-02T00:00:00Z') as unknown as Date,
+            overrideCount: 0,
             createdAt: newer,
             updatedAt: newer
           }
