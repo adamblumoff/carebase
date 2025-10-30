@@ -58,6 +58,7 @@ const {
   createMedicationForOwner,
   updateMedicationForOwner,
   recordMedicationIntake,
+  deleteMedicationDoseForOwner,
   deleteMedicationForOwner,
   deleteMedicationIntakeForOwner
 } = await import('../medicationService.js');
@@ -346,7 +347,7 @@ describe('createMedicationForOwner', () => {
       collaborator: null
     });
     queriesMock.createMedication.mockResolvedValueOnce(medication);
-    queriesMock.getMedicationForRecipient.mockResolvedValueOnce(medication);
+    queriesMock.getMedicationForRecipient.mockImplementation(async () => medication);
     queriesMock.createMedicationDose.mockResolvedValue(createDose());
     queriesMock.listMedicationDoses.mockResolvedValueOnce([createDose()]);
 
@@ -459,6 +460,47 @@ describe('updateMedicationForOwner', () => {
     queriesMock.updateMedication.mockResolvedValueOnce(null);
 
     await expect(updateMedicationForOwner(user, 999, { name: 'Missing' })).rejects.toBeInstanceOf(NotFoundError);
+  });
+});
+
+describe('deleteMedicationDoseForOwner', () => {
+  it('removes dependent intakes and cancels reminders before deleting dose', async () => {
+    const user = createUser();
+    const medication = createMedication();
+    const dose = createDose({ id: 201 });
+    const pendingIntake = createIntake({
+      id: 401,
+      doseId: dose.id,
+      status: 'pending',
+      acknowledgedAt: null,
+      actorUserId: null,
+      occurrenceDate: now,
+      scheduledFor: now
+    });
+    const takenIntake = createIntake({ id: 402, doseId: dose.id, status: 'taken', occurrenceDate: now, scheduledFor: now });
+
+    queriesMock.resolveRecipientContextForUser.mockResolvedValueOnce({
+      recipient: { id: medication.recipientId, userId: user.id, displayName: 'Alex', createdAt: now },
+      collaborator: null
+    });
+    queriesMock.getMedicationForRecipient.mockResolvedValueOnce(medication);
+    queriesMock.listMedicationIntakes
+      .mockResolvedValueOnce([pendingIntake, takenIntake])
+      .mockResolvedValueOnce([]);
+    queriesMock.deleteMedicationIntake
+      .mockResolvedValueOnce(pendingIntake)
+      .mockResolvedValueOnce(takenIntake);
+    queriesMock.deleteMedicationDose.mockResolvedValueOnce(true);
+    queriesMock.listMedicationDoses.mockResolvedValueOnce([]);
+    queriesMock.listMedicationOccurrences.mockResolvedValueOnce([]);
+    queriesMock.listMedicationIntakeEvents.mockResolvedValueOnce([]);
+
+    await expect(deleteMedicationDoseForOwner(user, medication.id, dose.id)).rejects.toBeInstanceOf(NotFoundError);
+    expect(queriesMock.deleteMedicationIntake).toHaveBeenCalledWith(pendingIntake.id, medication.id);
+    expect(queriesMock.deleteMedicationIntake).toHaveBeenCalledWith(takenIntake.id, medication.id);
+    expect(reminderSchedulerMocks.cancelMedicationRemindersForIntake).toHaveBeenCalledWith(pendingIntake.id);
+    expect(reminderSchedulerMocks.cancelMedicationRemindersForIntake).toHaveBeenCalledWith(takenIntake.id);
+    expect(queriesMock.deleteMedicationDose).toHaveBeenCalledWith(dose.id, medication.id);
   });
 });
 

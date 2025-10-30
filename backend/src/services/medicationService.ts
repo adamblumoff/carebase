@@ -816,6 +816,16 @@ export async function deleteMedicationDoseForOwner(
   if (!medication) {
     throw new NotFoundError('Medication not found');
   }
+
+  const intakes = await listMedicationIntakes(medicationId);
+  for (const intake of intakes) {
+    if (intake.doseId !== doseId) {
+      continue;
+    }
+    await cancelMedicationRemindersForIntake(intake.id);
+    await deleteMedicationIntake(intake.id, medicationId);
+  }
+
   const removed = await deleteMedicationDose(doseId, medicationId);
   if (!removed) {
     throw new NotFoundError('Dose not found');
