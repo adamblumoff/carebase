@@ -520,22 +520,6 @@ export default function PlanScreen({ navigation, route }: Props) {
     ]
   );
 
-  const handleToggleOccurrence = useCallback(
-    (medicationId: number, intakeId: number, status?: MedicationIntakeStatus) =>
-      handleMedicationMutator(() =>
-        medicationsState.toggleOccurrenceStatus(medicationId, intakeId, status)
-      ),
-    [handleMedicationMutator, medicationsState]
-  );
-
-  const handleConfirmOccurrenceOverride = useCallback(
-    (medicationId: number, intakeId: number, status?: MedicationIntakeStatus) =>
-      handleMedicationMutator(() =>
-        medicationsState.confirmOverride(medicationId, intakeId, status)
-      ),
-    [handleMedicationMutator, medicationsState]
-  );
-
   const handleUndoOccurrence = useCallback(
     (medicationId: number, intakeId: number) =>
       handleMedicationMutator(() => medicationsState.undoOccurrence(medicationId, intakeId)),
