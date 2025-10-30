@@ -24,6 +24,8 @@ const queriesMock: QueryMocks = {
   getMedicationRefillProjection: vi.fn(),
   listMedicationDoses: vi.fn(),
   listMedicationIntakes: vi.fn(),
+  listMedicationOccurrences: vi.fn(),
+  listMedicationIntakeEvents: vi.fn(),
   listMedicationsForRecipient: vi.fn(),
   resolveRecipientContextForUser: vi.fn(),
   touchPlanForUser: vi.fn(),
@@ -135,6 +137,8 @@ function resetMocks(): void {
   Object.values(queriesMock).forEach((mockFn) => mockFn.mockReset());
   queriesMock.listMedicationDoses.mockResolvedValue([]);
   queriesMock.listMedicationIntakes.mockResolvedValue([]);
+  queriesMock.listMedicationOccurrences.mockResolvedValue([]);
+  queriesMock.listMedicationIntakeEvents.mockResolvedValue([]);
   queriesMock.getMedicationRefillProjection.mockResolvedValue(null);
   queriesMock.ensureOwnerCollaborator.mockResolvedValue({ id: 500 });
   queriesMock.createAuditLog.mockResolvedValue({ id: 900 });
@@ -162,6 +166,19 @@ describe('listMedicationsForUser', () => {
     queriesMock.listMedicationDoses.mockResolvedValueOnce([dose]);
     queriesMock.listMedicationIntakes.mockResolvedValueOnce([intake]);
     queriesMock.getMedicationRefillProjection.mockResolvedValueOnce(projection);
+    queriesMock.listMedicationOccurrences.mockResolvedValueOnce([
+      {
+        intakeId: 999,
+        medicationId: medication.id,
+        doseId: dose.id,
+        occurrenceDate: now,
+        status: 'pending',
+        acknowledgedAt: null,
+        acknowledgedByUserId: null,
+        overrideCount: 0
+      }
+    ]);
+    queriesMock.listMedicationIntakeEvents.mockResolvedValueOnce([]);
 
     const results = await listMedicationsForUser(user, { includeArchived: true, intakeLimit: 5 });
 
@@ -169,8 +186,10 @@ describe('listMedicationsForUser', () => {
     expect(results[0]?.doses[0]?.label).toBe('Morning');
     expect(results[0]?.upcomingIntakes[0]?.status).toBe('taken');
     expect(results[0]?.refillProjection?.expectedRunOutOn).toEqual(projection.expectedRunOutOn);
+    expect(results[0]?.occurrences?.length).toBe(1);
     expect(queriesMock.listMedicationsForRecipient).toHaveBeenCalledWith(medication.recipientId, { includeArchived: true });
     expect(queriesMock.ensureOwnerCollaborator).toHaveBeenCalledWith(medication.recipientId, user);
+    expect(queriesMock.listMedicationOccurrences).toHaveBeenCalledWith(medication.id, expect.objectContaining({ since: expect.any(Date) }));
   });
 
   it('filters archived medications for collaborators', async () => {

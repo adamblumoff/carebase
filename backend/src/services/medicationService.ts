@@ -2,10 +2,13 @@ import type {
   MedicationCreateRequest,
   MedicationDeleteResponse,
   MedicationDoseInput,
+  MedicationDoseOccurrence,
   MedicationDoseUpdateInput,
   MedicationIntakeDeleteResponse,
+  MedicationIntakeEvent,
   MedicationIntakeRecordRequest,
   MedicationIntakeStatus,
+  MedicationOccurrenceSummary,
   MedicationUpdateRequest,
   MedicationWithDetails,
   User
@@ -23,7 +26,9 @@ import {
   getMedicationForRecipient,
   getMedicationRefillProjection,
   listMedicationDoses,
+  listMedicationIntakeEvents,
   listMedicationIntakes,
+  listMedicationOccurrences,
   listMedicationsForRecipient,
   resolveRecipientContextForUser,
   touchPlanForUser,
@@ -48,6 +53,7 @@ const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_INTAKE_LOOKBACK_DAYS = 7;
 const DEFAULT_INTAKE_LIMIT = 10;
 const MAX_INTAKE_LIMIT = 50;
+const DEFAULT_OCCURRENCE_LOOKBACK_DAYS = 7;
 
 interface MedicationContext {
   recipientId: number;
@@ -342,6 +348,37 @@ function buildIntakeQueryOptions(options: MedicationListOptions | undefined) {
   return { limit, since, statuses };
 }
 
+function groupEventsByIntake(events: MedicationIntakeEvent[]): Map<number, MedicationIntakeEvent[]> {
+  const map = new Map<number, MedicationIntakeEvent[]>();
+  for (const event of events) {
+    if (!map.has(event.intakeId)) {
+      map.set(event.intakeId, []);
+    }
+    map.get(event.intakeId)!.push(event);
+  }
+  return map;
+}
+
+function buildOccurrences(
+  summaries: MedicationOccurrenceSummary[],
+  events: MedicationIntakeEvent[]
+): MedicationDoseOccurrence[] {
+  if (summaries.length === 0) {
+    return [];
+  }
+  const historyByIntake = groupEventsByIntake(events);
+  return summaries.map((summary) => ({
+    medicationId: summary.medicationId,
+    doseId: summary.doseId,
+    occurrenceDate: summary.occurrenceDate,
+    status: summary.status,
+    acknowledgedAt: summary.acknowledgedAt,
+    acknowledgedByUserId: summary.acknowledgedByUserId,
+    overrideCount: summary.overrideCount,
+    history: historyByIntake.get(summary.intakeId) ?? []
+  }));
+}
+
 type MedicationIntakeList = Awaited<ReturnType<typeof listMedicationIntakes>>;
 
 function buildMedicationAuditSnapshot(
@@ -402,7 +439,11 @@ async function hydrateMedication(
   options?: MedicationDetailOptions
 ): Promise<MedicationWithDetails> {
   const intakeOptions = buildIntakeQueryOptions(options);
-  const [medication, doses, intakes, projection] = await Promise.all([
+  const occurrenceSince = options?.intakeLookbackDays && options.intakeLookbackDays > 0
+    ? new Date(Date.now() - options.intakeLookbackDays * DAY_IN_MS)
+    : new Date(Date.now() - DEFAULT_OCCURRENCE_LOOKBACK_DAYS * DAY_IN_MS);
+
+  const [medication, doses, intakes, projection, occurrenceSummaries] = await Promise.all([
     getMedicationForRecipient(medicationId, context.recipientId),
     listMedicationDoses(medicationId),
     listMedicationIntakes(medicationId, {
@@ -410,8 +451,12 @@ async function hydrateMedication(
       limit: intakeOptions.limit,
       statuses: intakeOptions.statuses
     }),
-    getMedicationRefillProjection(medicationId)
+    getMedicationRefillProjection(medicationId),
+    listMedicationOccurrences(medicationId, { since: occurrenceSince })
   ]);
+
+  const occurrenceEvents = await listMedicationIntakeEvents(occurrenceSummaries.map((summary) => summary.intakeId));
+  const occurrences = buildOccurrences(occurrenceSummaries, occurrenceEvents);
 
   if (!medication) {
     throw new NotFoundError('Medication not found');
@@ -425,7 +470,8 @@ async function hydrateMedication(
     ...medication,
     doses,
     upcomingIntakes: intakes,
-    refillProjection: projection
+    refillProjection: projection,
+    occurrences
   };
 }
 
@@ -452,11 +498,15 @@ export async function listMedicationsForUser(
       }),
       getMedicationRefillProjection(medication.id)
     ]);
+    const occurrenceSummaries = await listMedicationOccurrences(medication.id, { since: listOptions.since });
+    const occurrenceEvents = await listMedicationIntakeEvents(occurrenceSummaries.map((summary) => summary.intakeId));
+    const occurrences = buildOccurrences(occurrenceSummaries, occurrenceEvents);
     results.push({
       ...medication,
       doses,
       upcomingIntakes: intakes,
-      refillProjection: projection
+      refillProjection: projection,
+      occurrences
     });
   }
   return results;

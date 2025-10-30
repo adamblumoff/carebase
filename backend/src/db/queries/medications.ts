@@ -666,7 +666,7 @@ export async function listMedicationIntakeEvents(intakeIds: number[]): Promise<M
   const result = await db.query<MedicationIntakeEventRow>(
     `SELECT id, intake_id, medication_id, dose_id, event_type, occurred_at, actor_user_id
        FROM medication_intake_events
-       WHERE intake_id = ANY($1)
+       WHERE intake_id = ANY($1::int[])
        ORDER BY occurred_at ASC, id ASC`,
     [intakeIds]
   );
