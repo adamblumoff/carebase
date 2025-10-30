@@ -173,6 +173,7 @@ describe('MedicationDetailSheet', () => {
     expect(screen.getByText('Lipitor')).toBeTruthy();
     expect(screen.getByText('Take once daily with food.')).toBeTruthy();
     expect(screen.getByText(/Schedule/)).toBeTruthy();
+    expect(screen.getAllByText('Morning')[0]).toBeTruthy();
 
     fireEvent.click(screen.getByText('Mark taken'));
     expect(onToggleOccurrence).toHaveBeenCalledWith(201, 'taken');
@@ -245,6 +246,7 @@ describe('MedicationDetailSheet', () => {
     const pendingPill = screen.getByText('0/1');
     expect(pendingPill.style.color).toBe('rgb(108, 143, 120)');
     expect(pendingPill.parentElement?.style.backgroundColor).toBe('rgb(216, 235, 222)');
+    expect(screen.getAllByText('Morning')[0]).toBeTruthy();
 
     const takenMedication: MedicationWithDetails = {
       ...pendingMedication,

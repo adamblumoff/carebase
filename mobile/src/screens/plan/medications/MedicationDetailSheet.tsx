@@ -68,13 +68,15 @@ export function MedicationDetailSheet({
     historyOccurrences,
     upcomingById,
     dailyCount,
-    activeDoseCount
+    activeDoseCount,
+    doseById
   } = useMemo((): {
     todayOccurrences: MedicationDoseOccurrence[];
     historyOccurrences: MedicationDoseOccurrence[];
     upcomingById: Map<number, MedicationWithDetails['upcomingIntakes'][number]>;
     dailyCount: ReturnType<typeof computeMedicationDailyCount> | null;
     activeDoseCount: number;
+    doseById: Map<number, MedicationWithDetails['doses'][number]>;
   } => {
     if (!medication) {
       return {
@@ -82,12 +84,19 @@ export function MedicationDetailSheet({
         historyOccurrences: [],
         upcomingById: new Map(),
         dailyCount: null,
-        activeDoseCount: 0
+        activeDoseCount: 0,
+        doseById: new Map()
       };
     }
 
     const upcomingMap = new Map<number, MedicationWithDetails['upcomingIntakes'][number]>();
     medication.upcomingIntakes.forEach((intake) => upcomingMap.set(intake.id, intake));
+    const doseMap = new Map<number, MedicationWithDetails['doses'][number]>();
+    medication.doses.forEach((dose) => {
+      if (dose.id != null) {
+        doseMap.set(dose.id, dose);
+      }
+    });
 
     const todayKey = toDateKey(new Date());
     const occurrences = (medication.occurrences ?? []) as MedicationDoseOccurrence[];
@@ -105,7 +114,8 @@ export function MedicationDetailSheet({
       historyOccurrences: history,
       upcomingById: upcomingMap,
       dailyCount: dailyCountSummary,
-      activeDoseCount
+      activeDoseCount,
+      doseById: doseMap
     };
   }, [medication]);
 
@@ -219,9 +229,10 @@ export function MedicationDetailSheet({
                 ) : (
                   todayOccurrences.map((occurrence) => {
                     const intake = upcomingById.get(occurrence.intakeId) ?? null;
-                    const label = occurrence.label ?? 'Dose';
+                    const dose = occurrence.doseId != null ? doseById.get(occurrence.doseId) ?? null : null;
+                    const label = dose?.label ?? 'Dose';
                     const scheduledLabel = formatScheduledLabel(intake ? intake.scheduledFor as string : null);
-                    const timezone = intake?.timezone ?? occurrence.timezone ?? null;
+                    const timezone = intake?.timezone ?? dose?.timezone ?? occurrence.timezone ?? null;
                     const statusLabel = STATUS_LABELS[occurrence.status];
 
                     return (
@@ -349,6 +360,7 @@ export function MedicationDetailSheet({
                   historyOccurrences.map((occurrence) => {
                     const statusLabel = STATUS_LABELS[occurrence.status];
                     const intake = upcomingById.get(occurrence.intakeId) ?? null;
+                    const dose = occurrence.doseId != null ? doseById.get(occurrence.doseId) ?? null : null;
                     const scheduledLabel = formatScheduledLabel(intake ? intake.scheduledFor as string : null);
                     const historyEvent = occurrence.history[occurrence.history.length - 1] ?? null;
                     const occurredAtLabel = historyEvent
@@ -359,7 +371,7 @@ export function MedicationDetailSheet({
                       <View key={`history-${occurrence.intakeId}-${toDateKey(occurrence.occurrenceDate)}`} style={styles.historyRow}>
                         <View>
                           <Text style={[styles.historyLabel, { color: palette.textPrimary }]}>
-                            {occurrence.label ?? 'Dose'} · {statusLabel}
+                            {(dose?.label ?? 'Dose')} · {statusLabel}
                           </Text>
                           <Text style={[styles.historyMeta, { color: palette.textMuted }]}>
                             {occurredAtLabel}
