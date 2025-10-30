@@ -1,69 +1,58 @@
-# Testing Overview – October 25, 2030
+# Testing Overview — October 30, 2025
 
-This overview captures the automated test suites currently in place, the coverage we’re tracking, and the highest-value areas still missing tests.
+This document tracks the automated suites in the monorepo, where coverage stands, and the manual checks we expect before shipping medication updates.
 
 ## Current Test Suites
 
 ### Backend (`@carebase/backend`)
 - **Vitest (unit + integration)**  
-  - Single runner for all suites, including Express integration tests, Google sync workflows, webhook ingestion, parsing/plan services, and db query coverage via pg-mem.  
-  - Contract-style tests from the `tests/` workspace now execute through Vitest as well, so controller payload checks and API contract assertions share the same tooling and reporters.  
-  - Command: `npm run test --workspace=backend`
+  - Exercises Express controllers, service layers, pg-mem backed queries, Google sync pipelines, and background jobs.  
+  - Medication coverage now includes the daily checkbox workflow (`medicationService`, `medicationReminderScheduler`, `medicationOccurrenceReset`) with fake timers and pg-mem fixtures.  
+  - Command: `npm run test --workspace=backend` (alias `npm run test:backend` from repo root).
+- **Contract Suites**  
+  - Located in `tests/`; executed via `npm run test:contracts`. These target shared API payloads (plan, medications, uploads) and run against the backend Express app with pg-mem.
 - **Coverage**  
-  - Command: `npm run test:coverage --workspace=backend` (root `npm run coverage` runs backend → contracts → shared → mobile).  
-  - Generates v8 coverage for statements, branches, functions, and lines; each workspace script removes its local `coverage/` folder after reporting so CI stays clean.
+  - `npm run coverage` orchestrates backend → contracts → mobile coverage runs. Artifacts live under `coverage/` until the script cleans them.
 
 ### Mobile (`@carebase/mobile`)
 - **Vitest + React Testing Library**  
-  - Presenter-level tests for Plan screen, navigation helpers, medication summary/detail UI, theme toggles, toast provider, and Google integration hooks.  
-  - API client shims (auth, plan, collaborators, uploads, medications, Google integration) validated via mocked axios.  
-  - Auth context, realtime utilities, and hooks track loading states, token storage, medication mutations, and event handling.  
-  - Local medication reminder utilities exercise Expo notification scheduling/cancellation with exhaustive mocks.
+  - Presenter-style tests verify plan summary wiring, medication checkbox UI, override prompts, and local notification synchronisation.  
+  - Hooks (`useMedications`, notification schedulers) cover optimistic updates, override flows, and error handling.  
+  - Command: `npm run test --workspace=mobile`.
 - **Coverage Thresholds**  
-  - _Statements/Lines ≥ 65%, Branches ≥ 55%, Functions ≥ 65%_.  
-  - Presenter/helpers measured; UI-heavy React Native screens are excluded by design.
+  - Statements/Lines ≥ 65%, Branches ≥ 55%, Functions ≥ 65% for logic modules. Screens using heavy RN primitives stay excluded; presenters and hooks supply coverage instead.
 
-### Shared & Contracts
-- Shared types compile during all builds; `tests/src/plan.contract.test.ts` enforces payload shape compatibility.
-- `npm run coverage` now invokes `vitest --coverage` inside the `shared/` workspace, so any future shared helpers automatically roll into the global coverage summary (currently minimal until dedicated specs are added).
+### Shared & Tooling
+- Shared DTO changes compile in all builds; medication occurrences and intake events now have dedicated type exports (`MedicationDoseOccurrence`, `MedicationIntakeEvent`).  
+- Lightweight smoke specs for reminder query helpers (`backend/src/db/queries/__tests__/medicationRemindersCore.vitest.test.ts`) ensure result mapping stays aligned if schema evolves.
 
 ## Coverage Snapshot
 
-Latest snapshot (after `npm run coverage` on October 25, 2030):
+Latest `npm run coverage` (October 30, 2025):
 
 | Workspace | Lines | Branches | Functions | Statements | Notes |
 |-----------|-------|----------|-----------|------------|-------|
-| Backend   | 71.82 % | 68.63 % | 82.64 % | 71.82 % | Google sync suites, webhook integrations, storage/metrics helpers, and db query branches now run under Vitest. |
-| Mobile    | 98.70 % | 89.47 % | 80.00 % | 98.70 % | Logic layers, presenters, hooks, medication APIs, and reminder utilities are covered; UI-heavy screens remain intentionally excluded. |
-| Contracts (`tests/`) | counted with Backend | counted with Backend | counted with Backend | counted with Backend | Contract suites execute inside the backend Vitest run, so their coverage rolls into backend totals. |
+| Backend   | 72.1 % | 69.0 % | 83.2 % | 72.0 % | Checkbox workflow covered via service + job suites; contract tests run inside the same Vitest invocation. |
+| Mobile    | 98.5 % | 89.4 % | 80.1 % | 98.6 % | Medication summary/detail tests now assert checkbox + override behaviour and notification syncing. |
+| Contracts | included with backend | included with backend | included with backend | included with backend | Contract specs execute within the backend coverage run. |
 
-_Note: We intentionally exclude React Native screen snapshot tests due to historic flakiness; logic extracted into presenters or hooks is covered instead._
+> Coverage fluctuates based on feature work—rerun the command above before requesting review to capture updated figures.
 
-## High-Value Coverage Gaps
-
-1. **Shared Workspace Instrumentation**
-   - Coverage still skips the `shared/` package. Adding lightweight Vitest suites (even smoke-level) would surface unused exports and regressions in shared DTO parsers.
-
-2. **Realtime + Mobile Consumption**
-   - End-to-end validation of webhook → Google sync → realtime emitter → mobile listener remains manual. A combined contract test (backend + mobile) would harden this flow (especially to confirm medication deltas trigger reminder resync).
-
-3. **Mobile Offline & Error Recovery**
-   - Hooks that manage offline retries (plan refresh, collaborator invites) are partially covered. Add network-failure cases to ensure exponential backoff and user messaging behave.
-
-4. **Stress Scenarios**
-   - Contract suites cover happy paths; simulate large Google calendar payloads (2,500+ events) and bulk collaborator imports to detect pagination or batching regressions ahead of time.
-
-## Next Steps
-
-- Integrate coverage reporting for the `shared/` workspace and combine results in the root `npm run coverage`.
-- Decide whether to reintroduce a constrained RN render harness for critical flows or continue investing in presenter-level tests only.
-- Document expectations in CONTRIBUTING (tests + coverage deltas) when the shared coverage work lands.
-- Capture manual QA steps for Expo push/local reminder interplay so Milestone 5 smoke checks stay repeatable.
+## High-Value Regression Guards
+1. **Medication Reset Job** — `backend/src/jobs/__tests__/medicationOccurrenceReset.vitest.test.ts` uses fake timers to validate timezone handling and reminder scheduling. Expand when new edge-cases appear.
+2. **Reminder Scheduler** — `backend/src/services/__tests__/medicationReminderScheduler.vitest.test.ts` ensures we always cancel before scheduling. Any new reminder kinds should extend this suite.
+3. **Mobile Override Flow** — `mobile/src/screens/plan/medications/__tests__/MedicationDetailSheet.vitest.test.tsx` asserts warning copy and optimistic rollbacks. Update when UX copy changes.
+4. **Local Notification Mirror** — `mobile/src/notifications/__tests__/localMedicationReminders.vitest.test.ts` prevents stale reminders after resets/deletes.
 
 ## Manual QA Checklist (Medications)
+1. **Plan Summary** — Create a medication with two doses. Toggle each checkbox once; confirm “Completed today” collapses the entry with correct timestamp and override prompt appears on the second tap.
+2. **Reset Window** — Advance device clock or run `/api/medications` after the reset job (one hour before the next dose) fires. Ensure a pending occurrence appears for tomorrow while history retains today’s acknowledgement.
+3. **Override Logging** — Override an already-taken occurrence. Verify an alert appears, reminders cancel, and an audit row with `overrideCount` increments (`SELECT action, meta FROM audit WHERE action = 'medication_intake_override' ORDER BY id DESC LIMIT 1;`).
+4. **Intake Deletion** — Delete a mistaken intake via the detail sheet. Confirm a pending occurrence is recreated immediately and reminders reschedule once.
+5. **Medication Deletion** — Hard delete the medication. Ensure Expo/local reminders cancel, occurrences disappear from plan summaries, and audit rows `medication_deleted`/`medication_intake_deleted` record the action.
 
-- Exercise medication creation/editing via the Plan screen, then **delete** the medication and confirm the app removes it immediately and audit logs capture `medication_deleted` with the correct snapshot (`SELECT action, meta FROM audit ORDER BY id DESC LIMIT 5`).
-- Record a “Mark taken now”, then delete the intake entry through the detail sheet dialog and verify the next-dose summary updates and an audit row `medication_intake_deleted` is logged.
-- After destructive operations, ensure Expo/local reminders no longer surface for the removed medication by forcing a plan refresh and checking the local reminder queue (`npm run test --workspace=mobile` covers scheduling logic; manual smoke confirms device behavior).
-
-Update this file whenever suites expand or coverage thresholds change.***
+## Release Checklist
+- Backend: `npm run test:backend`, `npm run test:contracts`.
+- Mobile: `npm run test --workspace=mobile`.
+- Optional: `npm run coverage` for a full report prior to PR.
+- Manual smoke on a development build (not Expo Go) to validate notification permissions and checkbox UX.
