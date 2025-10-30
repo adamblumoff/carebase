@@ -360,12 +360,14 @@ export async function unarchiveMedication(
   return result.rows[0] ? toMedication(result.rows[0]) : null;
 }
 
-export async function deleteMedication(id: number, ownerId: number): Promise<boolean> {
-  const result = await db.query(
-    `DELETE FROM medications WHERE id = $1 AND owner_id = $2`,
-    [id, ownerId]
+export async function deleteMedication(id: number, recipientId: number, ownerId: number): Promise<Medication | null> {
+  const result = await db.query<MedicationRow>(
+    `DELETE FROM medications
+     WHERE id = $1 AND recipient_id = $2 AND owner_id = $3
+     RETURNING *`,
+    [id, recipientId, ownerId]
   );
-  return result.rowCount > 0;
+  return result.rows[0] ? toMedication(result.rows[0]) : null;
 }
 
 export async function getMedicationById(id: number): Promise<Medication | null> {
@@ -578,6 +580,26 @@ export async function listMedicationIntakes(
     params
   );
   return result.rows.map((row) => toIntake(row));
+}
+
+export async function getMedicationIntake(intakeId: number, medicationId: number): Promise<MedicationIntake | null> {
+  const result = await db.query<MedicationIntakeRow>(
+    `SELECT *
+     FROM medication_intakes
+     WHERE id = $1 AND medication_id = $2`,
+    [intakeId, medicationId]
+  );
+  return result.rows[0] ? toIntake(result.rows[0]) : null;
+}
+
+export async function deleteMedicationIntake(intakeId: number, medicationId: number): Promise<MedicationIntake | null> {
+  const result = await db.query<MedicationIntakeRow>(
+    `DELETE FROM medication_intakes
+     WHERE id = $1 AND medication_id = $2
+     RETURNING *`,
+    [intakeId, medicationId]
+  );
+  return result.rows[0] ? toIntake(result.rows[0]) : null;
 }
 
 export async function upsertMedicationRefillProjection(

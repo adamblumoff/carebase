@@ -1,7 +1,9 @@
 import type {
   MedicationCreateRequest,
+  MedicationDeleteResponse,
   MedicationDoseInput,
   MedicationDoseUpdateInput,
+  MedicationIntakeDeleteResponse,
   MedicationIntakeRecordRequest,
   MedicationIntakeStatus,
   MedicationUpdateRequest,
@@ -15,7 +17,9 @@ import {
   createMedicationIntake,
   deleteMedication,
   deleteMedicationDose,
+  deleteMedicationIntake,
   deleteMedicationRefillProjection,
+  getMedicationIntake,
   getMedicationForRecipient,
   getMedicationRefillProjection,
   listMedicationDoses,
@@ -28,7 +32,8 @@ import {
   updateMedicationDose,
   updateMedicationIntake,
   upsertMedicationRefillProjection,
-  ensureOwnerCollaborator
+  ensureOwnerCollaborator,
+  createAuditLog
 } from '../db/queries.js';
 import type {
   MedicationDoseUpdateData,
@@ -87,6 +92,13 @@ function ensureOwner(context: MedicationContext): void {
   if (context.role !== 'owner') {
     throw new ForbiddenError('Only the owner can modify medications');
   }
+}
+
+function requireOwnerCollaboratorId(context: MedicationContext): number {
+  if (context.ownerCollaboratorId == null) {
+    throw new ForbiddenError('Unable to determine owner context');
+  }
+  return context.ownerCollaboratorId;
 }
 
 function clampIntakeLimit(limit?: number): number {
@@ -330,6 +342,60 @@ function buildIntakeQueryOptions(options: MedicationListOptions | undefined) {
   return { limit, since, statuses };
 }
 
+type MedicationIntakeList = Awaited<ReturnType<typeof listMedicationIntakes>>;
+
+function buildMedicationAuditSnapshot(
+  medication: MedicationWithDetails,
+  intakes: MedicationIntakeList
+) {
+  return {
+    medication: {
+      id: medication.id,
+      recipientId: medication.recipientId,
+      ownerId: medication.ownerId,
+      name: medication.name,
+      strengthValue: medication.strengthValue,
+      strengthUnit: medication.strengthUnit,
+      form: medication.form,
+      instructions: medication.instructions,
+      notes: medication.notes,
+      prescribingProvider: medication.prescribingProvider,
+      startDate: medication.startDate,
+      endDate: medication.endDate,
+      quantityOnHand: medication.quantityOnHand,
+      refillThreshold: medication.refillThreshold,
+      preferredPharmacy: medication.preferredPharmacy,
+      createdAt: medication.createdAt,
+      updatedAt: medication.updatedAt,
+      archivedAt: medication.archivedAt
+    },
+    doses: medication.doses.map((dose) => ({
+      id: dose.id,
+      label: dose.label,
+      timeOfDay: dose.timeOfDay,
+      timezone: dose.timezone,
+      reminderWindowMinutes: dose.reminderWindowMinutes,
+      isActive: dose.isActive
+    })),
+    intakes: intakes.map((intake) => ({
+      id: intake.id,
+      doseId: intake.doseId,
+      scheduledFor: intake.scheduledFor,
+      acknowledgedAt: intake.acknowledgedAt,
+      status: intake.status,
+      actorUserId: intake.actorUserId,
+      createdAt: intake.createdAt,
+      updatedAt: intake.updatedAt
+    })),
+    refillProjection: medication.refillProjection
+      ? {
+          expectedRunOutOn: medication.refillProjection.expectedRunOutOn,
+          calculatedAt: medication.refillProjection.calculatedAt
+        }
+      : null
+  };
+}
+
 async function hydrateMedication(
   medicationId: number,
   context: MedicationContext,
@@ -415,12 +481,10 @@ export async function createMedicationForOwner(
     throw new ForbiddenError('Cannot create medication for another recipient');
   }
 
-  if (context.ownerCollaboratorId == null) {
-    throw new ForbiddenError('Unable to determine owner context');
-  }
+  const ownerCollaboratorId = requireOwnerCollaboratorId(context);
 
   const writeData = mapCreatePayload(payload);
-  const medication = await createMedication(context.recipientId, context.ownerCollaboratorId, writeData);
+  const medication = await createMedication(context.recipientId, ownerCollaboratorId, writeData);
 
   try {
     if (payload.doses && payload.doses.length > 0) {
@@ -430,7 +494,7 @@ export async function createMedicationForOwner(
       }
     }
   } catch (error) {
-    await deleteMedication(medication.id, context.ownerCollaboratorId);
+    await deleteMedication(medication.id, context.recipientId, ownerCollaboratorId);
     throw error;
   }
 
@@ -445,11 +509,14 @@ export async function updateMedicationForOwner(
 ): Promise<MedicationWithDetails> {
   const context = await resolveContext(user);
   ensureOwner(context);
-  if (context.ownerCollaboratorId == null) {
-    throw new ForbiddenError('Unable to determine owner context');
-  }
+  const ownerCollaboratorId = requireOwnerCollaboratorId(context);
   const updateData = mapUpdatePayload(payload);
-  const updated = await updateMedication(medicationId, context.recipientId, context.ownerCollaboratorId, updateData);
+  const updated = await updateMedication(
+    medicationId,
+    context.recipientId,
+    ownerCollaboratorId,
+    updateData
+  );
   if (!updated) {
     throw new NotFoundError('Medication not found');
   }
@@ -460,10 +527,8 @@ export async function updateMedicationForOwner(
 export async function archiveMedicationForOwner(user: User, medicationId: number): Promise<MedicationWithDetails> {
   const context = await resolveContext(user);
   ensureOwner(context);
-  if (context.ownerCollaboratorId == null) {
-    throw new ForbiddenError('Unable to determine owner context');
-  }
-  const archived = await archiveMedication(medicationId, context.recipientId, context.ownerCollaboratorId);
+  const ownerCollaboratorId = requireOwnerCollaboratorId(context);
+  const archived = await archiveMedication(medicationId, context.recipientId, ownerCollaboratorId);
   if (!archived) {
     throw new NotFoundError('Medication not found');
   }
@@ -477,10 +542,8 @@ export async function unarchiveMedicationForOwner(
 ): Promise<MedicationWithDetails> {
   const context = await resolveContext(user);
   ensureOwner(context);
-  if (context.ownerCollaboratorId == null) {
-    throw new ForbiddenError('Unable to determine owner context');
-  }
-  const restored = await unarchiveMedication(medicationId, context.recipientId, context.ownerCollaboratorId);
+  const ownerCollaboratorId = requireOwnerCollaboratorId(context);
+  const restored = await unarchiveMedication(medicationId, context.recipientId, ownerCollaboratorId);
   if (!restored) {
     throw new NotFoundError('Medication not found');
   }
@@ -543,6 +606,90 @@ export async function deleteMedicationDoseForOwner(
   }
   await touchPlanForUser(context.ownerUserId);
   return hydrateMedication(medicationId, context);
+}
+
+export async function deleteMedicationForOwner(
+  user: User,
+  medicationId: number
+): Promise<MedicationDeleteResponse> {
+  const context = await resolveContext(user);
+  ensureOwner(context);
+  const ownerCollaboratorId = requireOwnerCollaboratorId(context);
+  const hydrated = await hydrateMedication(medicationId, context, {
+    intakeLimit: MAX_INTAKE_LIMIT,
+    intakeLookbackDays: 365
+  });
+  const allIntakes = await listMedicationIntakes(medicationId);
+  const snapshot = buildMedicationAuditSnapshot(hydrated, allIntakes);
+
+  const deleted = await deleteMedication(medicationId, context.recipientId, ownerCollaboratorId);
+  if (!deleted) {
+    throw new NotFoundError('Medication not found');
+  }
+
+  const auditRecord = (await createAuditLog(null, 'medication_deleted', {
+    medicationId,
+    recipientId: context.recipientId,
+    deletedByUserId: user.id,
+    snapshot
+  })) as { id: number };
+
+  await touchPlanForUser(context.ownerUserId);
+
+  return {
+    deletedMedicationId: medicationId,
+    auditLogId: auditRecord.id
+  };
+}
+
+export async function deleteMedicationIntakeForOwner(
+  user: User,
+  medicationId: number,
+  intakeId: number
+): Promise<MedicationIntakeDeleteResponse> {
+  const context = await resolveContext(user);
+  ensureOwner(context);
+  requireOwnerCollaboratorId(context);
+
+  const medication = await getMedicationForRecipient(medicationId, context.recipientId);
+  if (!medication) {
+    throw new NotFoundError('Medication not found');
+  }
+
+  const existingIntake = await getMedicationIntake(intakeId, medicationId);
+  if (!existingIntake) {
+    throw new NotFoundError('Intake not found');
+  }
+
+  const deletedIntake = await deleteMedicationIntake(intakeId, medicationId);
+  if (!deletedIntake) {
+    throw new NotFoundError('Intake not found');
+  }
+
+  const auditRecord = (await createAuditLog(null, 'medication_intake_deleted', {
+    medicationId,
+    intakeId,
+    recipientId: context.recipientId,
+    deletedByUserId: user.id,
+    intake: {
+      id: deletedIntake.id,
+      doseId: deletedIntake.doseId,
+      scheduledFor: deletedIntake.scheduledFor,
+      acknowledgedAt: deletedIntake.acknowledgedAt,
+      status: deletedIntake.status,
+      actorUserId: deletedIntake.actorUserId
+    }
+  })) as { id: number };
+
+  await touchPlanForUser(context.ownerUserId);
+
+  const refreshed = await hydrateMedication(medicationId, context);
+
+  return {
+    medication: refreshed,
+    deletedIntakeId: intakeId,
+    auditLogId: auditRecord.id
+  };
 }
 
 export async function recordMedicationIntake(

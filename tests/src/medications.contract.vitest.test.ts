@@ -2,7 +2,12 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import express from 'express';
 import request from 'supertest';
-import type { MedicationWithDetails, User } from '@carebase/shared';
+import type {
+  MedicationDeleteResponse,
+  MedicationIntakeDeleteResponse,
+  MedicationWithDetails,
+  User
+} from '@carebase/shared';
 import { applySchema, wireDbClient } from './helpers/db.js';
 
 process.env.NODE_ENV = 'test';
@@ -159,6 +164,92 @@ test('POST /api/medications creates medication with doses', async ({ onTestFinis
 
   const countResult = await pool.query('SELECT COUNT(*)::int AS count FROM medications WHERE name = $1', ['Metformin']);
   assert.equal(countResult.rows[0].count, 1);
+
+  onTestFinished(async () => {
+    restore();
+    await pool.end();
+  });
+});
+
+test('DELETE /api/medications/:id removes medication and logs audit', async ({ onTestFinished }) => {
+  const mem = applySchema();
+  const { pool, restore } = wireDbClient(mem);
+  const { owner } = await seedMedicationFixture(pool);
+
+  const existingMedication = await pool.query<{ id: number }>(
+    'SELECT id FROM medications ORDER BY id DESC LIMIT 1'
+  );
+  const medicationId = existingMedication.rows[0]?.id;
+  assert.ok(medicationId);
+
+  const app = createApp(owner);
+
+  const response = await request(app).delete(`/api/medications/${medicationId}`);
+  assert.equal(response.status, 200);
+  const payload = response.body as MedicationDeleteResponse;
+  assert.equal(payload.deletedMedicationId, medicationId);
+  assert.ok(Number.isInteger(payload.auditLogId));
+
+  const remaining = await pool.query('SELECT COUNT(*)::int AS count FROM medications WHERE id = $1', [medicationId]);
+  assert.equal(remaining.rows[0]?.count, 0);
+
+  const auditRow = await pool.query(
+    `SELECT action, meta->>'medicationId' AS medication_id
+     FROM audit
+     WHERE id = $1`,
+    [payload.auditLogId]
+  );
+  assert.equal(auditRow.rows[0]?.action, 'medication_deleted');
+  assert.equal(Number(auditRow.rows[0]?.medication_id), medicationId);
+
+  onTestFinished(async () => {
+    restore();
+    await pool.end();
+  });
+});
+
+test('DELETE /api/medications/:id/intakes/:intakeId removes intake and returns refreshed medication', async ({ onTestFinished }) => {
+  const mem = applySchema();
+  const { pool, restore } = wireDbClient(mem);
+  const { owner } = await seedMedicationFixture(pool);
+
+  const details = await pool.query<{ id: number }>(
+    `SELECT id FROM medications ORDER BY id DESC LIMIT 1`
+  );
+  const medicationId = details.rows[0]?.id;
+  assert.ok(medicationId);
+
+  const intakeResult = await pool.query<{ id: number }>(
+    `SELECT id FROM medication_intakes WHERE medication_id = $1 ORDER BY id DESC LIMIT 1`,
+    [medicationId]
+  );
+  const intakeId = intakeResult.rows[0]?.id;
+  assert.ok(intakeId);
+
+  const app = createApp(owner);
+
+  const response = await request(app).delete(`/api/medications/${medicationId}/intakes/${intakeId}`);
+  assert.equal(response.status, 200);
+  const payload = response.body as MedicationIntakeDeleteResponse;
+  assert.equal(payload.deletedIntakeId, intakeId);
+  assert.equal(payload.medication.id, medicationId);
+  assert.ok(Array.isArray(payload.medication.upcomingIntakes));
+  assert.ok(payload.medication.upcomingIntakes.every((intake) => intake.id !== intakeId));
+
+  const intakeCount = await pool.query(
+    `SELECT COUNT(*)::int AS count FROM medication_intakes WHERE id = $1`,
+    [intakeId]
+  );
+  assert.equal(intakeCount.rows[0]?.count, 0);
+
+  const auditRow = await pool.query(
+    `SELECT action, meta->>'intakeId' AS intake_id
+     FROM audit
+     WHERE id = $1`,
+    [payload.auditLogId]
+  );
+  assert.equal(auditRow.rows[0]?.action, 'medication_intake_deleted');
+  assert.equal(Number(auditRow.rows[0]?.intake_id), intakeId);
 
   onTestFinished(async () => {
     restore();

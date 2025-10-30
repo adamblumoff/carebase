@@ -6,6 +6,8 @@ import {
   createIntake,
   createMedication,
   deleteDose,
+  deleteIntake,
+  deleteMedication,
   getMedication,
   listMedications,
   setRefillProjection,
@@ -21,6 +23,7 @@ router.get('/', listMedications);
 router.get('/:id', getMedication);
 router.post('/', createMedication);
 router.patch('/:id', updateMedication);
+router.delete('/:id', deleteMedication);
 router.patch('/:id/archive', archiveMedicationHandler);
 router.patch('/:id/unarchive', unarchiveMedicationHandler);
 
@@ -30,6 +33,7 @@ router.delete('/:id/doses/:doseId', deleteDose);
 
 router.post('/:id/intakes', createIntake);
 router.patch('/:id/intakes/:intakeId', updateIntakeStatus);
+router.delete('/:id/intakes/:intakeId', deleteIntake);
 
 router.post('/:id/refill', setRefillProjection);
 router.delete('/:id/refill', clearRefillProjection);

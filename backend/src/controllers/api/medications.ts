@@ -6,6 +6,8 @@ import {
   createMedicationDoseForOwner,
   createMedicationForOwner,
   deleteMedicationDoseForOwner,
+  deleteMedicationForOwner,
+  deleteMedicationIntakeForOwner,
   getMedicationForUser,
   listMedicationsForUser,
   recordMedicationIntake,
@@ -124,6 +126,20 @@ export const deleteDose = route(async (req: Request, res: Response) => {
   const params = validateParams(req, medicationDoseParamsSchema);
   const medication = await deleteMedicationDoseForOwner(user, params.id, params.doseId);
   res.json(medication);
+});
+
+export const deleteMedication = route(async (req: Request, res: Response) => {
+  const user = ensureUser(req);
+  const params = validateParams(req, medicationIdParamsSchema);
+  const result = await deleteMedicationForOwner(user, params.id);
+  res.json(result);
+});
+
+export const deleteIntake = route(async (req: Request, res: Response) => {
+  const user = ensureUser(req);
+  const params = validateParams(req, medicationIntakeParamsSchema);
+  const result = await deleteMedicationIntakeForOwner(user, params.id, params.intakeId);
+  res.json(result);
 });
 
 export const createIntake = route(async (req: Request, res: Response) => {

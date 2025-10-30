@@ -19,6 +19,8 @@ const {
   updateMedicationDose,
   listMedicationDoses,
   createMedicationIntake,
+  deleteMedicationIntake,
+  getMedicationIntake,
   updateMedicationIntake,
   listMedicationIntakes,
   upsertMedicationRefillProjection,
@@ -165,14 +167,14 @@ describe('medication queries', () => {
   });
 
   it('deletes medication for owner', async () => {
-    dbMocks.query.mockResolvedValueOnce({ rowCount: 1 });
+    dbMocks.query.mockResolvedValueOnce({ rows: [baseMedicationRow], rowCount: 1 });
 
-    const removed = await deleteMedication(42, 3);
+    const removed = await deleteMedication(42, 10, 3);
 
-    expect(removed).toBe(true);
+    expect(removed?.id).toBe(baseMedicationRow.id);
     const [sql, params] = dbMocks.query.mock.calls[0] as [string, unknown[]];
     expect(sql).toContain('DELETE FROM medications');
-    expect(params).toEqual([42, 3]);
+    expect(params).toEqual([42, 10, 3]);
   });
 });
 
@@ -228,6 +230,21 @@ describe('medication intake queries', () => {
     const [listSql, listParams] = dbMocks.query.mock.calls[2] as [string, unknown[]];
     expect(listSql).toContain('status = ANY');
     expect(listParams[0]).toBe(42);
+  });
+
+  it('retrieves and deletes intake by id', async () => {
+    dbMocks.query
+      .mockResolvedValueOnce({ rows: [baseIntakeRow], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [baseIntakeRow], rowCount: 1 });
+
+    const found = await getMedicationIntake(baseIntakeRow.id, baseIntakeRow.medication_id);
+    expect(found?.id).toBe(baseIntakeRow.id);
+
+    const removed = await deleteMedicationIntake(baseIntakeRow.id, baseIntakeRow.medication_id);
+    expect(removed?.id).toBe(baseIntakeRow.id);
+
+    const [, deleteParams] = dbMocks.query.mock.calls[1] as [string, unknown[]];
+    expect(deleteParams).toEqual([baseIntakeRow.id, baseIntakeRow.medication_id]);
   });
 });
 

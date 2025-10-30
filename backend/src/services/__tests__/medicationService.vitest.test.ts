@@ -17,8 +17,10 @@ const queriesMock: QueryMocks = {
   createMedicationIntake: vi.fn(),
   deleteMedication: vi.fn(),
   deleteMedicationDose: vi.fn(),
+  deleteMedicationIntake: vi.fn(),
   deleteMedicationRefillProjection: vi.fn(),
   getMedicationForRecipient: vi.fn(),
+  getMedicationIntake: vi.fn(),
   getMedicationRefillProjection: vi.fn(),
   listMedicationDoses: vi.fn(),
   listMedicationIntakes: vi.fn(),
@@ -30,7 +32,8 @@ const queriesMock: QueryMocks = {
   updateMedicationDose: vi.fn(),
   updateMedicationIntake: vi.fn(),
   upsertMedicationRefillProjection: vi.fn(),
-  ensureOwnerCollaborator: vi.fn()
+  ensureOwnerCollaborator: vi.fn(),
+  createAuditLog: vi.fn()
 };
 
 vi.mock('../../db/queries.js', () => queriesMock);
@@ -39,7 +42,9 @@ const {
   listMedicationsForUser,
   createMedicationForOwner,
   updateMedicationForOwner,
-  recordMedicationIntake
+  recordMedicationIntake,
+  deleteMedicationForOwner,
+  deleteMedicationIntakeForOwner
 } = await import('../medicationService.js');
 
 const now = new Date('2025-01-01T00:00:00.000Z');
@@ -130,6 +135,9 @@ function resetMocks(): void {
   queriesMock.listMedicationIntakes.mockResolvedValue([]);
   queriesMock.getMedicationRefillProjection.mockResolvedValue(null);
   queriesMock.ensureOwnerCollaborator.mockResolvedValue({ id: 500 });
+  queriesMock.createAuditLog.mockResolvedValue({ id: 900 });
+  queriesMock.getMedicationIntake.mockResolvedValue(null);
+  queriesMock.deleteMedicationIntake.mockResolvedValue(null);
 }
 
 beforeEach(() => {
@@ -304,6 +312,84 @@ describe('updateMedicationForOwner', () => {
     queriesMock.updateMedication.mockResolvedValueOnce(null);
 
     await expect(updateMedicationForOwner(user, 999, { name: 'Missing' })).rejects.toBeInstanceOf(NotFoundError);
+  });
+});
+
+describe('deleteMedicationForOwner', () => {
+  it('deletes medication, logs audit, and touches plan', async () => {
+    const user = createUser();
+    const medication = createMedication();
+    const dose = createDose();
+    const intake = createIntake();
+
+    queriesMock.resolveRecipientContextForUser.mockResolvedValueOnce({
+      recipient: { id: medication.recipientId, userId: user.id, displayName: 'Alex', createdAt: now },
+      collaborator: null
+    });
+    queriesMock.getMedicationForRecipient.mockResolvedValueOnce(medication);
+    queriesMock.listMedicationDoses.mockResolvedValueOnce([dose]);
+    queriesMock.listMedicationIntakes
+      .mockResolvedValueOnce([intake])
+      .mockResolvedValueOnce([intake]);
+    queriesMock.deleteMedication.mockResolvedValueOnce(medication);
+    queriesMock.createAuditLog.mockResolvedValueOnce({ id: 1234 });
+
+    const result = await deleteMedicationForOwner(user, medication.id);
+
+    expect(result).toEqual({ deletedMedicationId: medication.id, auditLogId: 1234 });
+    expect(queriesMock.deleteMedication).toHaveBeenCalledWith(medication.id, medication.recipientId, 500);
+    expect(queriesMock.createAuditLog).toHaveBeenCalledWith(
+      null,
+      'medication_deleted',
+      expect.objectContaining({
+        medicationId: medication.id,
+        deletedByUserId: user.id,
+        snapshot: expect.objectContaining({
+          medication: expect.objectContaining({ id: medication.id })
+        })
+      })
+    );
+    expect(queriesMock.touchPlanForUser).toHaveBeenCalledWith(user.id);
+  });
+});
+
+describe('deleteMedicationIntakeForOwner', () => {
+  it('deletes intake, logs audit, refreshes medication', async () => {
+    const user = createUser();
+    const medication = createMedication();
+    const dose = createDose();
+    const intake = createIntake();
+
+    queriesMock.resolveRecipientContextForUser.mockResolvedValueOnce({
+      recipient: { id: medication.recipientId, userId: user.id, displayName: 'Alex', createdAt: now },
+      collaborator: null
+    });
+    queriesMock.getMedicationForRecipient
+      .mockResolvedValueOnce(medication)
+      .mockResolvedValueOnce(medication);
+    queriesMock.getMedicationIntake.mockResolvedValueOnce(intake);
+    queriesMock.deleteMedicationIntake.mockResolvedValueOnce(intake);
+    queriesMock.listMedicationDoses.mockResolvedValueOnce([dose]);
+    queriesMock.listMedicationIntakes.mockResolvedValueOnce([]);
+    queriesMock.createAuditLog.mockResolvedValueOnce({ id: 4321 });
+
+    const result = await deleteMedicationIntakeForOwner(user, medication.id, intake.id);
+
+    expect(result.deletedIntakeId).toBe(intake.id);
+    expect(result.auditLogId).toBe(4321);
+    expect(result.medication.doses[0]?.id).toBe(dose.id);
+    expect(result.medication.upcomingIntakes).toHaveLength(0);
+    expect(queriesMock.deleteMedicationIntake).toHaveBeenCalledWith(intake.id, medication.id);
+    expect(queriesMock.createAuditLog).toHaveBeenCalledWith(
+      null,
+      'medication_intake_deleted',
+      expect.objectContaining({
+        medicationId: medication.id,
+        intakeId: intake.id,
+        deletedByUserId: user.id
+      })
+    );
+    expect(queriesMock.touchPlanForUser).toHaveBeenCalledWith(user.id);
   });
 });
 

@@ -12,6 +12,8 @@ const serviceMocks = vi.hoisted(() => ({
   createMedicationDoseForOwner: vi.fn(),
   updateMedicationDoseForOwner: vi.fn(),
   deleteMedicationDoseForOwner: vi.fn(),
+  deleteMedicationForOwner: vi.fn(),
+  deleteMedicationIntakeForOwner: vi.fn(),
   recordMedicationIntake: vi.fn(),
   updateMedicationIntakeStatus: vi.fn(),
   setMedicationRefillProjection: vi.fn(),
@@ -24,8 +26,10 @@ const {
   listMedications,
   createMedication,
   updateMedication,
+  deleteMedication,
   createDose,
   createIntake,
+  deleteIntake,
   setRefillProjection
 } = await import('../medications.js');
 
@@ -222,7 +226,44 @@ describe('medication controller', () => {
     await updateMedication(req, res);
 
     expect(serviceMocks.updateMedicationForOwner).toHaveBeenCalledWith(user, 10, { preferredPharmacy: 'CVS' });
-    expect(getJson<MedicationWithDetails>().id).toBe(10);
+   expect(getJson<MedicationWithDetails>().id).toBe(10);
+  });
+
+  it('deletes medication and returns audit', async () => {
+    const user = createUser();
+    serviceMocks.deleteMedicationForOwner.mockResolvedValueOnce({ deletedMedicationId: 10, auditLogId: 77 });
+
+    const req = {
+      user,
+      params: { id: '10' }
+    } as unknown as Request;
+    const { res, getJson } = createResponseHarness();
+
+    await deleteMedication(req, res);
+
+    expect(serviceMocks.deleteMedicationForOwner).toHaveBeenCalledWith(user, 10);
+    expect(getJson<{ deletedMedicationId: number; auditLogId: number }>().auditLogId).toBe(77);
+  });
+
+  it('deletes intake and returns refreshed medication', async () => {
+    const user = createUser();
+    const medication = createMockMedication();
+    serviceMocks.deleteMedicationIntakeForOwner.mockResolvedValueOnce({
+      medication,
+      deletedIntakeId: 301,
+      auditLogId: 88
+    });
+
+    const req = {
+      user,
+      params: { id: '5', intakeId: '301' }
+    } as unknown as Request;
+    const { res, getJson } = createResponseHarness();
+
+    await deleteIntake(req, res);
+
+    expect(serviceMocks.deleteMedicationIntakeForOwner).toHaveBeenCalledWith(user, 5, 301);
+    expect(getJson<{ auditLogId: number }>().auditLogId).toBe(88);
   });
 
   it('creates dose and intake payloads with validation', async () => {
