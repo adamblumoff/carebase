@@ -1,102 +1,59 @@
-# Plan: Medication Management & Reminder Loop
+# Plan: Medication Hard Delete & Intake UX Rethink
 
 ## Goal
-Launch a first-class medication management experience that lets caregivers capture prescriptions, schedule fixed-time doses, receive persistent reminders, and acknowledge intake, while projecting refills and reusing existing infrastructure. Scope is intentionally MVP-friendly: owners manage medications, collaborators see read-only data, and analytics/compliance enhancements are deferred.
+Deliver owner-only hard deletion for medications and their dose/intake history while preserving an auditable trail, and lay the groundwork for simplifying the “Mark Taken” experience into an intuitive daily checkbox workflow with multi-intake safeguards.
 
-## Milestone 0 — Kickoff & Alignment
-1. Finalize requirements in docs/ (add `docs/medications.md` outlining fields, permissions, reminder rules, and non-goals). Include ERD sketches and sequence diagrams for reminder escalation.
-2. Review plan with product + compliance to ensure start/end date handling, provider metadata, and notification cadence meet expectations.
-3. Create Linear/Jira epics for each milestone to track progress and cross-team dependencies.
+## Milestone 0 — Alignment
+1. Confirm clinical/compliance expectations: owners may permanently delete medications; collaborators stay read-only; audit entries must capture actor, subject IDs, and before/after snapshot.
+2. Catalog existing reminder jobs, local notifications, and OCR drafts tied to medications so hard deletes can clean them up.
 
-## Milestone 1 — Data Model & Shared Types
-1. Update `backend/src/db/schema.sql`:
-   - Introduce `medications` table (id, recipient_id FK, owner_id FK, name, strength_value, strength_unit, form, instructions, notes, prescribing_provider, start_date, end_date, quantity_on_hand, refill_threshold, preferred_pharmacy, created_at, updated_at, archived_at).
-   - Add `medication_doses` table (id, medication_id FK, label, time_of_day, timezone, reminder_window_minutes default 120, is_active).
-   - Add `medication_intakes` table (id, medication_id FK, dose_id FK nullable, scheduled_for timestamptz, acknowledged_at timestamptz, status enum `taken|skipped|expired`, actor_user_id FK).
-   - Add `medication_refill_forecasts` materialized view or helper table for projected refill date (medication_id, expected_run_out_on).
-2. Create migration script if schema is managed incrementally; otherwise update docs on running `npm run db:migrate --workspace=backend`.
-3. Extend pg-mem fixtures in `tests/src/helpers/db.ts` and other contract helpers to mirror new tables.
-4. Update shared types (`shared/types/index.ts`) with `Medication`, `MedicationDose`, `MedicationIntake`, `MedicationRefillProjection`, request/response payloads, and enums.
-5. Regenerate TypeScript barrels if needed and add zod schema definitions for API validation (`shared/types/validation.ts` if present).
-6. Document new tables in `docs/architecture.md` and include ERD snippet.
+## Milestone 1 — Backend Hard Delete Support
+1. **Shared Types**: extend `@carebase/shared` payloads with `MedicationDeleteResponse` and `MedicationIntakeDeleteResponse`; update generated zod schemas and map into API docs.
+2. **Validators**: add params schemas for `DELETE /api/medications/:id` and `DELETE /api/medications/:id/intakes/:intakeId`; ensure owner-only guard remains enforced.
+3. **Service Layer**:
+   - Implement `deleteMedicationForOwner` that resolves recipient + owner collaborator, wraps operations in a transaction, and removes:
+     - medication row,
+     - related doses, intakes, refill projections,
+     - queued reminder jobs/locks,
+     - OCR drafts or upload relations.
+   - Implement `deleteMedicationIntakeForOwner` to remove a single intake and trigger reminder re-evaluation.
+4. **Queries**: create hard-delete helpers inside `backend/src/db/queries/medications.ts` plus any reminder queue adapters; ensure cascading deletes respect FK constraints without relying solely on `ON DELETE CASCADE`.
+5. **Controllers/Routes**: expose `DELETE /api/medications/:id` and `DELETE /api/medications/:id/intakes/:intakeId`; return updated medication payload (or 204 for full delete) matching shared contract.
+6. **Reminder Cleanup**: cancel pending Expo/local notifications for removed doses; if an intake is deleted, re-seed next reminder window.
 
-## Milestone 2 — Backend Services & API Surface
-1. Create `backend/src/services/medicationService.ts` handling CRUD, intake acknowledgements, refill projections, and generating reminder jobs.
-2. Build repository/query helpers (`backend/src/db/queries/medications.ts`, `medicationDoses.ts`, `medicationIntakes.ts`) with transactional helpers for creating medication + doses atomically.
-3. Add auth guard helpers to enforce owner-only mutations; extend `backend/src/middleware/requireOwner.ts` if necessary.
-4. Implement controllers + routes:
-   - `POST /api/medications` for creating (manual/OCR) entries.
-   - `GET /api/medications` to list active medications with doses, intake status, and refill projections.
-   - `GET /api/medications/:id`, `PATCH /api/medications/:id`, `PATCH /api/medications/:id/archive`.
-   - `POST /api/medications/:id/doses` & `PATCH /api/medications/:id/doses/:doseId` for schedule management.
-   - `POST /api/medications/:id/intakes` to acknowledge `taken` or `skipped`.
-5. Update route registry metadata (`backend/src/routes/registry.ts` + `.metadata.ts`) and ensure dependency-cruiser rules stay satisfied.
-6. Extend Clerk-based authorization to expose medication scopes in `backend/src/services/clerkAuthGateway.ts` if needed.
-7. Write unit tests (`backend/src/services/__tests__/medicationService.vitest.test.ts`) and controller tests using supertest/pg-mem; add contract coverage in `tests/src/medications.contract.test.ts`.
-8. Update error handling to map domain errors (e.g., editing archived medication, unauthorized collaborator) to HTTP 403/409 responses.
+## Milestone 2 — Mobile Deletion UX
+1. **API Client**: add `deleteMedication` and `deleteMedicationIntake` calls to `mobile/src/api/medications.ts` with typed responses and error normalization.
+2. **Hooks & State**: extend `useMedications` and related selectors with deletion actions, optimistic removal, and fallback refetch on failure; handle 404/409 gracefully.
+3. **UI Flow**:
+   - Medication detail sheet: surface destructive actions with confirmation modals (include warning copy about permanent removal and reminder cancellation).
+   - Intake history list: enable swipe-to-delete or overflow action for each intake; warn user before deletion.
+   - After a full medication delete, close sheets, navigate back to plan summary, and purge any pending local reminders.
+4. **Accessibility**: ensure destructive buttons have accessible labels and confirmation dialogs announce permanence.
 
-## Milestone 3 — Reminder & Notification Engine
-1. Design reminder state machine: initial reminder at scheduled time, repeat every 120 minutes until intake recorded, fire end-of-day summary, then daily nags until intake complete.
-2. Extend existing job infrastructure:
-   - Add scheduler module (`backend/src/services/medicationReminderScheduler.ts`) that seeds cron/queue jobs when doses are created or updated.
-   - Reuse current queue / worker (`services/realtime` or background worker) to enqueue Expo push payloads; add medication-specific templates.
-   - Store pending jobs in `medication_reminder_jobs` table or leverage existing delayed-job mechanism.
-3. Implement logic to cancel/reschedule jobs when user records an intake or medication is archived.
-4. Add final notification generator that emits once per day for overdue doses; ensure it respects timezone and start/end dates.
-5. Integrate with Expo push provider: add new notification categories (`medication-reminder`, `medication-missed`) and payload builders in `backend/src/services/email.ts` or a dedicated push helper.
-6. Write unit tests for scheduler state transitions and integration tests that simulate a full day with pg-mem + fake clock.
-7. Update observability: emit structured logs/metrics for reminders sent, acknowledgements, and missed doses; add basic dashboard/alerts if existing stack supports it.
+## Milestone 3 — Audit Logging & Documentation
+1. Record audit events via existing `audit` table for both medication deletes and intake deletes, storing actor user ID, medication/intake identifiers, and snapshot metadata (name, dose label, scheduled time).
+2. Update `docs/medications.md`, `docs/testing.md`, and `AGENTS.md` with new endpoints, audit expectations, and manual QA steps.
+3. Add runbook guidance for restoring mistakenly deleted medications (re-upload prescription) and querying audit trails.
 
-## Milestone 4 — Mobile UX & OCR Capture
-1. Keep the plan experience as the single landing surface:
-   - Extend `mobile/src/screens/plan/PlanScreen.tsx` (or equivalent) with a medications summary module that surfaces next doses, overdue badges, and quick actions.
-   - Launch medication detail via in-plan navigation (bottom sheet, drawer, or nested stack) so users never leave the plan context; avoid adding a top-level tab/route that competes with the plan entry point.
-   - Ensure collaborators accessing the app still route to the plan screen on launch and only see read-only medication rows.
-2. Build medication UI components inside `mobile/src/screens/plan/medications/` for list, detail, and intake experiences, reusing them within the plan screen without introducing a separate navigation root.
-3. Build API client (`mobile/src/api/medications.ts`) and associated hooks (`mobile/src/hooks/useMedications.ts`, `useMedicationIntake.ts`) with optimistic updates on acknowledgements; co-locate plan-specific selectors that hydrate the summary module.
-4. Implement manual entry form exposed from the plan page (`MedicationEditSheet` or modal) respecting owner-only editing; ensure collaborators fall back to read-only state.
-5. Integrate OCR:
-   - Extend existing upload flow with a `Scan Prescription` option launching camera.
-   - Add new OCR endpoint `POST /api/upload/medication-label` or reuse generic upload by passing intent flag.
-   - Map parsed fields to form defaults; allow user to adjust before saving.
-6. Wire push notification handling: register new Expo notification categories, display in-app banners, and deep-link taps to the plan screen with the medication detail sheet open.
-7. Add local reminders fallback (optional) if backend push fails—log but defer full offline support.
-8. Create Vitest suites for hooks/components (`*.vitest.test.tsx`) and integration tests that confirm the plan landing page renders medication summaries and can drill into detail flows; mock Expo notifications to verify acknowledgement callouts.
+## Milestone 4 — Testing & QA
+1. **Automated**: extend backend unit + contract tests to cover deletion happy paths and guard failures; expand mobile Vitest suites for hooks/UI (mock API responses, optimistic rollback).
+2. **Manual**: on dev build, create medication with doses/intakes, delete an intake, verify reminder recalculation, then delete medication and confirm removal across plan, camera scan drafts, and notifications.
+3. Re-run full suites: `npm run test:backend`, `npm run test:contracts`, `npm run test --workspace=mobile`, and lint if required.
 
-## Milestone 5 — Testing, QA, and Rollout
-1. Backend
-   - `npm run test:backend`, `npm run test:contracts`, add new coverage expectations for medication modules.
-   - Run manual pg-mem scenario to simulate multi-day adherence.
-2. Mobile
-   - `npm run test --workspace=mobile`; exercise flows on iOS + Android simulators (Expo Go).
-   - Validate notification receipt and deep links; confirm collaborator accounts receive read-only views.
-3. OCR
-   - Collect sample prescription labels; confirm parser populates fields with acceptable accuracy.
-4. Performance & load
-   - Evaluate reminder job volume vs queue capacity; add rate limiting or batching if required.
-5. Documentation & enablement
-   - Update `README.md`, `docs/DETAILS.md`, `docs/architecture.md`, and create `docs/notification-matrix.md`.
-   - Record Loom or screenshot walkthrough for support team.
-6. Rollout
-   - Behind feature flag (env var `ENABLE_MEDICATIONS`); enable for internal testers first.
-   - Migrate production schema, deploy backend, release mobile update via Expo EAS, then flip flag.
-   - Monitor logs/metrics, gather feedback, and plan post-launch enhancements (analytics, collaborator editing, SMS).
-
-## Milestone 6 — Post-Launch Enhancements (Backlog Seed)
-1. Adherence analytics dashboard (missed doses, streaks).
-2. Collaborator editing with audit trail.
-3. SMS/email notification channels with opt-in management.
-4. Compliance review for storage encryption and audit logs.
-5. Advanced schedules (every X hours, tapers, PRN logging).
+## Milestone 5 — Upcoming “Mark Taken” Checkbox Redesign
+1. Replace per-intake timestamp logging with a day-bound checkbox per scheduled dose that automatically resets at the next scheduled occurrence (24-hour window respecting timezone).
+2. Track duplicate confirmations: if a user attempts to mark taken more than once inside the window, prompt with “You’ve already marked this dose taken—continue?” and log the override.
+3. Persist checkbox state server-side so reminders and summaries mirror the simplified status; archive detailed intake history to the audit log.
+4. Update plan detail and summary cards to reflect checkbox state rather than list of timestamps; ensure collaborators remain view-only.
+5. Revisit analytics to ensure adherence metrics can derive from checkbox state.
 
 ## Dependencies & Risks
-- **Dependencies**: Expo push service quota, reliable clock source for scheduler, OCR model accuracy for prescription labels, existing auth scopes for owner verification.
-- **Risks**: Reminder spam if cancellation fails; mitigate with idempotent job cancellation and observability. OCR misclassification; mitigate with manual review screen. Feature creep; mitigate via feature flag and milestone gating.
+- Need reliable reminder cancellation to prevent orphaned push notifications.
+- Audit table growth may require pruning strategy; monitor storage.
+- Hard delete removes historical data—support must rely on audit trail exports when troubleshooting.
 
 ## Exit Criteria
-- Schema + shared types merged, migrations applied in staging.
-- Backend routes pass contract tests; reminder engine verified with fake clock integration tests.
-- Mobile client lands on the plan screen, surfaces medication summaries there, handles intake actions, and receives push notifications across platforms.
-- OCR flow produces editable drafts with >80% field accuracy on test set.
-- Runbook created for support with troubleshooting steps for reminders and refill projections.
-- Feature flag enabled for pilot group with positive feedback and <5% reminder failure rate over first week.
+- New delete endpoints live, protected, and covered by tests.
+- Mobile client supports confirmation-driven deletion flows with optimistic UX.
+- Audit entries populate for every delete action and documentation/runbooks updated.
+- Future checkbox redesign scoped with clear next steps for engineering and product.

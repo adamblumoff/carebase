@@ -280,6 +280,17 @@ export interface MedicationWithDetails extends Medication {
   refillProjection: MedicationRefillProjection | null;
 }
 
+export interface MedicationDeleteResponse {
+  deletedMedicationId: number;
+  auditLogId: number;
+}
+
+export interface MedicationIntakeDeleteResponse {
+  medication: MedicationWithDetails;
+  deletedIntakeId: number;
+  auditLogId: number;
+}
+
 export interface MedicationDraftDose {
   label: string | null;
   timeOfDay: string;
