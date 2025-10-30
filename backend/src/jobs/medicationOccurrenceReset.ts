@@ -1,112 +1,165 @@
-import { differenceInMinutes, subMinutes, isBefore, isAfter } from 'date-fns';
-import type { MedicationIntakeStatus } from '@carebase/shared';
+import { subMinutes } from 'date-fns';
+import type { MedicationDose, MedicationIntake } from '@carebase/shared';
 import {
-  listMedicationOccurrences,
-  listMedicationIntakeEvents,
-  listMedicationsForRecipient,
-  resolveRecipientContextForUser,
-  updateMedicationIntake,
-  getMedicationForRecipient,
-  createMedicationIntake,
-  insertMedicationIntakeEvent
+  listActiveMedications,
+  listMedicationDoses,
+  listMedicationIntakes,
+  createMedicationIntake
 } from '../db/queries.js';
+import { findRecipientById } from '../db/queries/recipients.js';
 import { touchPlanForUser } from '../db/queries/plan.js';
-import { logger } from '../utils/logger.js';
+import { combineDateWithTimeZone } from '../utils/timezone.js';
 
 const RESET_WINDOW_MINUTES = 60;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const LOOKBACK_DAYS = 2;
+const DEFAULT_INTERVAL_MS = Number(process.env.MEDICATION_RESET_INTERVAL_MS ?? 15 * 60 * 1000);
 
-interface ResetContext {
-  medicationId: number;
+let resetTimer: NodeJS.Timeout | null = null;
+
+interface IntakeIndexKey {
   doseId: number | null;
-  occurrenceDate: Date;
-  status: MedicationIntakeStatus;
-  intakeId: number;
-  timezone: string;
-  timeOfDay: string;
+  occurrenceDate: string;
 }
 
-function computeResetTime(occurrence: ResetContext): Date {
-  const [hours, minutes] = occurrence.timeOfDay.split(':').map((value) => Number(value));
-  const base = new Date(occurrence.occurrenceDate);
-  base.setHours(hours, minutes, 0, 0);
-  return subMinutes(base, RESET_WINDOW_MINUTES);
+function toKey(intake: IntakeIndexKey): string {
+  return `${intake.doseId ?? 0}-${intake.occurrenceDate}`;
 }
 
-export async function resetMedicationOccurrences(userId: number): Promise<void> {
-  const context = await resolveRecipientContextForUser(userId);
-  if (!context.recipient || !context.recipient.id) {
+function toOccurrenceDateString(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function computeResetTime(intake: MedicationIntake): Date {
+  return subMinutes(new Date(intake.scheduledFor), RESET_WINDOW_MINUTES);
+}
+
+function computeNextOccurrenceDate(intake: MedicationIntake): Date {
+  return new Date(intake.occurrenceDate.getTime() + DAY_MS);
+}
+
+function computeNextScheduledFor(intake: MedicationIntake, dose: MedicationDose | null): Date {
+  if (dose) {
+    try {
+      return combineDateWithTimeZone(computeNextOccurrenceDate(intake), dose.timeOfDay, dose.timezone);
+    } catch (error) {
+      console.warn('[MedicationReset] Failed to combine timezone for next occurrence; falling back to UTC shift', {
+        intakeId: intake.id,
+        medicationId: intake.medicationId,
+        doseId: dose.id,
+        error
+      });
+    }
+  }
+  return new Date(new Date(intake.scheduledFor).getTime() + DAY_MS);
+}
+
+function toStringKey(intake: MedicationIntake): string {
+  return toKey({
+    doseId: intake.doseId,
+    occurrenceDate: toOccurrenceDateString(intake.occurrenceDate)
+  });
+}
+
+export async function runMedicationOccurrenceReset(): Promise<void> {
+  const medications = await listActiveMedications();
+  if (medications.length === 0) {
     return;
   }
 
-  const medications = await listMedicationsForRecipient(context.recipient.id, { includeArchived: false });
   const now = new Date();
+  const intakeSince = new Date(now.getTime() - LOOKBACK_DAYS * DAY_MS);
 
   for (const medication of medications) {
+    let planTouched = false;
     try {
-      const doses = medication.doses;
-      const occurrenceSummaries = await listMedicationOccurrences(medication.id);
-      const events = await listMedicationIntakeEvents(occurrenceSummaries.map((summary) => summary.intakeId));
-      const historyByIntake = new Map<number, typeof events>();
-      for (const event of events) {
-        if (!historyByIntake.has(event.intakeId)) {
-          historyByIntake.set(event.intakeId, []);
-        }
-        historyByIntake.get(event.intakeId)!.push(event);
+      const doses = await listMedicationDoses(medication.id);
+      if (doses.length === 0) {
+        continue;
       }
 
-      for (const summary of occurrenceSummaries) {
-        const dose = doses.find((item) => item.id === summary.doseId) ?? doses[0];
-        if (!dose) {
+      const intakes = await listMedicationIntakes(medication.id, {
+        since: intakeSince,
+        limit: 100
+      });
+
+      if (intakes.length === 0) {
+        continue;
+      }
+
+      const doseIndex = new Map<number, MedicationDose>();
+      for (const dose of doses) {
+        doseIndex.set(dose.id, dose);
+      }
+
+      const intakeIndex = new Map<string, MedicationIntake>();
+      for (const intake of intakes) {
+        intakeIndex.set(toStringKey(intake), intake);
+      }
+
+      for (const intake of intakes) {
+        if (intake.status === 'pending' || intake.status === 'expired') {
           continue;
         }
 
-        const resetTime = computeResetTime({
-          medicationId: medication.id,
-          doseId: summary.doseId,
-          occurrenceDate: summary.occurrenceDate,
-          status: summary.status,
-          intakeId: summary.intakeId,
-          timezone: dose.timezone,
-          timeOfDay: dose.timeOfDay
+        const resetTime = computeResetTime(intake);
+        if (now < resetTime) {
+          continue;
+        }
+
+        const nextOccurrenceDate = computeNextOccurrenceDate(intake);
+        const nextKey = toKey({ doseId: intake.doseId, occurrenceDate: toOccurrenceDateString(nextOccurrenceDate) });
+        if (intakeIndex.has(nextKey)) {
+          continue;
+        }
+
+        const matchingDose = intake.doseId ? doseIndex.get(intake.doseId) ?? null : null;
+        const nextScheduledFor = computeNextScheduledFor(intake, matchingDose);
+        const created = await createMedicationIntake(medication.id, {
+          doseId: intake.doseId ?? null,
+          scheduledFor: nextScheduledFor,
+          acknowledgedAt: null,
+          status: 'pending',
+          actorUserId: null,
+          occurrenceDate: nextOccurrenceDate,
+          overrideCount: 0
         });
 
-        if (isAfter(resetTime, now)) {
-          continue;
-        }
-
-        if (summary.status === 'pending') {
-          continue;
-        }
-
-        const nextOccurrenceDate = new Date(summary.occurrenceDate.getTime() + 24 * 60 * 60 * 1000);
-        const existingNext = occurrenceSummaries.find(
-          (item) => item.doseId === summary.doseId && item.occurrenceDate.getTime() === nextOccurrenceDate.getTime()
-        );
-
-        if (!existingNext) {
-          const newIntake = await createMedicationIntake(medication.id, {
-            doseId: summary.doseId,
-            scheduledFor: computeScheduledFor(nextOccurrenceDate, dose.timeOfDay, dose.timezone),
-            acknowledgedAt: null,
-            status: 'pending',
-            actorUserId: null,
-            occurrenceDate: nextOccurrenceDate,
-            overrideCount: 0
-          });
-          await insertMedicationIntakeEvent(newIntake.id, medication.id, newIntake.doseId, 'undo', null);
-        }
+        intakeIndex.set(nextKey, created);
+        console.log('[MedicationReset] Created next occurrence', {
+          medicationId: medication.id,
+          previousIntakeId: intake.id,
+          nextIntakeId: created.id,
+          doseId: intake.doseId,
+          scheduledFor: created.scheduledFor.toISOString()
+        });
+        planTouched = true;
       }
 
-      await touchPlanForUser(context.recipient.userId);
+      if (planTouched) {
+        const recipient = await findRecipientById(medication.recipientId);
+        if (recipient) {
+          await touchPlanForUser(recipient.userId);
+        }
+      }
     } catch (error) {
-      logger.error({ err: error, medicationId: medication.id }, 'Failed to reset medication occurrences');
+      console.error('[MedicationReset] Medication iteration failed', { medicationId: medication.id, error });
     }
   }
 }
 
-function computeScheduledFor(date: Date, timeOfDay: string, _timezone: string): Date {
-  const [hours, minutes] = timeOfDay.split(':').map((value) => Number(value));
-  const scheduled = new Date(date);
-  scheduled.setHours(hours, minutes, 0, 0);
-  return scheduled;
+export function startMedicationOccurrenceResetJob(): void {
+  if (resetTimer) {
+    return;
+  }
+  const intervalMs = DEFAULT_INTERVAL_MS;
+  const execute = async () => {
+    try {
+      await runMedicationOccurrenceReset();
+    } catch (error) {
+      console.error('[MedicationReset] Job execution failed', error);
+    }
+  };
+  void execute();
+  resetTimer = setInterval(execute, intervalMs);
 }

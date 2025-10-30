@@ -161,6 +161,71 @@ export function formatInstantWithZone(date: Date, timeZone: string): { dateTime:
   };
 }
 
+function parseTimeOfDay(value: string): { hour: number; minute: number; second: number } {
+  const parts = value.split(':');
+  if (parts.length < 2 || parts.length > 3) {
+    throw new Error(`Invalid time of day: ${value}`);
+  }
+  const [hourRaw, minuteRaw, secondRaw] = parts;
+  const hour = Number.parseInt(hourRaw, 10);
+  const minute = Number.parseInt(minuteRaw, 10);
+  const second = secondRaw !== undefined ? Number.parseInt(secondRaw, 10) : 0;
+
+  if (
+    Number.isNaN(hour) ||
+    Number.isNaN(minute) ||
+    Number.isNaN(second) ||
+    hour < 0 ||
+    hour > 23 ||
+    minute < 0 ||
+    minute > 59 ||
+    second < 0 ||
+    second > 59
+  ) {
+    throw new Error(`Invalid time of day: ${value}`);
+  }
+
+  return { hour, minute, second };
+}
+
+function offsetToMinutes(offset: string): number {
+  const sign = offset.startsWith('-') ? -1 : 1;
+  const [hourComponent = '0', minuteComponent = '0'] = offset.slice(1).split(':');
+  const hours = Number.parseInt(hourComponent, 10);
+  const minutes = Number.parseInt(minuteComponent, 10);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+    return 0;
+  }
+  return sign * (hours * 60 + minutes);
+}
+
+export function combineDateWithTimeZone(date: Date, timeOfDay: string, timeZone: string): Date {
+  const { hour, minute, second } = parseTimeOfDay(timeOfDay);
+
+  const targetParts: DateParts = {
+    year: date.getUTCFullYear(),
+    month: date.getUTCMonth() + 1,
+    day: date.getUTCDate(),
+    hour,
+    minute,
+    second
+  };
+
+  const offset = resolveOffset(targetParts, timeZone);
+  const offsetMinutes = offsetToMinutes(offset);
+
+  const utcMillis = Date.UTC(
+    targetParts.year,
+    targetParts.month - 1,
+    targetParts.day,
+    hour,
+    minute,
+    second
+  ) - offsetMinutes * 60000;
+
+  return new Date(utcMillis);
+}
+
 export function isValidTimeZone(timeZone: string): boolean {
   try {
     getFormatter(timeZone);

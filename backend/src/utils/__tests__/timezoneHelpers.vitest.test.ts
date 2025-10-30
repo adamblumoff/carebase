@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatInstantWithZone, isValidTimeZone } from '../timezone.js';
+import { combineDateWithTimeZone, formatInstantWithZone, isValidTimeZone } from '../timezone.js';
 
 describe('formatInstantWithZone', () => {
   it('returns ISO string with correct offset for zoned instant', () => {
@@ -16,5 +16,16 @@ describe('formatInstantWithZone', () => {
   it('detects valid and invalid timezones', () => {
     expect(isValidTimeZone('America/Chicago')).toBe(true);
     expect(isValidTimeZone('America/Chiago')).toBe(false);
+  });
+});
+
+describe('combineDateWithTimeZone', () => {
+  it('combines occurrence date and time of day using timezone offset', () => {
+    const occurrenceDate = new Date(Date.UTC(2025, 2, 1)); // 2025-03-01 UTC midnight
+    const result = combineDateWithTimeZone(occurrenceDate, '08:00:00', 'America/New_York');
+    expect(result.toISOString()).toBe('2025-03-01T13:00:00.000Z');
+
+    const tokyoResult = combineDateWithTimeZone(occurrenceDate, '21:30:00', 'Asia/Tokyo');
+    expect(tokyoResult.toISOString()).toBe('2025-03-01T12:30:00.000Z');
   });
 });
