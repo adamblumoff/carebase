@@ -22,7 +22,6 @@ interface MedicationDetailSheetProps {
   onToggleOccurrence: (intakeId: number, status?: MedicationIntakeStatus) => Promise<void>;
   onConfirmOverride: (intakeId: number, status?: MedicationIntakeStatus) => Promise<void>;
   onUndoOccurrence: (intakeId: number) => Promise<void>;
-  onRecordNow: () => Promise<void>;
   onEdit: () => void;
   onDeleteMedication: () => Promise<void>;
   onDeleteIntake: (intakeId: number) => Promise<void>;
@@ -56,7 +55,6 @@ export function MedicationDetailSheet({
   onToggleOccurrence,
   onConfirmOverride,
   onUndoOccurrence,
-  onRecordNow,
   onEdit,
   onDeleteMedication,
   onDeleteIntake,
@@ -214,28 +212,7 @@ export function MedicationDetailSheet({
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
                   <Text style={[styles.sectionHeading, { color: palette.textPrimary }]}>Today</Text>
-                  {(doseCountPill || canManage) ? (
-                    <View style={styles.sectionHeaderActions}>
-                      {doseCountPill}
-                      {canManage ? (
-                        <Pressable
-                          style={({ pressed }) => [
-                            styles.recordNow,
-                            { backgroundColor: palette.primary },
-                            pressed && styles.recordNowPressed
-                          ]}
-                          onPress={onRecordNow}
-                          disabled={actionPending}
-                        >
-                          {actionPending ? (
-                            <ActivityIndicator color="#fff" size="small" />
-                          ) : (
-                            <Text style={styles.recordNowText}>Mark taken now</Text>
-                          )}
-                        </Pressable>
-                      ) : null}
-                    </View>
-                  ) : null}
+                  {doseCountPill}
                 </View>
                 {todayOccurrences.length === 0 ? (
                   <Text style={[styles.sectionText, { color: palette.textMuted }]}>No doses scheduled today.</Text>
@@ -510,23 +487,6 @@ const styles = StyleSheet.create({
   editButtonText: {
     fontSize: 13,
     fontWeight: '600'
-  },
-  recordNow: {
-    paddingHorizontal: spacing(1.5),
-    paddingVertical: spacing(0.75),
-    borderRadius: radius.md
-  },
-  recordNowPressed: {
-    opacity: 0.85
-  },
-  recordNowText: {
-    color: '#fff',
-    fontWeight: '600'
-  },
-  sectionHeaderActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing(1)
   },
   doseCountPill: {
     paddingHorizontal: spacing(1.25),

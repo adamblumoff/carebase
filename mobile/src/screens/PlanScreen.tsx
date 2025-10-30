@@ -435,17 +435,6 @@ export default function PlanScreen({ navigation, route }: Props) {
     [canManageMedications]
   );
 
-  const handleRecordNow = useCallback(async () => {
-    if (!selectedMedicationId || !canManageMedications) return;
-    await handleMedicationMutator(() =>
-      medicationsState.recordIntake(selectedMedicationId, {
-        doseId: null,
-        scheduledFor: new Date().toISOString(),
-        status: 'taken'
-      })
-    );
-  }, [canManageMedications, handleMedicationMutator, medicationsState, selectedMedicationId]);
-
   const handleDeleteMedication = useCallback(() => {
     if (!selectedMedicationId || !canManageMedications) return;
     const medicationId = selectedMedicationId;
@@ -1129,7 +1118,6 @@ export default function PlanScreen({ navigation, route }: Props) {
         onToggleOccurrence={toggleOccurrenceForSelected}
         onConfirmOverride={confirmOverrideForSelected}
         onUndoOccurrence={undoOccurrenceForSelected}
-        onRecordNow={handleRecordNow}
         onEdit={openEditMedication}
         onDeleteMedication={handleDeleteMedication}
         onDeleteIntake={handleDeleteIntake}

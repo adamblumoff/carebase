@@ -149,7 +149,6 @@ describe('MedicationDetailSheet', () => {
     const onToggleOccurrence = vi.fn().mockResolvedValue(undefined);
     const onConfirmOverride = vi.fn().mockResolvedValue(undefined);
     const onUndoOccurrence = vi.fn().mockResolvedValue(undefined);
-    const onRecordNow = vi.fn();
     const onEdit = vi.fn();
     const onDeleteMedication = vi.fn();
     const onDeleteIntake = vi.fn();
@@ -163,7 +162,6 @@ describe('MedicationDetailSheet', () => {
         onToggleOccurrence={async (id, status) => onToggleOccurrence(id, status)}
         onConfirmOverride={async (id, status) => onConfirmOverride(id, status)}
         onUndoOccurrence={async (id) => onUndoOccurrence(id)}
-        onRecordNow={async () => onRecordNow()}
         onEdit={onEdit}
         onDeleteMedication={async () => onDeleteMedication()}
         onDeleteIntake={async (id) => onDeleteIntake(id)}
@@ -175,9 +173,6 @@ describe('MedicationDetailSheet', () => {
     expect(screen.getByText('Lipitor')).toBeTruthy();
     expect(screen.getByText('Take once daily with food.')).toBeTruthy();
     expect(screen.getByText(/Schedule/)).toBeTruthy();
-
-    fireEvent.click(screen.getByText('Mark taken now'));
-    expect(onRecordNow).toHaveBeenCalled();
 
     fireEvent.click(screen.getByText('Mark taken'));
     expect(onToggleOccurrence).toHaveBeenCalledWith(201, 'taken');
@@ -215,7 +210,6 @@ describe('MedicationDetailSheet', () => {
       onToggleOccurrence: async () => undefined,
       onConfirmOverride: async () => undefined,
       onUndoOccurrence: async () => undefined,
-      onRecordNow: async () => undefined,
       onEdit: vi.fn(),
       onDeleteMedication: async () => undefined,
       onDeleteIntake: async () => undefined,
