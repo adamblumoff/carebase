@@ -260,6 +260,17 @@ export interface MedicationIntakeEvent {
   actorUserId: number | null;
 }
 
+export interface MedicationOccurrenceSummary {
+  intakeId: number;
+  medicationId: number;
+  doseId: number | null;
+  occurrenceDate: Date;
+  status: MedicationIntakeStatus;
+  acknowledgedAt: Date | null;
+  acknowledgedByUserId: number | null;
+  overrideCount: number;
+}
+
 export interface MedicationRefillProjection {
   medicationId: number;
   expectedRunOutOn: Date | null;
