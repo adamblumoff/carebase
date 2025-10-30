@@ -1,9 +1,11 @@
 import type {
   MedicationCreateRequest,
   MedicationDeleteResponse,
+  MedicationDose,
   MedicationDoseInput,
   MedicationDoseOccurrence,
   MedicationDoseUpdateInput,
+  MedicationIntake,
   MedicationIntakeDeleteResponse,
   MedicationIntakeEvent,
   MedicationIntakeRecordRequest,
@@ -56,6 +58,7 @@ import {
   rescheduleMedicationIntakeReminder,
   scheduleMedicationIntakeReminder
 } from './medicationReminderScheduler.js';
+import { combineDateWithTimeZone, getDefaultTimeZone } from '../utils/timezone.js';
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_INTAKE_LOOKBACK_DAYS = 7;
@@ -83,6 +86,104 @@ const ALLOWED_STATUSES: MedicationIntakeStatus[] = ['pending', 'taken', 'skipped
 const OVERRIDE_WARNING_THRESHOLD = 1;
 
 type IntakeEventType = 'taken' | 'skipped' | 'undo' | 'override';
+
+function isSameOccurrenceDay(a: Date, b: Date): boolean {
+  return toOccurrenceDate(a).getTime() === toOccurrenceDate(b).getTime();
+}
+
+async function ensureTodayDoseOccurrences(
+  medicationId: number,
+  context: MedicationContext,
+  doses: MedicationDose[],
+  occurrenceSummaries: MedicationOccurrenceSummary[],
+  intakes: MedicationIntake[]
+): Promise<boolean> {
+  const activeDoses = doses.filter((dose) => dose.isActive !== false && dose.id != null);
+  if (activeDoses.length === 0) {
+    return false;
+  }
+
+  const today = toOccurrenceDate(new Date());
+  const todaysSummaries = occurrenceSummaries.filter((summary) => isSameOccurrenceDay(summary.occurrenceDate, today));
+
+  const assignedDoseIds = new Set<number>();
+  const unassigned: MedicationOccurrenceSummary[] = [];
+
+  for (const summary of todaysSummaries) {
+    if (summary.doseId != null) {
+      if (!assignedDoseIds.has(summary.doseId)) {
+        assignedDoseIds.add(summary.doseId);
+      }
+    } else {
+      unassigned.push(summary);
+    }
+  }
+
+  const sortedDoses = [...activeDoses].sort((a, b) => a.timeOfDay.localeCompare(b.timeOfDay));
+  const defaultTimeZone = getDefaultTimeZone();
+  let changed = false;
+
+  for (const dose of sortedDoses) {
+    const doseId = dose.id!;
+    if (assignedDoseIds.has(doseId)) {
+      continue;
+    }
+
+    if (unassigned.length > 0) {
+      const candidate = unassigned.shift()!;
+      await updateMedicationIntake(candidate.intakeId, medicationId, { doseId });
+      candidate.doseId = doseId;
+      assignedDoseIds.add(doseId);
+      changed = true;
+      continue;
+    }
+
+    const timezone = dose.timezone ?? defaultTimeZone;
+    const scheduledFor = combineDateWithTimeZone(new Date(), dose.timeOfDay, timezone);
+    const created = await createMedicationIntake(medicationId, {
+      doseId,
+      scheduledFor,
+      acknowledgedAt: null,
+      status: 'pending',
+      actorUserId: null,
+      occurrenceDate: toOccurrenceDate(scheduledFor),
+      overrideCount: 0
+    });
+
+    occurrenceSummaries.push({
+      intakeId: created.id,
+      medicationId,
+      doseId,
+      occurrenceDate: created.occurrenceDate,
+      status: created.status,
+      acknowledgedAt: created.acknowledgedAt,
+      acknowledgedByUserId: created.actorUserId,
+      overrideCount: created.overrideCount ?? 0,
+      history: []
+    });
+    intakes.push(created);
+
+    await scheduleMedicationIntakeReminder({
+      medicationId,
+      recipientId: context.recipientId,
+      intake: {
+        id: created.id,
+        scheduledFor: created.scheduledFor,
+        occurrenceDate: created.occurrenceDate
+      },
+      dose: {
+        id: doseId,
+        timezone,
+        reminderWindowMinutes: dose.reminderWindowMinutes
+      }
+    });
+
+    assignedDoseIds.add(doseId);
+    changed = true;
+  }
+
+  return changed;
+}
 
 async function resolveContext(user: User): Promise<MedicationContext> {
   const context = await resolveRecipientContextForUser(user.id);
@@ -470,9 +571,6 @@ async function hydrateMedication(
     listMedicationOccurrences(medicationId, { since: occurrenceSince })
   ]);
 
-  const occurrenceEvents = await listMedicationIntakeEvents(occurrenceSummaries.map((summary) => summary.intakeId));
-  const occurrences = buildOccurrences(occurrenceSummaries, occurrenceEvents);
-
   if (!medication) {
     throw new NotFoundError('Medication not found');
   }
@@ -481,10 +579,18 @@ async function hydrateMedication(
     throw new NotFoundError('Medication not found');
   }
 
+  const currentIntakes = intakes;
+  const currentOccurrenceSummaries = occurrenceSummaries;
+
+  await ensureTodayDoseOccurrences(medicationId, context, doses, currentOccurrenceSummaries, currentIntakes);
+
+  const occurrenceEvents = await listMedicationIntakeEvents(currentOccurrenceSummaries.map((summary) => summary.intakeId));
+  const occurrences = buildOccurrences(currentOccurrenceSummaries, occurrenceEvents);
+
   return {
     ...medication,
     doses,
-    upcomingIntakes: intakes,
+    upcomingIntakes: currentIntakes,
     refillProjection: projection,
     occurrences
   };
@@ -514,12 +620,16 @@ export async function listMedicationsForUser(
       getMedicationRefillProjection(medication.id)
     ]);
     const occurrenceSummaries = await listMedicationOccurrences(medication.id, { since: listOptions.since });
+    const currentIntakes = intakes;
+
+    await ensureTodayDoseOccurrences(medication.id, context, doses, occurrenceSummaries, currentIntakes);
+
     const occurrenceEvents = await listMedicationIntakeEvents(occurrenceSummaries.map((summary) => summary.intakeId));
     const occurrences = buildOccurrences(occurrenceSummaries, occurrenceEvents);
     results.push({
       ...medication,
       doses,
-      upcomingIntakes: intakes,
+      upcomingIntakes: currentIntakes,
       refillProjection: projection,
       occurrences
     });

@@ -4,7 +4,8 @@ import {
   listActiveMedications,
   listMedicationDoses,
   listMedicationIntakes,
-  createMedicationIntake
+  createMedicationIntake,
+  updateMedicationIntake
 } from '../db/queries.js';
 import { findRecipientById } from '../db/queries/recipients.js';
 import { touchPlanForUser } from '../db/queries/plan.js';
@@ -114,10 +115,19 @@ export async function runMedicationOccurrenceReset(): Promise<void> {
           continue;
         }
 
-        const matchingDose = intake.doseId ? doseIndex.get(intake.doseId) ?? null : null;
+        let matchingDose: MedicationDose | null = null;
+        if (intake.doseId != null) {
+          matchingDose = doseIndex.get(intake.doseId) ?? null;
+        } else if (doseIndex.size === 1) {
+          matchingDose = [...doseIndex.values()][0] ?? null;
+          if (matchingDose) {
+            await updateMedicationIntake(intake.id, medication.id, { doseId: matchingDose.id });
+            intake.doseId = matchingDose.id;
+          }
+        }
         const nextScheduledFor = computeNextScheduledFor(intake, matchingDose);
         const created = await createMedicationIntake(medication.id, {
-          doseId: intake.doseId ?? null,
+          doseId: matchingDose?.id ?? intake.doseId ?? null,
           scheduledFor: nextScheduledFor,
           acknowledgedAt: null,
           status: 'pending',

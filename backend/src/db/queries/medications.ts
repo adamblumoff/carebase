@@ -127,6 +127,9 @@ export interface MedicationIntakeUpdateData {
   status?: MedicationIntakeStatus;
   actorUserId?: number | null;
   overrideCount?: number;
+  doseId?: number | null;
+  scheduledFor?: Date;
+  occurrenceDate?: Date;
 }
 
 function normalizeOptionalText(value: string | null | undefined): string | null {
@@ -627,6 +630,18 @@ export async function updateMedicationIntake(
   if (data.overrideCount !== undefined) {
     updates.push(`override_count = $${updates.length + 1}`);
     params.push(data.overrideCount);
+  }
+  if (data.doseId !== undefined) {
+    updates.push(`dose_id = $${updates.length + 1}`);
+    params.push(data.doseId);
+  }
+  if (data.scheduledFor !== undefined) {
+    updates.push(`scheduled_for = $${updates.length + 1}`);
+    params.push(data.scheduledFor);
+  }
+  if (data.occurrenceDate !== undefined) {
+    updates.push(`occurrence_date = $${updates.length + 1}`);
+    params.push(data.occurrenceDate);
   }
 
   if (updates.length === 0) {
