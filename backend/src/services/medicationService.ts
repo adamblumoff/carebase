@@ -110,11 +110,13 @@ async function ensureTodayDoseOccurrences(
   const existingKeys = new Set<string>(todaysSummaries.map((summary) => occurrenceKey(summary.doseId ?? null)));
 
   const assignedDoseIds = new Set<number>();
+  const assignedSummaries = new Map<number, MedicationOccurrenceSummary>();
   const unassigned: MedicationOccurrenceSummary[] = [];
 
   for (const summary of todaysSummaries) {
     if (summary.doseId != null) {
       assignedDoseIds.add(summary.doseId);
+      assignedSummaries.set(summary.doseId, summary);
     } else {
       unassigned.push(summary);
     }
@@ -130,7 +132,7 @@ async function ensureTodayDoseOccurrences(
     const scheduledFor = combineDateWithTimeZone(today, dose.timeOfDay, timezone);
     const occurrenceDate = toOccurrenceDate(scheduledFor);
 
-    const existing = todaysSummaries.find((summary) => summary.doseId === doseId);
+    const existing = assignedSummaries.get(doseId);
     if (existing) {
       const matchingIntake = intakes.find((intake) => intake.id === existing.intakeId);
       if (matchingIntake && matchingIntake.status === 'pending') {
@@ -155,6 +157,7 @@ async function ensureTodayDoseOccurrences(
       await updateMedicationIntake(candidate.intakeId, medicationId, { doseId });
       candidate.doseId = doseId;
       assignedDoseIds.add(doseId);
+      assignedSummaries.set(doseId, candidate);
       existingKeys.add(occurrenceKey(doseId));
       changed = true;
       continue;
@@ -220,6 +223,38 @@ async function ensureTodayDoseOccurrences(
 
     assignedDoseIds.add(doseId);
     existingKeys.add(occurrenceKey(doseId));
+    assignedSummaries.set(doseId, occurrenceSummaries.find((summary) => summary.intakeId === created.id) ?? {
+      intakeId: created.id,
+      medicationId,
+      doseId,
+      occurrenceDate: created.occurrenceDate,
+      status: created.status,
+      acknowledgedAt: created.acknowledgedAt,
+      acknowledgedByUserId: created.actorUserId,
+      overrideCount: created.overrideCount ?? 0,
+      history: []
+    });
+    changed = true;
+  }
+
+  for (const leftover of unassigned) {
+    if (leftover.doseId != null) {
+      continue;
+    }
+    const intake = intakes.find((item) => item.id === leftover.intakeId);
+    if (!intake) {
+      continue;
+    }
+    await cancelMedicationRemindersForIntake(intake.id);
+    await deleteMedicationIntake(intake.id, medicationId);
+    const summaryIndex = occurrenceSummaries.findIndex((summary) => summary.intakeId === intake.id);
+    if (summaryIndex >= 0) {
+      occurrenceSummaries.splice(summaryIndex, 1);
+    }
+    const intakeIndex = intakes.findIndex((item) => item.id === intake.id);
+    if (intakeIndex >= 0) {
+      intakes.splice(intakeIndex, 1);
+    }
     changed = true;
   }
 
