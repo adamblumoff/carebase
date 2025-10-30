@@ -106,12 +106,23 @@ export function MedicationDetailSheet({
       .filter((occurrence) => toDateKey(occurrence.occurrenceDate) !== todayKey)
       .sort((a, b) => toDateKey(b.occurrenceDate).localeCompare(toDateKey(a.occurrenceDate)));
 
+    const dedupedHistory: MedicationDoseOccurrence[] = [];
+    const seenHistoryKeys = new Set<string>();
+    history.forEach((occurrence) => {
+      const dedupeKey = `${occurrence.intakeId}-${toDateKey(occurrence.occurrenceDate)}`;
+      if (seenHistoryKeys.has(dedupeKey)) {
+        return;
+      }
+      seenHistoryKeys.add(dedupeKey);
+      dedupedHistory.push(occurrence);
+    });
+
     const activeDoseCount = medication.doses.filter((dose) => dose.isActive !== false).length || medication.doses.length;
     const dailyCountSummary = computeMedicationDailyCount(medication);
 
     return {
       todayOccurrences: today,
-      historyOccurrences: history,
+      historyOccurrences: dedupedHistory,
       upcomingById: upcomingMap,
       dailyCount: dailyCountSummary,
       activeDoseCount,
@@ -363,12 +374,16 @@ export function MedicationDetailSheet({
                     const dose = occurrence.doseId != null ? doseById.get(occurrence.doseId) ?? null : null;
                     const scheduledLabel = formatScheduledLabel(intake ? intake.scheduledFor as string : null);
                     const historyEvent = occurrence.history[occurrence.history.length - 1] ?? null;
+                    const historyKeySuffix = historyEvent?.id ?? 'base';
                     const occurredAtLabel = historyEvent
                       ? `${formatDisplayDate(historyEvent.occurredAt)} · ${formatDisplayTime(historyEvent.occurredAt)}`
                       : formatDisplayDate(occurrence.occurrenceDate);
 
                     return (
-                      <View key={`history-${occurrence.intakeId}-${toDateKey(occurrence.occurrenceDate)}`} style={styles.historyRow}>
+                      <View
+                        key={`history-${occurrence.intakeId}-${toDateKey(occurrence.occurrenceDate)}-${historyKeySuffix}`}
+                        style={styles.historyRow}
+                      >
                         <View>
                           <Text style={[styles.historyLabel, { color: palette.textPrimary }]}>
                             {(dose?.label ?? 'Dose')} · {statusLabel}
