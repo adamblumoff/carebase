@@ -133,6 +133,7 @@ export {
   getMedicationForRecipient,
   getMedicationIntake,
   countMedicationIntakesByOccurrence,
+  findMedicationIntakeByDoseAndDate,
   getMedicationDoseById,
   getMedicationRefillProjection,
   listMedicationDoses,
