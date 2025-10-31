@@ -199,6 +199,7 @@ describe('listMedicationsForUser', () => {
     queriesMock.listMedicationDoses.mockResolvedValueOnce([dose]);
     queriesMock.listMedicationIntakes.mockResolvedValueOnce([intake]);
     queriesMock.getMedicationRefillProjection.mockResolvedValueOnce(projection);
+    queriesMock.getMedicationIntake.mockResolvedValue(intake);
     queriesMock.listMedicationOccurrences.mockResolvedValueOnce([
       {
         intakeId: 999,
@@ -266,17 +267,31 @@ describe('listMedicationsForUser', () => {
     queriesMock.listMedicationIntakes
       .mockResolvedValueOnce([takenIntake])
       .mockResolvedValueOnce([takenIntake, createdIntake]);
+    queriesMock.getMedicationIntake.mockImplementation(async (id: number) => {
+      if (id === takenIntake.id) return takenIntake;
+      if (id === createdIntake.id) return createdIntake;
+      return null;
+    });
     queriesMock.getMedicationRefillProjection.mockResolvedValueOnce(null);
     queriesMock.listMedicationOccurrences
       .mockResolvedValueOnce([takenSummary])
       .mockResolvedValueOnce([reassignedSummary, createdSummary]);
     queriesMock.updateMedicationIntake.mockResolvedValueOnce(createIntake({ ...takenIntake, doseId: morningDose.id }));
     queriesMock.createMedicationIntake.mockResolvedValueOnce(createdIntake);
+    queriesMock.getMedicationIntake.mockImplementation(async (id: number) => {
+      if (id === takenIntake.id) return takenIntake;
+      if (id === createdIntake.id) return createdIntake;
+      return null;
+    });
     queriesMock.listMedicationIntakeEvents.mockResolvedValueOnce([]);
 
     const results = await listMedicationsForUser(user);
 
-    expect(queriesMock.updateMedicationIntake).toHaveBeenCalledWith(takenSummary.intakeId, medication.id, { doseId: morningDose.id });
+    expect(queriesMock.updateMedicationIntake).toHaveBeenCalledWith(
+      takenSummary.intakeId,
+      medication.id,
+      expect.objectContaining({ doseId: morningDose.id })
+    );
     expect(queriesMock.createMedicationIntake).toHaveBeenCalledWith(
       medication.id,
       expect.objectContaining({ doseId: nightDose.id })
@@ -289,6 +304,118 @@ describe('listMedicationsForUser', () => {
       })
     );
     expect(results[0]?.occurrences?.map((occ) => occ.doseId).sort()).toEqual([morningDose.id, nightDose.id]);
+  });
+
+  it('creates occurrences using dose timezone day boundary', async () => {
+    vi.useFakeTimers();
+    const fixedNow = new Date('2025-03-01T12:00:00.000Z');
+    vi.setSystemTime(fixedNow);
+
+    const user = createUser();
+    const medication = createMedication();
+    const morningDose = createDose({
+      id: 301,
+      label: 'Morning',
+      timeOfDay: '08:00:00',
+      timezone: 'Pacific/Auckland'
+    });
+    const nightDose = createDose({
+      id: 302,
+      label: 'Night',
+      timeOfDay: '20:00:00',
+      timezone: 'Pacific/Auckland'
+    });
+
+    const existingIntake = createIntake({
+      id: 600,
+      doseId: morningDose.id,
+      occurrenceDate: new Date('2025-02-28T00:00:00.000Z'),
+      scheduledFor: new Date('2025-02-27T19:00:00.000Z'),
+      status: 'taken'
+    });
+    const occurrenceSummaries = [
+      {
+        intakeId: existingIntake.id,
+        medicationId: medication.id,
+        doseId: morningDose.id,
+        occurrenceDate: existingIntake.occurrenceDate,
+        status: existingIntake.status,
+        acknowledgedAt: existingIntake.acknowledgedAt,
+        acknowledgedByUserId: existingIntake.actorUserId,
+        overrideCount: 0,
+        history: []
+      }
+    ];
+
+    queriesMock.resolveRecipientContextForUser.mockResolvedValueOnce({
+      recipient: { id: medication.recipientId, userId: user.id, displayName: 'Alex', createdAt: now },
+      collaborator: null
+    });
+    queriesMock.listMedicationsForRecipient.mockResolvedValueOnce([medication]);
+    queriesMock.listMedicationDoses.mockResolvedValueOnce([morningDose, nightDose]);
+    queriesMock.listMedicationIntakes
+      .mockResolvedValueOnce([existingIntake])
+      .mockResolvedValueOnce([existingIntake]);
+    queriesMock.getMedicationRefillProjection.mockResolvedValueOnce(null);
+    queriesMock.listMedicationOccurrences
+      .mockResolvedValueOnce(occurrenceSummaries)
+      .mockResolvedValueOnce([
+        ...occurrenceSummaries,
+        {
+          intakeId: 601,
+          medicationId: medication.id,
+          doseId: nightDose.id,
+          occurrenceDate: new Date('2025-03-02T00:00:00.000Z'),
+          status: 'pending',
+          acknowledgedAt: null,
+          acknowledgedByUserId: null,
+          overrideCount: 0,
+          history: []
+        }
+      ]);
+    const newlyCreated = createIntake({
+      id: 601,
+      doseId: nightDose.id,
+      occurrenceDate: new Date('2025-03-02T00:00:00.000Z'),
+      scheduledFor: new Date('2025-02-28T07:00:00.000Z'),
+      status: 'pending'
+    });
+    queriesMock.createMedicationIntake.mockResolvedValueOnce(newlyCreated);
+    queriesMock.getMedicationIntake.mockImplementation(async (id: number) => {
+      if (id === existingIntake.id) return existingIntake;
+      if (id === newlyCreated.id) return newlyCreated;
+      return null;
+    });
+    queriesMock.listMedicationIntakeEvents.mockResolvedValueOnce([]);
+
+    const results = await listMedicationsForUser(user);
+
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: morningDose.timezone ?? 'UTC',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const parts = formatter.formatToParts(fixedNow).reduce<Record<string, string>>((acc, part) => {
+      acc[part.type] = part.value;
+      return acc;
+    }, {});
+    const expectedDateKey = `${parts.year}-${parts.month}-${parts.day}`;
+
+    const sameDayDoseIds = results[0]?.occurrences
+      ?.filter((occ) => occ.occurrenceDate.toISOString().startsWith(expectedDateKey))
+      ?.map((occ) => occ.doseId)
+      ?.sort((a, b) => (a ?? 0) - (b ?? 0));
+
+    expect(sameDayDoseIds).toEqual([morningDose.id, nightDose.id]);
+    expect(queriesMock.createMedicationIntake).toHaveBeenCalledWith(
+      medication.id,
+      expect.objectContaining({
+        doseId: nightDose.id,
+        occurrenceDate: expect.any(Date)
+      })
+    );
+    vi.useRealTimers();
   });
 
   it('handles duplicate occurrence creation gracefully', async () => {

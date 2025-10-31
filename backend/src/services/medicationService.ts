@@ -92,6 +92,28 @@ function isSameOccurrenceDay(a: Date, b: Date): boolean {
   return toOccurrenceDate(a).getTime() === toOccurrenceDate(b).getTime();
 }
 
+function computeZoneOccurrenceDate(reference: Date, timeZone: string): Date {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  let year = reference.getUTCFullYear();
+  let month = reference.getUTCMonth() + 1;
+  let day = reference.getUTCDate();
+  for (const part of formatter.formatToParts(reference)) {
+    if (part.type === 'year') {
+      year = Number.parseInt(part.value, 10);
+    } else if (part.type === 'month') {
+      month = Number.parseInt(part.value, 10);
+    } else if (part.type === 'day') {
+      day = Number.parseInt(part.value, 10);
+    }
+  }
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
 async function ensureTodayDoseOccurrences(
   medicationId: number,
   context: MedicationContext,
@@ -104,247 +126,246 @@ async function ensureTodayDoseOccurrences(
     return false;
   }
 
-  const today = toOccurrenceDate(new Date());
-  const todaysSummaries = occurrenceSummaries.filter((summary) => isSameOccurrenceDay(summary.occurrenceDate, today));
-  const occurrenceKey = (doseId: number | null) => `${medicationId}|${doseId ?? 0}|${today.getTime()}`;
-  const existingKeys = new Set<string>(todaysSummaries.map((summary) => occurrenceKey(summary.doseId ?? null)));
+  const referenceNow = new Date();
+  const defaultTimeZone = getDefaultTimeZone();
+  const doseMap = new Map<number, MedicationDose>();
+  activeDoses.forEach((dose) => {
+    if (dose.id != null) {
+      doseMap.set(dose.id, dose);
+    }
+  });
 
-  const assignedDoseIds = new Set<number>();
-  const assignedSummaries = new Map<number, MedicationOccurrenceSummary>();
-  const unassigned: MedicationOccurrenceSummary[] = [];
-  const duplicates: MedicationOccurrenceSummary[] = [];
+  const intakeById = new Map<number, MedicationIntake>();
+  intakes.forEach((intake) => intakeById.set(intake.id, intake));
 
-  for (const summary of todaysSummaries) {
-    if (summary.doseId != null) {
-      if (assignedSummaries.has(summary.doseId)) {
-        duplicates.push(summary);
-      } else {
-        assignedDoseIds.add(summary.doseId);
-        assignedSummaries.set(summary.doseId, summary);
-      }
+  const summariesByDose = new Map<number, MedicationOccurrenceSummary[]>();
+  const unassignedSummaries: MedicationOccurrenceSummary[] = [];
+  for (const summary of occurrenceSummaries) {
+    if (summary.doseId != null && doseMap.has(summary.doseId)) {
+      const list = summariesByDose.get(summary.doseId) ?? [];
+      list.push(summary);
+      summariesByDose.set(summary.doseId, list);
     } else {
-      unassigned.push(summary);
+      unassignedSummaries.push(summary);
     }
   }
 
+  const zoneDayCache = new Map<string, Date>();
+  const getZoneDay = (timeZone: string): Date => {
+    const zone = timeZone && timeZone.trim().length > 0 ? timeZone : defaultTimeZone;
+    let cached = zoneDayCache.get(zone);
+    if (!cached) {
+      cached = computeZoneOccurrenceDate(referenceNow, zone);
+      zoneDayCache.set(zone, cached);
+    }
+    return cached;
+  };
+
   const sortedDoses = [...activeDoses].sort((a, b) => a.timeOfDay.localeCompare(b.timeOfDay));
-  const defaultTimeZone = getDefaultTimeZone();
+  const duplicates: MedicationOccurrenceSummary[] = [];
+  const unusedUnassigned = new Set(unassignedSummaries);
   let changed = false;
+
+  const ensureIntake = async (intakeId: number): Promise<MedicationIntake> => {
+    const cached = intakeById.get(intakeId);
+    if (cached) {
+      return cached;
+    }
+    const fetched = await getMedicationIntake(intakeId, medicationId);
+    if (!fetched) {
+      throw new NotFoundError('Medication intake not found');
+    }
+    intakeById.set(fetched.id, fetched);
+    intakes.push(fetched);
+    return fetched;
+  };
 
   for (const dose of sortedDoses) {
     const doseId = dose.id!;
-    const timezone = dose.timezone ?? defaultTimeZone;
-    const scheduledFor = combineDateWithTimeZone(today, dose.timeOfDay, timezone);
-    const occurrenceDate = toOccurrenceDate(scheduledFor);
+    const timeZone = dose.timezone ?? defaultTimeZone;
+    const zoneDay = getZoneDay(timeZone);
+    const scheduledFor = combineDateWithTimeZone(zoneDay, dose.timeOfDay, timeZone);
 
-    const existing = assignedSummaries.get(doseId);
-    if (existing) {
-      const matchingIntake = intakes.find((intake) => intake.id === existing.intakeId);
-      if (matchingIntake && matchingIntake.status === 'pending') {
-        const diffMs = Math.abs(matchingIntake.scheduledFor.getTime() - scheduledFor.getTime());
-        if (diffMs > 60 * 1000) {
-          let activeIntake = matchingIntake;
-          let activeSummary = existing;
+    const candidates = summariesByDose.get(doseId) ?? [];
+    let selected: MedicationOccurrenceSummary | null =
+      candidates.find((summary) => isSameOccurrenceDay(summary.occurrenceDate, zoneDay)) ?? null;
 
-          while (true) {
-            try {
-              const updated = await updateMedicationIntake(activeIntake.id, medicationId, {
-                scheduledFor,
-                occurrenceDate
-              });
-              if (updated) {
-                activeIntake.scheduledFor = updated.scheduledFor;
-                activeIntake.occurrenceDate = updated.occurrenceDate;
-                activeSummary.occurrenceDate = updated.occurrenceDate;
-                changed = true;
-              }
-              break;
-            } catch (error: any) {
-              if (error?.code !== '23505') {
-                throw error;
-              }
+    if (!selected) {
+      selected =
+        candidates.find((summary) => {
+          const intake = intakeById.get(summary.intakeId);
+          return intake?.status === 'pending';
+        }) ?? null;
+    }
 
-              const resolution = await reconcileOccurrenceConflict(
-                medicationId,
-                doseId,
-                occurrenceDate,
-                activeIntake,
-                occurrenceSummaries,
-                intakes
-              );
+    if (!selected && candidates.length > 0) {
+      selected = candidates[0];
+    }
 
-              if (!resolution) {
-                throw error;
-              }
-
-              activeIntake = resolution.intake;
-              activeSummary = resolution.summary;
-              assignedSummaries.set(doseId, activeSummary);
+    if (!selected) {
+      const fallback = [...unusedUnassigned].find((summary) => intakeById.get(summary.intakeId)?.status === 'pending')
+        ?? [...unusedUnassigned][0] ?? null;
+      if (fallback) {
+        unusedUnassigned.delete(fallback);
+        let intake = await ensureIntake(fallback.intakeId);
+        let updated = false;
+        while (true) {
+          try {
+            await updateMedicationIntake(fallback.intakeId, medicationId, {
+              doseId,
+              scheduledFor,
+              occurrenceDate: zoneDay
+            });
+            updated = true;
+            break;
+          } catch (error: any) {
+            if (error?.code !== '23505') {
+              throw error;
             }
+            const resolution = await reconcileOccurrenceConflict(
+              medicationId,
+              doseId,
+              zoneDay,
+              intake,
+              occurrenceSummaries,
+              intakes
+            );
+            if (!resolution) {
+              throw error;
+            }
+            intakeById.set(resolution.intake.id, resolution.intake);
+            selected = resolution.summary;
+            intake = resolution.intake;
+            selected.doseId = doseId;
+            selected.occurrenceDate = zoneDay;
+            updated = true;
+            break;
           }
         }
-      }
-      assignedDoseIds.add(doseId);
-      continue;
-    }
-
-    if (unassigned.length > 0) {
-      const candidate = unassigned.shift()!;
-      let candidateIntake = intakes.find((item) => item.id === candidate.intakeId) ?? null;
-
-      const ensureCandidateIntake = async (): Promise<MedicationIntake> => {
-        if (candidateIntake) {
-          return candidateIntake;
+        if (!selected) {
+          selected = fallback;
         }
-        const fetched = await getMedicationIntake(candidate.intakeId, medicationId);
-        if (!fetched) {
-          throw new NotFoundError('Medication intake not found');
-        }
-        candidateIntake = fetched;
-        intakes.push(fetched);
-        return fetched;
-      };
-
-      while (true) {
-        try {
-          await updateMedicationIntake(candidate.intakeId, medicationId, { doseId });
-          candidate.doseId = doseId;
-          if (candidateIntake) {
-            candidateIntake.doseId = doseId;
-          }
-          assignedDoseIds.add(doseId);
-          assignedSummaries.set(doseId, candidate);
-          existingKeys.add(occurrenceKey(doseId));
+        selected.doseId = doseId;
+        selected.occurrenceDate = zoneDay;
+        intake.doseId = doseId;
+        intake.occurrenceDate = zoneDay;
+        intake.scheduledFor = scheduledFor;
+        if (updated) {
           changed = true;
-          break;
-        } catch (error: any) {
-          if (error?.code !== '23505') {
-            throw error;
-          }
-
-          const failedIntake = await ensureCandidateIntake();
-          const resolution = await reconcileOccurrenceConflict(
-            medicationId,
-            doseId,
-            candidate.occurrenceDate,
-            failedIntake,
-            occurrenceSummaries,
-            intakes
-          );
-
-          if (!resolution) {
-            throw error;
-          }
-
-          candidate.doseId = resolution.summary.doseId;
-          assignedDoseIds.add(doseId);
-          assignedSummaries.set(doseId, resolution.summary);
-          existingKeys.add(occurrenceKey(doseId));
-          changed = true;
-          break;
         }
       }
-      continue;
     }
 
-    if (existingKeys.has(occurrenceKey(doseId))) {
-      continue;
-    }
-
-    let created: MedicationIntake | null = null;
-    let createdNew = false;
-    try {
-      created = await createMedicationIntake(medicationId, {
-        doseId,
-        scheduledFor,
-        acknowledgedAt: null,
-        status: 'pending',
-        actorUserId: null,
-        occurrenceDate,
-        overrideCount: 0
-      });
-      createdNew = true;
-    } catch (error: any) {
-      if (error?.code === '23505') {
-        created = await findMedicationIntakeByDoseAndDate(medicationId, doseId, occurrenceDate);
-        if (!created) {
-          continue;
+    if (!selected) {
+      let created: MedicationIntake | null = null;
+      let createdNew = false;
+      try {
+        created = await createMedicationIntake(medicationId, {
+          doseId,
+          scheduledFor,
+          acknowledgedAt: null,
+          status: 'pending',
+          actorUserId: null,
+          occurrenceDate: zoneDay,
+          overrideCount: 0
+        });
+        createdNew = true;
+      } catch (error: any) {
+        if (error?.code === '23505') {
+          created = await findMedicationIntakeByDoseAndDate(medicationId, doseId, zoneDay);
+          if (!created) {
+            continue;
+          }
+        } else {
+          throw error;
         }
-      } else {
-        throw error;
       }
-    }
 
-    occurrenceSummaries.push({
-      intakeId: created.id,
-      medicationId,
-      doseId,
-      occurrenceDate: created.occurrenceDate,
-      status: created.status,
-      acknowledgedAt: created.acknowledgedAt,
-      acknowledgedByUserId: created.actorUserId,
-      overrideCount: created.overrideCount ?? 0,
-      history: []
-    });
-    intakes.push(created);
-
-    if (createdNew) {
-      await scheduleMedicationIntakeReminder({
+      const summary: MedicationOccurrenceSummary = {
+        intakeId: created.id,
         medicationId,
-        recipientId: context.recipientId,
-        intake: {
-          id: created.id,
-          scheduledFor: created.scheduledFor,
-          occurrenceDate: created.occurrenceDate
-        },
-        dose: {
-          id: doseId,
-          timezone,
-          reminderWindowMinutes: dose.reminderWindowMinutes
+        doseId,
+        occurrenceDate: created.occurrenceDate,
+        status: created.status,
+        acknowledgedAt: created.acknowledgedAt,
+        acknowledgedByUserId: created.actorUserId,
+        overrideCount: created.overrideCount ?? 0
+      };
+      occurrenceSummaries.push(summary);
+      intakes.push(created);
+      intakeById.set(created.id, created);
+      selected = summary;
+      summariesByDose.set(doseId, [...candidates, summary]);
+      changed = true;
+
+      if (createdNew) {
+        await scheduleMedicationIntakeReminder({
+          medicationId,
+          recipientId: context.recipientId,
+          intake: {
+            id: created.id,
+            scheduledFor: created.scheduledFor,
+            occurrenceDate: created.occurrenceDate
+          },
+          dose: {
+            id: doseId,
+            timezone: timeZone,
+            reminderWindowMinutes: dose.reminderWindowMinutes
+          }
+        });
+      }
+    } else {
+      let intake = await ensureIntake(selected.intakeId);
+      const diffMs = Math.abs(intake.scheduledFor.getTime() - scheduledFor.getTime());
+      if (diffMs > 60 * 1000 || !isSameOccurrenceDay(selected.occurrenceDate, zoneDay)) {
+        while (true) {
+          try {
+            const updated = await updateMedicationIntake(selected.intakeId, medicationId, {
+              scheduledFor,
+              occurrenceDate: zoneDay
+            });
+            if (updated) {
+              intake.scheduledFor = updated.scheduledFor;
+              intake.occurrenceDate = updated.occurrenceDate;
+            } else {
+              intake.scheduledFor = scheduledFor;
+              intake.occurrenceDate = zoneDay;
+            }
+            selected.occurrenceDate = zoneDay;
+            changed = true;
+            break;
+          } catch (error: any) {
+            if (error?.code !== '23505') {
+              throw error;
+            }
+            const resolution = await reconcileOccurrenceConflict(
+              medicationId,
+              doseId,
+              zoneDay,
+              intake,
+              occurrenceSummaries,
+              intakes
+            );
+            if (!resolution) {
+              throw error;
+            }
+            selected = resolution.summary;
+            intakeById.set(resolution.intake.id, resolution.intake);
+            intake = resolution.intake;
+            summariesByDose.set(doseId, (summariesByDose.get(doseId) ?? []).filter((item) => item.intakeId !== selected!.intakeId).concat(selected));
+          }
         }
-      });
+      }
+      selected.doseId = doseId;
     }
 
-    assignedDoseIds.add(doseId);
-    existingKeys.add(occurrenceKey(doseId));
-    assignedSummaries.set(doseId, occurrenceSummaries.find((summary) => summary.intakeId === created.id) ?? {
-      intakeId: created.id,
-      medicationId,
-      doseId,
-      occurrenceDate: created.occurrenceDate,
-      status: created.status,
-      acknowledgedAt: created.acknowledgedAt,
-      acknowledgedByUserId: created.actorUserId,
-      overrideCount: created.overrideCount ?? 0,
-      history: []
-    });
-    changed = true;
-  }
-
-  for (const leftover of unassigned) {
-    const intake = intakes.find((item) => item.id === leftover.intakeId);
-    if (!intake) {
-      continue;
-    }
-    if (leftover.doseId != null) {
-      assignedSummaries.set(leftover.doseId, leftover);
-      continue;
-    }
-    await cancelMedicationRemindersForIntake(intake.id);
-    await deleteMedicationIntake(intake.id, medicationId);
-    const summaryIndex = occurrenceSummaries.findIndex((summary) => summary.intakeId === intake.id);
-    if (summaryIndex >= 0) {
-      occurrenceSummaries.splice(summaryIndex, 1);
-    }
-    const intakeIndex = intakes.findIndex((item) => item.id === intake.id);
-    if (intakeIndex >= 0) {
-      intakes.splice(intakeIndex, 1);
-    }
-    changed = true;
+    const remaining = (summariesByDose.get(doseId) ?? []).filter((summary) => summary !== selected);
+    duplicates.push(...remaining);
+    summariesByDose.set(doseId, [selected!]);
   }
 
   for (const duplicate of duplicates) {
-    const intake = intakes.find((item) => item.id === duplicate.intakeId);
+    const intake = intakeById.get(duplicate.intakeId);
     if (!intake) {
       continue;
     }
@@ -358,6 +379,26 @@ async function ensureTodayDoseOccurrences(
     if (intakeIndex >= 0) {
       intakes.splice(intakeIndex, 1);
     }
+    intakeById.delete(intake.id);
+    changed = true;
+  }
+
+  for (const leftover of unusedUnassigned) {
+    const intake = intakeById.get(leftover.intakeId);
+    if (!intake) {
+      continue;
+    }
+    await cancelMedicationRemindersForIntake(intake.id);
+    await deleteMedicationIntake(intake.id, medicationId);
+    const summaryIndex = occurrenceSummaries.findIndex((summary) => summary.intakeId === intake.id);
+    if (summaryIndex >= 0) {
+      occurrenceSummaries.splice(summaryIndex, 1);
+    }
+    const intakeIndex = intakes.findIndex((item) => item.id === intake.id);
+    if (intakeIndex >= 0) {
+      intakes.splice(intakeIndex, 1);
+    }
+    intakeById.delete(intake.id);
     changed = true;
   }
 
