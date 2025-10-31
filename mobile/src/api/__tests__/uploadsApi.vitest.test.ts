@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { uploadBillPhoto, uploadMedicationPhoto } from '../uploads';
+import { uploadBillPhoto } from '../uploads';
 import { API_ENDPOINTS } from '../../config/apiEndpoints';
 
 const postMock = vi.fn();
@@ -61,17 +61,4 @@ describe('uploads API', () => {
     expect(uploaded.type).toBe('image/jpeg');
   });
 
-  it('appends medication intent and timezone when uploading medication photo', async () => {
-    postMock.mockResolvedValue({ data: { success: true } });
-
-    await uploadMedicationPhoto({
-      uri: 'file:///label.png',
-      timezone: 'America/Chicago'
-    });
-
-    expect(postMock).toHaveBeenCalledTimes(1);
-    const [url, formData] = postMock.mock.calls[0];
-    expect(url).toBe(`${API_ENDPOINTS.uploadPhoto}?intent=medication&timezone=America%2FChicago`);
-    expect(formData).toBeInstanceOf(MockFormData);
-  });
 });

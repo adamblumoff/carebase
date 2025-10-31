@@ -16,25 +16,22 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
 import * as ImagePicker from 'expo-image-picker';
-import { uploadBillPhoto, uploadMedicationPhoto } from '../api/uploads';
+import { uploadBillPhoto } from '../api/uploads';
 import { useTheme, spacing, radius, type Palette, type Shadow } from '../theme';
 import { emitPlanChanged } from '../utils/planEvents';
 import { formatCurrency } from '../utils/format';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Camera'>;
 
-export default function CameraScreen({ navigation, route }: Props) {
+export default function CameraScreen({ navigation }: Props) {
   const { palette, shadow } = useTheme();
   const styles = useMemo(() => createStyles(palette, shadow), [palette, shadow]);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const intent = route.params?.intent ?? 'bill';
-  const isMedicationMode = intent === 'medication';
-  const timezone = route.params?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'America/New_York';
   const requestPermissions = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission required', `Camera access is needed to scan ${isMedicationMode ? 'prescription labels' : 'bills'}.`);
+      Alert.alert('Permission required', 'Camera access is needed to scan bills.');
       return false;
     }
     return true;
@@ -75,18 +72,6 @@ export default function CameraScreen({ navigation, route }: Props) {
       const filename = imageUri.split('/').pop() || 'photo.jpg';
       const match = /\.(\w+)$/.exec(filename);
       const type = match ? `image/${match[1]}` : 'image/jpeg';
-
-      if (isMedicationMode) {
-        const response = await uploadMedicationPhoto({ uri: imageUri, fileName: filename, contentType: type, timezone });
-        const draft = response.medicationDraft;
-        if (draft) {
-          setImageUri(null);
-          navigation.navigate('Plan', { medicationDraft: draft });
-        } else {
-          Alert.alert('Nothing detected', 'We could not find a medication on this label. Try another photo or add it manually.');
-        }
-        return;
-      }
 
       const response = await uploadBillPhoto({ uri: imageUri, fileName: filename, contentType: type });
 
@@ -147,18 +132,16 @@ export default function CameraScreen({ navigation, route }: Props) {
                 {uploading ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={styles.primaryButtonText}>{isMedicationMode ? 'Import medication' : 'Upload & process'}</Text>
+                  <Text style={styles.primaryButtonText}>Upload & process</Text>
                 )}
               </TouchableOpacity>
             </View>
           </View>
         ) : (
           <View style={styles.content}>
-            <Text style={styles.title}>{isMedicationMode ? 'Scan a prescription' : 'Scan a bill'}</Text>
+            <Text style={styles.title}>Scan a bill</Text>
             <Text style={styles.subtitle}>
-              {isMedicationMode
-                ? 'Capture the medication label to prefill the name, instructions, and times.'
-                : 'Capture a clear photo of the statement to pull in amounts, due dates, and providers.'}
+              Capture a clear photo of the statement to pull in amounts, due dates, and providers.
             </Text>
 
             <TouchableOpacity style={styles.heroAction} onPress={handleTakePhoto}>

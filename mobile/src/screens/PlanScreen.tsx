@@ -567,22 +567,6 @@ export default function PlanScreen({ navigation, route }: Props) {
     setMedicationFormVisible(true);
   }, [canManageMedications, toast]);
 
-  const openMedicationScanner = useCallback(() => {
-    if (!canManageMedications) {
-      toast.showToast('Only the plan owner can manage medications.');
-      return;
-    }
-    navigation.navigate('Camera', { intent: 'medication', timezone: defaultTimezone });
-  }, [canManageMedications, defaultTimezone, navigation, toast]);
-
-  useEffect(() => {
-    const draftFromRoute = route.params?.medicationDraft ?? null;
-    if (draftFromRoute) {
-      openCreateMedication(draftFromRoute);
-      navigation.setParams({ medicationDraft: undefined });
-    }
-  }, [navigation, openCreateMedication, route.params?.medicationDraft]);
-
   useEffect(() => {
     const focusId = route.params?.focusMedicationId ?? null;
     if (focusId != null) {
@@ -790,7 +774,7 @@ export default function PlanScreen({ navigation, route }: Props) {
                 styles.actionPrimary,
                 pressed && styles.actionPillPressed,
               ]}
-              onPress={() => navigation.navigate('Camera', { intent: 'bill' })}
+                  onPress={() => navigation.navigate('Camera')}
             >
               <Text style={styles.actionPrimaryText}>📷 Scan bill</Text>
             </Pressable>
@@ -975,26 +959,15 @@ export default function PlanScreen({ navigation, route }: Props) {
                 <Text style={styles.sectionTitle}>Medications</Text>
               </View>
               {canManageMedications ? (
-                <View style={styles.sectionActions}>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.linkButton,
-                      pressed && styles.linkButtonPressed
-                    ]}
-                    onPress={() => openCreateMedication()}
-                  >
-                    <Text style={[styles.linkButtonText, { color: palette.primary }]}>Add medication</Text>
-                  </Pressable>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.secondaryLinkButton,
-                      pressed && styles.linkButtonPressed
-                    ]}
-                    onPress={openMedicationScanner}
-                  >
-                    <Text style={[styles.secondaryLinkText, { color: palette.primary }]}>Scan prescription</Text>
-                  </Pressable>
-                </View>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.linkButton,
+                    pressed && styles.linkButtonPressed
+                  ]}
+                  onPress={() => openCreateMedication()}
+                >
+                  <Text style={[styles.linkButtonText, { color: palette.primary }]}>Add medication</Text>
+                </Pressable>
               ) : (
                 <Text style={[styles.readOnlyLabel, { color: palette.textMuted }]}>View only</Text>
               )}
@@ -1006,6 +979,11 @@ export default function PlanScreen({ navigation, route }: Props) {
               onConfirmOverride={handleConfirmOccurrenceOverride}
               canManage={canManageMedications}
             />
+            {canManageMedications ? (
+              <Text style={[styles.sectionHelper, { color: palette.textMuted }]}>
+                Tip: Forward prescription emails so we can prefill details faster.
+              </Text>
+            ) : null}
           </View>
         ) : medicationsState.loading ? null : (
           <View style={styles.section}>
@@ -1045,17 +1023,10 @@ export default function PlanScreen({ navigation, route }: Props) {
                   >
                     <Text style={styles.primaryCtaText}>Add manually</Text>
                   </Pressable>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.primaryCta,
-                      styles.primaryCtaOutline,
-                      pressed && styles.primaryCtaPressed
-                    ]}
-                    onPress={openMedicationScanner}
-                  >
-                    <Text style={[styles.primaryCtaText, { color: palette.primary }]}>Scan prescription</Text>
-                  </Pressable>
                 </View>
+                <Text style={[styles.emptyHelper, { color: palette.textMuted }]}>
+                  Tip: Forward prescription emails to keep everything in sync.
+                </Text>
               ) : (
                 <Text style={[styles.readOnlyHelper, { color: palette.textMuted }]}>Need changes? Ask the plan owner to add the prescription.</Text>
               )}
@@ -1474,11 +1445,6 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
       alignItems: 'center',
       justifyContent: 'space-between',
     },
-    sectionActions: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing(1.25)
-    },
     sectionTitleRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -1496,6 +1462,10 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
       fontSize: 13,
       color: palette.textMuted,
     },
+    sectionHelper: {
+      fontSize: 12,
+      marginTop: spacing(1),
+    },
     linkButton: {
       paddingHorizontal: spacing(1),
       paddingVertical: spacing(0.5),
@@ -1505,17 +1475,6 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
       opacity: 0.8
     },
     linkButtonText: {
-      fontSize: 13,
-      fontWeight: '600'
-    },
-    secondaryLinkButton: {
-      paddingHorizontal: spacing(1),
-      paddingVertical: spacing(0.5),
-      borderRadius: radius.sm,
-      borderWidth: 1,
-      borderColor: palette.textMuted
-    },
-    secondaryLinkText: {
       fontSize: 13,
       fontWeight: '600'
     },
@@ -1615,16 +1574,16 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
       marginTop: spacing(1),
       gap: spacing(1.25)
     },
+    emptyHelper: {
+      marginTop: spacing(1),
+      fontSize: 13,
+      textAlign: 'center'
+    },
     primaryCta: {
       paddingHorizontal: spacing(3),
       paddingVertical: spacing(1.25),
       borderRadius: radius.sm,
       alignItems: 'center'
-    },
-    primaryCtaOutline: {
-      borderWidth: 1,
-      borderColor: palette.primary,
-      backgroundColor: 'transparent'
     },
     primaryCtaPressed: {
       opacity: 0.9
