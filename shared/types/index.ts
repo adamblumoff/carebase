@@ -557,7 +557,6 @@ export interface UploadPhotoResponse {
   bill?: Bill | null;
   extracted?: BillCreateRequest | null;
   overdue?: boolean;
-  medicationDraft?: MedicationDraft | null;
   ocr?: {
     preview: string;
     storageKey: string | null;
