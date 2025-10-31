@@ -5,9 +5,16 @@ import type {
   MedicationIntakeStatus,
   MedicationWithDetails
 } from '@carebase/shared';
-import { parseServerDate } from '../../../utils/date';
+import { formatDateKeyInZone, parseServerDate } from '../../../utils/date';
 
 const OCCURRENCE_LIMIT = 3;
+const DEVICE_TIME_ZONE = (() => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
+  } catch {
+    return 'UTC';
+  }
+})();
 
 export interface MedicationSummaryOccurrence {
   intakeId: number;
@@ -58,12 +65,48 @@ function buildOccurrenceSummary(
     .slice()
     .sort((a, b) => toDate(a.occurrenceDate).getTime() - toDate(b.occurrenceDate).getTime());
 
-  const todayKey = toDateKey(new Date());
-  const todays = occurrences.filter((occurrence) => toDateKey(occurrence.occurrenceDate) === todayKey);
-  const futurePending = occurrences.filter(
-    (occurrence) =>
-      toDateKey(occurrence.occurrenceDate) > todayKey && occurrence.status === 'pending'
-  );
+  const occurrenceDateMeta = new Map<number, { key: string; zoneToday: string }>();
+  const parseScheduled = (value: unknown): Date | null => {
+    if (!value) return null;
+    if (value instanceof Date) return value;
+    if (typeof value === 'string') return parseServerDate(value);
+    return null;
+  };
+
+  occurrences.forEach((occurrence) => {
+    const intake = medication.upcomingIntakes.find((item) => item.id === occurrence.intakeId) ?? null;
+    const scheduled = intake ? parseScheduled(intake.scheduledFor) : null;
+    let reference = occurrence.occurrenceDate;
+    const dose = occurrence.doseId != null ? doseMap.get(occurrence.doseId) ?? null : null;
+    const zone = dose?.timezone ?? DEVICE_TIME_ZONE;
+    if (scheduled) {
+      const occurrenceKey = formatDateKeyInZone(reference, zone);
+      const scheduledKey = formatDateKeyInZone(scheduled, zone);
+      if (scheduledKey !== occurrenceKey) {
+        reference = scheduled;
+      }
+    }
+    const key = formatDateKeyInZone(reference, zone);
+    const zoneToday = formatDateKeyInZone(new Date(), zone);
+    occurrenceDateMeta.set(occurrence.intakeId, { key, zoneToday });
+  });
+
+  const todays = occurrences.filter((occurrence) => {
+    const meta = occurrenceDateMeta.get(occurrence.intakeId);
+    return meta ? meta.key === meta.zoneToday : false;
+  });
+  const futurePending = occurrences.filter((occurrence) => {
+    if (occurrence.status !== 'pending') {
+      return false;
+    }
+    const meta = occurrenceDateMeta.get(occurrence.intakeId);
+    if (!meta) {
+      const fallback = formatDateKeyInZone(occurrence.occurrenceDate, DEVICE_TIME_ZONE);
+      const fallbackToday = formatDateKeyInZone(new Date(), DEVICE_TIME_ZONE);
+      return fallback > fallbackToday;
+    }
+    return meta.key > meta.zoneToday;
+  });
 
   const summaries: MedicationSummaryOccurrence[] = [];
   const summaryById = new Map<number, MedicationSummaryOccurrence>();

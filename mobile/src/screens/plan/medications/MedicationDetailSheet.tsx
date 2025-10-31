@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import type { MedicationDoseOccurrence, MedicationIntakeStatus, MedicationWithDetails } from '@carebase/shared';
 import { useTheme, spacing, radius } from '../../../theme';
-import { formatDisplayDate, formatDisplayTime, parseServerDate } from '../../../utils/date';
+import { formatDateKeyInZone, formatDisplayDate, formatDisplayTime, parseServerDate } from '../../../utils/date';
 import { computeMedicationDailyCount } from './useMedicationSummary';
 
 interface MedicationDetailSheetProps {
@@ -36,10 +36,13 @@ const STATUS_LABELS: Record<MedicationIntakeStatus, string> = {
   expired: 'Expired'
 };
 
-function toDateKey(value: Date | string): string {
-  const date = value instanceof Date ? value : new Date(value);
-  return date.toISOString().slice(0, 10);
-}
+const DEVICE_TIME_ZONE = (() => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
+  } catch {
+    return 'UTC';
+  }
+})();
 
 function formatScheduledLabel(scheduledFor: string | null): string | null {
   if (!scheduledFor) return null;
@@ -69,7 +72,8 @@ export function MedicationDetailSheet({
     upcomingById,
     dailyCount,
     activeDoseCount,
-    doseById
+    doseById,
+    metaByIntake
   } = useMemo((): {
     todayOccurrences: MedicationDoseOccurrence[];
     historyOccurrences: MedicationDoseOccurrence[];
@@ -77,6 +81,7 @@ export function MedicationDetailSheet({
     dailyCount: ReturnType<typeof computeMedicationDailyCount> | null;
     activeDoseCount: number;
     doseById: Map<number, MedicationWithDetails['doses'][number]>;
+    metaByIntake: Map<number, { key: string; zoneToday: string }>;
   } => {
     if (!medication) {
       return {
@@ -98,18 +103,56 @@ export function MedicationDetailSheet({
       }
     });
 
-    const todayKey = toDateKey(new Date());
     const occurrences = (medication.occurrences ?? []) as MedicationDoseOccurrence[];
+    const parseScheduled = (value: unknown): Date | null => {
+      if (!value) return null;
+      if (value instanceof Date) return value;
+      if (typeof value === 'string') return parseServerDate(value);
+      return null;
+    };
 
-    const today = occurrences.filter((occurrence) => toDateKey(occurrence.occurrenceDate) === todayKey);
+    const metaByIntake = new Map<number, { key: string; zoneToday: string }>();
+    occurrences.forEach((occurrence) => {
+      const intake = medication.upcomingIntakes.find((item) => item.id === occurrence.intakeId) ?? null;
+      const scheduled = intake ? parseScheduled(intake.scheduledFor) : null;
+      let reference = occurrence.occurrenceDate;
+      const dose = occurrence.doseId != null ? doseMap.get(occurrence.doseId) ?? null : null;
+      const zone = dose?.timezone ?? DEVICE_TIME_ZONE;
+      if (scheduled) {
+        const occurrenceKey = formatDateKeyInZone(reference, zone);
+        const scheduledKey = formatDateKeyInZone(scheduled, zone);
+        if (scheduledKey !== occurrenceKey) {
+          reference = scheduled;
+        }
+      }
+      metaByIntake.set(occurrence.intakeId, {
+        key: formatDateKeyInZone(reference, zone),
+        zoneToday: formatDateKeyInZone(new Date(), zone)
+      });
+    });
+
+    const today = occurrences.filter((occurrence) => {
+      const meta = metaByIntake.get(occurrence.intakeId);
+      return meta ? meta.key === meta.zoneToday : false;
+    });
     const history = occurrences
-      .filter((occurrence) => toDateKey(occurrence.occurrenceDate) !== todayKey)
-      .sort((a, b) => toDateKey(b.occurrenceDate).localeCompare(toDateKey(a.occurrenceDate)));
+      .filter((occurrence) => {
+        const meta = metaByIntake.get(occurrence.intakeId);
+        return meta ? meta.key !== meta.zoneToday : true;
+      })
+      .sort((a, b) => {
+        const metaA = metaByIntake.get(a.intakeId);
+        const metaB = metaByIntake.get(b.intakeId);
+        const keyA = metaA ? metaA.key : formatDateKeyInZone(a.occurrenceDate, DEVICE_TIME_ZONE);
+        const keyB = metaB ? metaB.key : formatDateKeyInZone(b.occurrenceDate, DEVICE_TIME_ZONE);
+        return keyB.localeCompare(keyA);
+      });
 
     const dedupedHistory: MedicationDoseOccurrence[] = [];
     const seenHistoryKeys = new Set<string>();
     history.forEach((occurrence) => {
-      const dedupeKey = `${occurrence.intakeId}-${toDateKey(occurrence.occurrenceDate)}`;
+      const meta = metaByIntake.get(occurrence.intakeId);
+      const dedupeKey = `${occurrence.intakeId}-${meta ? meta.key : formatDateKeyInZone(occurrence.occurrenceDate, DEVICE_TIME_ZONE)}`;
       if (seenHistoryKeys.has(dedupeKey)) {
         return;
       }
@@ -126,7 +169,8 @@ export function MedicationDetailSheet({
       upcomingById: upcomingMap,
       dailyCount: dailyCountSummary,
       activeDoseCount,
-      doseById: doseMap
+      doseById: doseMap,
+      metaByIntake
     };
   }, [medication]);
 
@@ -381,7 +425,8 @@ export function MedicationDetailSheet({
 
                     return (
                       <View
-                        key={`history-${occurrence.intakeId}-${toDateKey(occurrence.occurrenceDate)}-${historyKeySuffix}`}
+                        key={`history-${occurrence.intakeId}-${(metaByIntake.get(occurrence.intakeId)?.key)
+                          ?? formatDateKeyInZone(occurrence.occurrenceDate, DEVICE_TIME_ZONE)}-${historyKeySuffix}`}
                         style={styles.historyRow}
                       >
                         <View>

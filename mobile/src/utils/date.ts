@@ -34,3 +34,39 @@ export const formatForPayload = (date: Date): string =>
   `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
     date.getHours()
   )}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+
+const resolveTimeZone = (timeZone?: string): string => {
+  if (timeZone && timeZone.trim().length > 0) {
+    return timeZone.trim();
+  }
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
+  } catch {
+    return 'UTC';
+  }
+};
+
+export const formatDateKeyInZone = (input: DateInput, timeZone?: string): string => {
+  const date = coerceDate(input);
+  if (!date) return '';
+  const zone = resolveTimeZone(timeZone);
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: zone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  let year = '1970';
+  let month = '01';
+  let day = '01';
+  for (const part of formatter.formatToParts(date)) {
+    if (part.type === 'year') {
+      year = part.value;
+    } else if (part.type === 'month') {
+      month = part.value;
+    } else if (part.type === 'day') {
+      day = part.value;
+    }
+  }
+  return `${year}-${month}-${day}`;
+};

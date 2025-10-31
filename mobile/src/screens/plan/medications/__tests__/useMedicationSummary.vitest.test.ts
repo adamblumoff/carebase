@@ -212,6 +212,75 @@ describe('useMedicationSummary', () => {
 
     expect(result.current[0]?.nextOccurrenceLabel).toBe('Evening');
   });
+
+  it('returns both occurrences when occurrence dates straddle UTC midnight', () => {
+    vi.setSystemTime(new Date('2025-02-28T12:00:00Z'));
+    const meds = [
+      buildMedication({
+        doses: [
+          buildDose({ id: 1, label: 'Morning', timezone: 'Pacific/Auckland' }),
+          buildDose({ id: 2, label: 'Night', timezone: 'Pacific/Auckland', timeOfDay: '20:00:00' })
+        ],
+        upcomingIntakes: [
+          {
+            id: 11,
+            medicationId: 1,
+            doseId: 1,
+            scheduledFor: '2025-03-01T08:00:00+13:00',
+            acknowledgedAt: null,
+            status: 'pending',
+            actorUserId: null,
+            occurrenceDate: new Date('2025-03-01T00:00:00Z') as unknown as Date,
+            overrideCount: 0,
+            createdAt: new Date('2025-03-01T08:00:00+13:00') as unknown as Date,
+            updatedAt: new Date('2025-03-01T08:00:00+13:00') as unknown as Date
+          },
+          {
+            id: 12,
+            medicationId: 1,
+            doseId: 2,
+            scheduledFor: '2025-03-01T20:00:00+13:00',
+            acknowledgedAt: null,
+            status: 'pending',
+            actorUserId: null,
+            occurrenceDate: new Date('2025-03-01T00:00:00Z') as unknown as Date,
+            overrideCount: 0,
+            createdAt: new Date('2025-03-01T20:00:00+13:00') as unknown as Date,
+            updatedAt: new Date('2025-03-01T20:00:00+13:00') as unknown as Date
+          }
+        ],
+        occurrences: [
+          {
+            intakeId: 11,
+            medicationId: 1,
+            doseId: 1,
+            occurrenceDate: new Date('2025-02-28T00:00:00Z'),
+            status: 'pending',
+            acknowledgedAt: null,
+            acknowledgedByUserId: null,
+            overrideCount: 0,
+            history: []
+          },
+          {
+            intakeId: 12,
+            medicationId: 1,
+            doseId: 2,
+            occurrenceDate: new Date('2025-03-01T00:00:00Z'),
+            status: 'pending',
+            acknowledgedAt: null,
+            acknowledgedByUserId: null,
+            overrideCount: 0,
+            history: []
+          }
+        ]
+      })
+    ];
+
+    const { result } = renderHook(() => useMedicationSummary(meds));
+
+    expect(result.current[0]?.occurrences).toHaveLength(2);
+    expect(result.current[0]?.occurrences?.map((occ) => occ.label)).toEqual(['Morning', 'Night']);
+  });
 });
 
 describe('computeMedicationDailyCount', () => {
