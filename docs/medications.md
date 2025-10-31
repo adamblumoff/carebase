@@ -7,6 +7,7 @@ _Updated October 30, 2025_
 - Each scheduled dose now materialises as a **daily occurrence** (one per day per dose). Caregivers interact with a single checkbox that resets one hour before the next dose window. Historical timestamps remain available for compliance.
 - The backend continues to power Expo push reminders and now records reminder events in a dedicated table; the mobile client mirrors the next few pending occurrences via local notifications for resilience.
 - Hard deletes are supported for medications and individual occurrences while preserving an audit trail (`medication_deleted`, `medication_intake_deleted`) and re-seeding the pending occurrence when required.
+- Photo-based medication ingestion has been retired. Users import details via manual entry or by forwarding pharmacy emails, keeping bill-photo OCR dedicated to statements only.
 
 ## Domain Overview
 

@@ -116,7 +116,7 @@ npm run env:mobile:prod      # Expo → carebase.dev
 ### Navigation & Screens
 - React Navigation native stack in `src/navigation/AppNavigator.tsx` (registered via `navigationRef` so notifications can deep-link into the plan).
 - Key screens: `PlanScreen`, `AppointmentDetailScreen`, `BillDetailScreen`, `SettingsScreen`, `CameraScreen`.
-- The plan screen hosts the medication summary list, detail sheet, and add/edit flow. Owners can launch OCR via the camera intent; collaborators see the same rows but without quick actions.
+- The plan screen hosts the medication summary list, detail sheet, and add/edit flow. Owners add medications manually or from forwarded emails; the camera flow now handles bill uploads only. Collaborators see the same rows but without quick actions.
 - Settings hosts collaborator management, Google Calendar controls, and logout.
 
 ### Theming & UI
