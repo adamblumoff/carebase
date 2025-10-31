@@ -1012,21 +1012,23 @@ export default function PlanScreen({ navigation, route }: Props) {
                 When the plan owner adds medications, they’ll show up here with upcoming doses and quick actions.
               </Text>
               {canManageMedications ? (
-                <View style={styles.emptyActions}>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.primaryCta,
-                      { backgroundColor: palette.primary },
-                      pressed && styles.primaryCtaPressed
-                    ]}
-                    onPress={() => openCreateMedication()}
-                  >
-                    <Text style={styles.primaryCtaText}>Add manually</Text>
-                  </Pressable>
-                </View>
-                <Text style={[styles.emptyHelper, { color: palette.textMuted }]}>
-                  Tip: Forward prescription emails to keep everything in sync.
-                </Text>
+                <>
+                  <View style={styles.emptyActions}>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.primaryCta,
+                        { backgroundColor: palette.primary },
+                        pressed && styles.primaryCtaPressed
+                      ]}
+                      onPress={() => openCreateMedication()}
+                    >
+                      <Text style={styles.primaryCtaText}>Add manually</Text>
+                    </Pressable>
+                  </View>
+                  <Text style={[styles.emptyHelper, { color: palette.textMuted }]}>
+                    Tip: Forward prescription emails to keep everything in sync.
+                  </Text>
+                </>
               ) : (
                 <Text style={[styles.readOnlyHelper, { color: palette.textMuted }]}>Need changes? Ask the plan owner to add the prescription.</Text>
               )}
