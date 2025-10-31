@@ -13,7 +13,7 @@ describe('MedicationSummaryList', () => {
   it('renders medication cards and emits selection', () => {
     const onSelect = vi.fn();
     const onToggle = vi.fn().mockResolvedValue(undefined);
-    const onConfirmOverride = vi.fn().mockResolvedValue(undefined);
+    const onUndo = vi.fn().mockResolvedValue(undefined);
     const items: MedicationSummaryItem[] = [
       {
         id: 1,
@@ -49,7 +49,7 @@ describe('MedicationSummaryList', () => {
         items={items}
         onSelect={onSelect}
         onToggleOccurrence={onToggle}
-        onConfirmOverride={onConfirmOverride}
+        onUndoOccurrence={onUndo}
         canManage
       />
     );

@@ -9,7 +9,7 @@ interface MedicationSummaryListProps {
   items: MedicationSummaryItem[];
   onSelect: (medicationId: number) => void;
   onToggleOccurrence: (medicationId: number, intakeId: number, status?: MedicationIntakeStatus) => Promise<void>;
-  onConfirmOverride: (medicationId: number, intakeId: number, status?: MedicationIntakeStatus) => Promise<void>;
+  onUndoOccurrence: (medicationId: number, intakeId: number) => Promise<void>;
   canManage: boolean;
 }
 
@@ -17,7 +17,7 @@ export function MedicationSummaryList({
   items,
   onSelect,
   onToggleOccurrence,
-  onConfirmOverride,
+  onUndoOccurrence,
   canManage
 }: MedicationSummaryListProps) {
   const { palette } = useTheme();
@@ -55,7 +55,7 @@ export function MedicationSummaryList({
           text: 'Override',
           style: 'destructive',
           onPress: () => {
-            void onConfirmOverride(item.id, occurrenceId, status);
+            void onUndoOccurrence(item.id, occurrenceId);
           }
         }
       ]

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MedicationWithDetails } from '@carebase/shared';
 import { MedicationDetailSheet } from '../MedicationDetailSheet';
 import { ThemeProvider } from '../../../../theme';
+import { Alert } from 'react-native';
 
 vi.mock('react-native', async () => {
   const actual = await vi.importActual<typeof import('react-native')>('react-native');
@@ -147,11 +148,15 @@ describe('MedicationDetailSheet', () => {
     const medication = buildMedication();
     const onClose = vi.fn();
     const onToggleOccurrence = vi.fn().mockResolvedValue(undefined);
-    const onConfirmOverride = vi.fn().mockResolvedValue(undefined);
     const onUndoOccurrence = vi.fn().mockResolvedValue(undefined);
     const onEdit = vi.fn();
     const onDeleteMedication = vi.fn();
     const onDeleteIntake = vi.fn();
+    const alertSpy = vi.spyOn(Alert, 'alert').mockImplementation((_title, _message, buttons) => {
+      const destructive = buttons?.find((button) => button?.style === 'destructive');
+      destructive?.onPress?.();
+      return 1;
+    });
 
     renderWithTheme(
       <MedicationDetailSheet
@@ -160,7 +165,6 @@ describe('MedicationDetailSheet', () => {
         canManage
         onClose={onClose}
         onToggleOccurrence={async (id, status) => onToggleOccurrence(id, status)}
-        onConfirmOverride={async (id, status) => onConfirmOverride(id, status)}
         onUndoOccurrence={async (id) => onUndoOccurrence(id)}
         onEdit={onEdit}
         onDeleteMedication={async () => onDeleteMedication()}
@@ -190,14 +194,13 @@ describe('MedicationDetailSheet', () => {
     fireEvent.click(screen.getAllByText('Undo')[0]);
     expect(onUndoOccurrence).toHaveBeenCalledWith(203);
 
-    fireEvent.click(screen.getByText('Override'));
-    expect(onConfirmOverride).toHaveBeenCalledWith(203, 'taken');
-
     fireEvent.click(screen.getByText('Delete medication'));
     expect(onDeleteMedication).toHaveBeenCalled();
 
     fireEvent.click(screen.getByText('Close'));
     expect(onClose).toHaveBeenCalled();
+
+    alertSpy.mockRestore();
   });
 
   it('displays daily dose count pill states', () => {
@@ -209,7 +212,6 @@ describe('MedicationDetailSheet', () => {
       canManage: false,
       onClose: vi.fn(),
       onToggleOccurrence: async () => undefined,
-      onConfirmOverride: async () => undefined,
       onUndoOccurrence: async () => undefined,
       onEdit: vi.fn(),
       onDeleteMedication: async () => undefined,
@@ -274,27 +276,5 @@ describe('MedicationDetailSheet', () => {
     expect(takenPill.style.color).toBe('rgb(22, 163, 74)');
     expect(takenPill.parentElement?.style.backgroundColor).toBe('rgb(220, 252, 231)');
 
-    const overrideMedication: MedicationWithDetails = {
-      ...takenMedication,
-      occurrences: [
-        {
-          ...takenMedication.occurrences[0]!,
-          overrideCount: 1
-        }
-      ]
-    };
-
-    utils.rerender(
-      <ThemeProvider>
-        <MedicationDetailSheet
-          medication={overrideMedication}
-          {...commonProps}
-        />
-      </ThemeProvider>
-    );
-
-    const overridePill = screen.getByText('2/1');
-    expect(overridePill.style.color).toBe('rgb(220, 38, 38)');
-    expect(overridePill.parentElement?.style.backgroundColor).toBe('rgb(254, 226, 226)');
   });
 });

@@ -60,11 +60,6 @@ interface UseMedicationsResult {
     nextStatus?: MedicationIntakeStatus
   ) => Promise<MedicationWithDetails>;
   undoOccurrence: (medicationId: number, intakeId: number) => Promise<MedicationWithDetails>;
-  confirmOverride: (
-    medicationId: number,
-    intakeId: number,
-    status?: MedicationIntakeStatus
-  ) => Promise<MedicationWithDetails>;
 }
 
 const RELEVANT_ITEM_TYPES: PlanItemDelta['itemType'][] = ['plan', 'appointment', 'bill'];
@@ -103,13 +98,10 @@ function buildStatusPatch(
   userId: number | null,
   occurrence: MedicationDoseOccurrence | undefined
 ): OccurrencePatch {
-  const isOverride = occurrence?.status === nextStatus && nextStatus !== 'pending';
   const timestamp = nextStatus === 'pending' ? null : new Date();
   const overrideCount = nextStatus === 'pending'
     ? 0
-    : isOverride
-      ? (occurrence?.overrideCount ?? 0) + 1
-      : occurrence?.overrideCount ?? 0;
+    : occurrence?.overrideCount ?? 0;
 
   return {
     occurrence: {
@@ -325,15 +317,6 @@ export function useMedications(options?: UseMedicationsOptions): UseMedicationsR
     [setOccurrenceStatus]
   );
 
-  const confirmOverride = useCallback(
-    async (
-      medicationId: number,
-      intakeId: number,
-      status: MedicationIntakeStatus = 'taken'
-    ) => setOccurrenceStatus(medicationId, intakeId, status),
-    [setOccurrenceStatus]
-  );
-
   const api = useMemo(() => ({
     refresh: loadMedications,
     createMedication: (payload: MedicationCreateRequest) =>
@@ -361,8 +344,7 @@ export function useMedications(options?: UseMedicationsOptions): UseMedicationsR
     deleteMedication,
     deleteIntake,
     toggleOccurrenceStatus,
-    undoOccurrence,
-    confirmOverride
+    undoOccurrence
   }), [
     loadMedications,
     mutationWrapper,
@@ -370,8 +352,7 @@ export function useMedications(options?: UseMedicationsOptions): UseMedicationsR
     deleteMedication,
     deleteIntake,
     toggleOccurrenceStatus,
-    undoOccurrence,
-    confirmOverride
+    undoOccurrence
   ]);
 
   return {

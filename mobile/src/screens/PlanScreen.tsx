@@ -523,14 +523,6 @@ export default function PlanScreen({ navigation, route }: Props) {
     [handleToggleOccurrence, selectedMedicationId]
   );
 
-  const confirmOverrideForSelected = useCallback(
-    (intakeId: number, status?: MedicationIntakeStatus) => {
-      if (!selectedMedicationId) return Promise.resolve();
-      return handleConfirmOccurrenceOverride(selectedMedicationId, intakeId, status);
-    },
-    [handleConfirmOccurrenceOverride, selectedMedicationId]
-  );
-
   const undoOccurrenceForSelected = useCallback(
     (intakeId: number) => {
       if (!selectedMedicationId) return Promise.resolve();
@@ -543,14 +535,6 @@ export default function PlanScreen({ navigation, route }: Props) {
     (medicationId: number, intakeId: number, status?: MedicationIntakeStatus) =>
       handleMedicationMutator(() =>
         medicationsState.toggleOccurrenceStatus(medicationId, intakeId, status)
-      ),
-    [handleMedicationMutator, medicationsState]
-  );
-
-  const handleConfirmOccurrenceOverride = useCallback(
-    (medicationId: number, intakeId: number, status?: MedicationIntakeStatus) =>
-      handleMedicationMutator(() =>
-        medicationsState.confirmOverride(medicationId, intakeId, status)
       ),
     [handleMedicationMutator, medicationsState]
   );
@@ -976,7 +960,7 @@ export default function PlanScreen({ navigation, route }: Props) {
               items={medicationSummary}
               onSelect={openMedicationDetail}
               onToggleOccurrence={handleToggleOccurrence}
-              onConfirmOverride={handleConfirmOccurrenceOverride}
+              onUndoOccurrence={handleUndoOccurrence}
               canManage={canManageMedications}
             />
             {canManageMedications ? (
@@ -1089,7 +1073,6 @@ export default function PlanScreen({ navigation, route }: Props) {
         canManage={canManageMedications}
         onClose={closeMedicationDetail}
         onToggleOccurrence={toggleOccurrenceForSelected}
-        onConfirmOverride={confirmOverrideForSelected}
         onUndoOccurrence={undoOccurrenceForSelected}
         onEdit={openEditMedication}
         onDeleteMedication={handleDeleteMedication}

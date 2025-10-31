@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
+  Alert,
   ActivityIndicator,
   Modal,
   Pressable,
@@ -20,7 +21,6 @@ interface MedicationDetailSheetProps {
   canManage: boolean;
   onClose: () => void;
   onToggleOccurrence: (intakeId: number, status?: MedicationIntakeStatus) => Promise<void>;
-  onConfirmOverride: (intakeId: number, status?: MedicationIntakeStatus) => Promise<void>;
   onUndoOccurrence: (intakeId: number) => Promise<void>;
   onEdit: () => void;
   onDeleteMedication: () => Promise<void>;
@@ -56,7 +56,6 @@ export function MedicationDetailSheet({
   canManage,
   onClose,
   onToggleOccurrence,
-  onConfirmOverride,
   onUndoOccurrence,
   onEdit,
   onDeleteMedication,
@@ -174,6 +173,23 @@ export function MedicationDetailSheet({
     };
   }, [medication]);
 
+  const requestUndo = useCallback((intakeId: number) => {
+    Alert.alert(
+      'Already recorded',
+      'You already marked this dose. Override the status?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Override',
+          style: 'destructive',
+          onPress: () => {
+            void onUndoOccurrence(intakeId);
+          }
+        }
+      ]
+    );
+  }, [onUndoOccurrence]);
+
   const renderDoseCountPill = () => {
     if (!medication) {
       return null;
@@ -190,18 +206,13 @@ export function MedicationDetailSheet({
       return null;
     }
 
-    const overrides = dailyCount?.overrideCount ?? 0;
-
     let textColor = palette.textMuted;
     let backgroundColor = palette.surfaceMuted;
 
     if (recorded === 0) {
       textColor = palette.textMuted;
       backgroundColor = palette.surfaceMuted;
-    } else if (recorded > denominator) {
-      textColor = palette.danger;
-      backgroundColor = '#fee2e2';
-    } else if (recorded === denominator && denominator > 0 && overrides === 0) {
+    } else if (denominator > 0 && recorded >= denominator) {
       textColor = palette.success;
       backgroundColor = '#dcfce7';
     } else {
@@ -353,32 +364,18 @@ export function MedicationDetailSheet({
                                 </Pressable>
                               </>
                             ) : (
-                              <>
-                                <Pressable
-                                  style={({ pressed }) => [
-                                    styles.intakeButton,
-                                    { backgroundColor: palette.surfaceMuted },
-                                    pressed && styles.intakeButtonPressed,
-                                    actionPending && styles.disabledAction
-                                  ]}
-                                  onPress={() => onUndoOccurrence(occurrence.intakeId)}
-                                  disabled={actionPending}
-                                >
-                                  <Text style={[styles.intakeButtonText, { color: palette.textPrimary }]}>Undo</Text>
-                                </Pressable>
-                                <Pressable
-                                  style={({ pressed }) => [
-                                    styles.intakeButton,
-                                    { backgroundColor: palette.primary },
-                                    pressed && styles.intakeButtonPressed,
-                                    actionPending && styles.disabledAction
-                                  ]}
-                                  onPress={() => onConfirmOverride(occurrence.intakeId, occurrence.status)}
-                                  disabled={actionPending}
-                                >
-                                  <Text style={styles.intakeButtonText}>Override</Text>
-                                </Pressable>
-                              </>
+                              <Pressable
+                                style={({ pressed }) => [
+                                  styles.intakeButton,
+                                  { backgroundColor: palette.surfaceMuted },
+                                  pressed && styles.intakeButtonPressed,
+                                  actionPending && styles.disabledAction
+                                ]}
+                                onPress={() => requestUndo(occurrence.intakeId)}
+                                disabled={actionPending}
+                              >
+                                <Text style={[styles.intakeButtonText, { color: palette.textPrimary }]}>Undo</Text>
+                              </Pressable>
                             )}
                           </View>
                         ) : (

@@ -37,7 +37,7 @@ Replace the current “Mark taken” button workflow with a caregiver-friendly d
 1. Extend `mobile/src/api/medications.ts` with response DTO containing `occurrences` (today + historical).
 2. Update `useMedications` hook to:
    - Store occurrence state per medication.
-   - Expose actions `toggleOccurrenceStatus`, `undoOccurrence`, `confirmOverride`.
+   - Expose actions `toggleOccurrenceStatus`, `undoOccurrence`.
    - Handle optimistic updates and fallback refetch.
 3. Refresh local notification sync to mirror only pending occurrences; cancel when status flips.
 

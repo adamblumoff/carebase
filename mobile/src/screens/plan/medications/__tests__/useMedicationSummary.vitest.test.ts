@@ -329,8 +329,8 @@ describe('computeMedicationDailyCount', () => {
 
     expect(summary.expectedCount).toBe(2);
     expect(summary.takenCount).toBe(1);
-    expect(summary.overrideCount).toBe(2);
-    expect(summary.recordedCount).toBe(3);
+    expect(summary.overrideCount).toBe(0);
+    expect(summary.recordedCount).toBe(1);
     expect(summary.skippedCount).toBe(1);
   });
 });

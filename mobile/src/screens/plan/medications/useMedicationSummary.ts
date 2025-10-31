@@ -216,7 +216,6 @@ export function computeMedicationDailyCount(
 
     if (occurrence.status === 'taken') {
       takenCount += 1;
-      overrideCount += occurrence.overrideCount ?? 0;
     } else if (occurrence.status === 'skipped') {
       skippedCount += 1;
     }
@@ -227,6 +226,6 @@ export function computeMedicationDailyCount(
     takenCount,
     skippedCount,
     overrideCount,
-    recordedCount: takenCount + overrideCount
+    recordedCount: takenCount
   };
 }
