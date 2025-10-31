@@ -235,10 +235,8 @@ describe('uploadPhoto controller', () => {
     );
   });
 
-  it('returns medication draft when medication intent is specified', async () => {
-    const extractMock = vi.spyOn(ocr, 'extractTextFromImage').mockResolvedValue(
-      'Lipitor 10 mg\nTake one tablet twice daily\n8 AM\n8 PM'
-    );
+  it('returns a 410 response when medication intent is specified', async () => {
+    const extractMock = vi.spyOn(ocr, 'extractTextFromImage');
     const storeFileMock = vi.spyOn(storage, 'storeFile');
     const storeTextMock = vi.spyOn(storage, 'storeText');
     const createSourceMock = vi.spyOn(queries, 'createSource');
@@ -262,18 +260,11 @@ describe('uploadPhoto controller', () => {
       res as Response
     );
 
-    expect(res.status).not.toHaveBeenCalled();
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({
-        medicationDraft: expect.objectContaining({
-          name: 'Lipitor 10 mg',
-          doses: expect.arrayContaining([
-            expect.objectContaining({ timeOfDay: '08:00', timezone: 'America/Chicago' })
-          ])
-        })
-      })
-    );
-    expect(extractMock).toHaveBeenCalledTimes(1);
+    expect(res.status).toHaveBeenCalledWith(410);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Medication photo scanning is no longer supported. Please add medications manually or forward prescription emails.'
+    });
+    expect(extractMock).not.toHaveBeenCalled();
     expect(storeFileMock).not.toHaveBeenCalled();
     expect(storeTextMock).not.toHaveBeenCalled();
     expect(createSourceMock).not.toHaveBeenCalled();

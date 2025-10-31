@@ -11,7 +11,6 @@ import {
 import { extractTextFromImage, getShortExcerpt } from '../../services/ocr.js';
 import { storeFile, storeText } from '../../services/storage.js';
 import { parseSource } from '../../services/parser.js';
-import { extractMedicationDraft } from '../../services/medicationOcr.js';
 import type { User, UploadPhotoResponse, ItemReviewStatus } from '@carebase/shared';
 
 export async function uploadPhoto(req: Request, res: Response): Promise<void> {
@@ -31,10 +30,13 @@ export async function uploadPhoto(req: Request, res: Response): Promise<void> {
     const intent = typeof (query as Record<string, unknown>).intent === 'string'
       ? String((query as Record<string, unknown>).intent).toLowerCase()
       : null;
-    const requestedTimezoneRaw = typeof (query as Record<string, unknown>).timezone === 'string'
-      ? String((query as Record<string, unknown>).timezone).trim()
-      : '';
-    const defaultTimezone = requestedTimezoneRaw.length > 0 ? requestedTimezoneRaw : 'America/New_York';
+
+    if (intent === 'medication') {
+      res.status(410).json({
+        error: 'Medication photo scanning is no longer supported. Please add medications manually or forward prescription emails.'
+      });
+      return;
+    }
 
     let ocrText = '';
     try {
@@ -44,24 +46,6 @@ export async function uploadPhoto(req: Request, res: Response): Promise<void> {
     }
 
     const ocrPreview = ocrText.substring(0, 200);
-
-    if (intent === 'medication') {
-      const textForExtraction = ocrText.length > 0 ? ocrText : req.file.originalname ?? '';
-      const draft = extractMedicationDraft(textForExtraction, defaultTimezone);
-
-      const medicationResponse: UploadPhotoResponse = {
-        success: true,
-        medicationDraft: draft,
-        ocr: {
-          preview: ocrPreview,
-          storageKey: null,
-          length: ocrText.length
-        }
-      };
-
-      res.json(medicationResponse);
-      return;
-    }
 
     const recipients = await findRecipientsByUserId(user.id);
     if (recipients.length === 0) {
