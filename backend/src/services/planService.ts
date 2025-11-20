@@ -11,7 +11,9 @@ import {
 import { NotFoundError } from '../utils/errors.js';
 import { toAppointmentPayload, toBillPayload, toCollaboratorPayload } from '../utils/planPayload.js';
 
-export async function buildPlanPayload(user: User, days: number = 7): Promise<PlanPayload> {
+const DEFAULT_PLAN_DAYS = Number.parseInt(process.env.PLAN_WINDOW_DAYS ?? '30', 10);
+
+export async function buildPlanPayload(user: User, days: number = DEFAULT_PLAN_DAYS): Promise<PlanPayload> {
   const recipients = await findRecipientsByUserId(user.id);
   let recipient = recipients[0];
   let collaboratorView = false;

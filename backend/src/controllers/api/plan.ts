@@ -19,7 +19,7 @@ export const getPlan = route(async (req: Request, res: Response) => {
     })
   );
 
-  const payload = await buildPlanPayload(user, days ?? 7);
+  const payload = await buildPlanPayload(user, days ?? undefined);
   res.json(payload);
 });
 
