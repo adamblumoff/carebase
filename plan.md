@@ -1,76 +1,57 @@
-# Plan: Medication Daily Checkbox Experience
+# Plan: Carebase Hardening & Simplification (Q4 2025)
 
-## Goal
-Replace the current “Mark taken” button workflow with a caregiver-friendly daily checkbox model that keeps precise audit history, resets before the next dose window, and continues to power reminders without introducing data clutter. Focus the changes on owners for now while preserving redundant timestamps for compliance.
+## Objectives
+- Reduce security and operational risk (webhooks, device storage, background jobs).
+- Simplify hotspots (Plan screen, medication service) without a rewrite.
+- Establish one path for schema management and observability.
 
-## Milestone 0 — Discovery & Alignment
-1. Confirm caregiver expectations via quick stakeholder review: single checkbox per scheduled dose, warning on double tap, no collaborator edits yet.
-2. Inventory existing reminder jobs/local notifications to understand how daily resets affect scheduling.
-3. Document compliance requirements: maintain historical timestamps even when the surface UI shows a single checkbox state.
+## Guiding Principles
+- Prefer incremental, test-backed changes; keep shared types/contracts as source of truth.
+- One API/service per concern; small React components/hooks over monolith screens.
+- Secure by default: shrink blast radius before adding features.
 
-## Milestone 1 — Data Model & Shared Types
-1. Extend `shared/types` with a `MedicationDoseOccurrence` shape capturing:
-   - `doseId`, `occurrenceDate`, `status`, `acknowledgedAt`, `acknowledgedByUserId`, `overrideCount`.
-   - `history`: ordered list of `(eventType, occurredAt, actorUserId)` to preserve multiple timestamps.
-2. Update backend zod schemas and shared request/response payloads to include new checkbox state plus history blocks.
-3. Adjust pg schema (single migration):
-   - Add `occurrence_date` (DATE) and `status` enum (`pending`, `taken`, `skipped`) to `medication_intakes`.
-   - Add `override_count` INT default 0.
-   - Create `medication_intake_events` table for redundant timestamp logging.
-   - Add unique constraint `(medication_id, dose_id, occurrence_date)`.
-4. backfill migration script to populate `occurrence_date` from `scheduled_for::date` and move historical duplicates into `medication_intake_events`.
+## Phase 0 — Quick Wins (Week 1)
+- **Mobile data-at-rest**: Move plan cache from AsyncStorage to `expo-secure-store` (fallback to encrypted blob if unsupported). Path: `mobile/src/plan/PlanProvider.tsx`.
+- **Google webhook verification**: Require `x-goog-channel-token` match; reject missing/invalid tokens. Path: `backend/src/services/googleSync/watchers.ts`.
+- **Job singleton**: Gate `startMedicationOccurrenceResetJob` and `startGoogleSyncPolling` behind `WORKER_ENABLED=true` (or `ROLE=worker`). Path: `backend/src/server.ts`.
+- **Rate-limit map pruning**: Add TTL cleanup to `rateLimitBuckets` to avoid unbounded growth. Path: `backend/src/routes/webhook.ts`.
+- **CORS/helmet**: Add minimal hardening: origin allowlist for API/Socket.IO, Helmet defaults. Path: `backend/src/server.ts`.
 
-## Milestone 2 — Backend Services & Scheduler
-1. Update `medicationService` helpers:
-   - New `getDailyOccurrences` that returns current-day intake with history.
-   - Replace `recordMedicationIntake` logic with `setDoseStatus` that toggles between `pending`, `taken`, `skipped`, increments `override_count`, and records events.
-2. Implement `resetDailyOccurrences` job:
-   - Runs hourly, looks one hour before each upcoming dose window (`time_of_day - 60 minutes` adjusted for timezone).
-   - Resets status back to `pending`, clears `acknowledgedAt`, and schedules reminders for the new occurrence.
-3. Modify reminder scheduler to:
-   - Cancel jobs when status becomes `taken` or `skipped`.
-   - Respect the one-hour pre-window reset (no duplicate notifications).
-4. Add `DELETE /api/medications/:id/intakes/:intakeId` guard to prevent removing current-day occurrence unless necessary (owner-only) — reuse existing delete path but ensure the daily checkbox stays consistent.
-5. Bump tests: services, reminders, contract suites verifying new fields and reset behavior.
+## Phase 1 — Schema & Data Hygiene (Week 2)
+- Pick a single schema source: keep `backend/src/db/schema.sql` + migrations; remove runtime `ensure*Schema` once migrations cover collaborators/Google tables.
+- Add migration to enforce webhook watch tokens (NOT NULL where expected) and sensible defaults.
+- Backfill indexes for medication intakes/occurrences if missing in prod.
 
-## Milestone 3 — Mobile API & State Management
-1. Extend `mobile/src/api/medications.ts` with response DTO containing `occurrences` (today + historical).
-2. Update `useMedications` hook to:
-   - Store occurrence state per medication.
-   - Expose actions `toggleOccurrenceStatus`, `undoOccurrence`.
-   - Handle optimistic updates and fallback refetch.
-3. Refresh local notification sync to mirror only pending occurrences; cancel when status flips.
+## Phase 2 — Service Decomposition (Week 3–4)
+- **Medication service split**: Extract occurrence reconciliation, reminder scheduling hooks, and intake mutations into separate modules with narrow interfaces. Add unit tests around conflict handling.
+- **Storage service**: Wrap `storeText/retrieveText` with size limits and MIME metadata; consider S3 adapter hook for production.
+- **Google sync**: Move watch management, token refresh, and delta scheduling into dedicated files with clear telemetry.
 
-## Milestone 4 — Mobile UI/UX Refresh
-1. Plan screen summary:
-   - Replace current “Mark taken” CTA with checkbox chips per active dose.
-   - Show completed items collapsed under “Completed today” with timestamp.
-   - Overdue state: red outline + “Overdue” pill.
-2. Medication detail sheet:
-   - “Today” section with checkbox cards, skip link, and “undo” control.
-   - “History” section: chronological list of past days with taken/skipped icons and times (read-only).
-3. Override flow:
-   - When a checked card is tapped again, show alert “You already marked this taken. Override?” with confirm/cancel.
-   - On confirm, increment override history and keep status `taken`.
-4. Disable collaborator interaction (checkbox controls hidden or disabled when `canManage` is false).
-5. Update tests: MedicationDetailSheet and PlanScreen integration to validate checkbox flow, override dialog, and historical rendering.
+## Phase 3 — Mobile UX & State (Week 3–4, parallel)
+- Break `PlanScreen` into:
+  - `PlanSummary` (appointments/bills),
+  - `ReviewModal`,
+  - `MedicationPanel` (list),
+  - `MedicationDetailSheet` stays but delegates occurrence controls to a new `MedicationOccurrenceList`.
+- Strengthen `useMedications`: memoized selectors, optimistic state helpers, and a tiny reducer to keep local/remote state aligned.
+- Add lightweight vitest/RTL coverage for the split components, keeping screens smoke-tested only.
 
-## Milestone 5 — Documentation & QA
-1. Update `docs/medications.md`, `docs/testing.md`, and `AGENTS.md` with checkbox model, reset timing, override warnings, and audit expectations.
-2. Add runbook steps for monitoring `medication_intake_events` growth and troubleshooting resets.
-3. Automated tests: run backend, contracts, mobile suites; add new coverage for reset scheduler (fake clock) and hook interactions.
-4. Manual QA checklist:
-   - Create medication, confirm checkbox resets an hour before next dose.
-   - Tap checkbox twice to verify warning and override logging.
-   - Ensure reminders stop after check and resume after auto-reset.
+## Phase 4 — Observability & Ops (Week 5)
+- Centralize metrics/logging (pino) with request IDs; emit job start/end + error metrics for Google sync and medication reset.
+- Add health checks: `/health` already exists—extend with DB + queue (job) status stubs.
+- Ship a runbook in `docs/operations.md` covering: rotating webhook tokens, clearing Clerk token cache, and checking reminder queues.
 
-## Dependencies & Risks
-- Reset job must respect timezones and daylight savings transitions; test thoroughly.
-- Storing history in `medication_intake_events` increases storage; plan retention/archival later.
-- Override flow must remain intuitive; too many alerts could frustrate caregivers.
+## Phase 5 — ORM Pilot (Optional, Week 5–6)
+- Pilot Drizzle (pg) on a bounded context (collaborators/recipients). Use existing Pool. Keep raw SQL for medication/google until confidence gained.
+- Generate types from `schema.sql`; ensure contract tests stay green. Abort if query plans regress.
+
+## Phase 6 — Testing & CI (Ongoing)
+- Expand contract tests to assert webhook token enforcement and new auth/cors headers.
+- Add unit tests for rate-limit TTL and job singleton guard.
+- Run full matrix: `npm run test:backend`, `npm run test --workspace=mobile`, `npm run test:contracts`, `npm run coverage`.
 
 ## Exit Criteria
-- Checkbox UI live for owners, collaborators view-only.
-- Backend stores daily status + redundant timestamps with audit-friendly history.
-- Reminder engine aligned with one-hour pre-reset rule.
-- Documentation and QA procedures updated; tests green across workspaces.
+- Sensitive payloads encrypted at rest on device; webhook endpoints require tokens.
+- Background jobs run once per deployment, observable via metrics/logs.
+- Plan screen and medication flows modular, tested, and easier to reason about.
+- Single schema path with migrations; optional ORM pilot validated or rolled back.
