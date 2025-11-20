@@ -11,6 +11,7 @@ import { findRecipientById } from '../db/queries/recipients.js';
 import { touchPlanForUser } from '../db/queries/plan.js';
 import { combineDateWithTimeZone } from '../utils/timezone.js';
 import { scheduleMedicationIntakeReminder } from '../services/medicationReminderScheduler.js';
+import { incrementMetric } from '../utils/metrics.js';
 
 const RESET_WINDOW_MINUTES = 60;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -69,10 +70,17 @@ export async function runMedicationOccurrenceReset(): Promise<void> {
     return;
   }
 
+  const startedAt = Date.now();
+  let createdCount = 0;
+  let processedMedications = 0;
+  console.info('[MedicationReset] Starting reset run', { medications: medications.length });
+  incrementMetric('job.medication_reset.run', 1);
+
   const now = new Date();
   const intakeSince = new Date(now.getTime() - LOOKBACK_DAYS * DAY_MS);
 
   for (const medication of medications) {
+    processedMedications += 1;
     let planTouched = false;
     try {
       const doses = await listMedicationDoses(medication.id);
@@ -137,6 +145,8 @@ export async function runMedicationOccurrenceReset(): Promise<void> {
         });
 
         intakeIndex.set(nextKey, created);
+        createdCount += 1;
+        incrementMetric('job.medication_reset.created', 1, { env: process.env.NODE_ENV ?? 'unknown' });
         await scheduleMedicationIntakeReminder({
           medicationId: medication.id,
           recipientId: medication.recipientId,
@@ -173,6 +183,13 @@ export async function runMedicationOccurrenceReset(): Promise<void> {
       console.error('[MedicationReset] Medication iteration failed', { medicationId: medication.id, error });
     }
   }
+
+  const durationMs = Date.now() - startedAt;
+  console.info('[MedicationReset] Completed reset run', {
+    medicationsProcessed: processedMedications,
+    created: createdCount,
+    durationMs
+  });
 }
 
 export function startMedicationOccurrenceResetJob(): void {
