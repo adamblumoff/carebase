@@ -38,6 +38,81 @@ interface PlanContextValue {
 }
 
 const PLAN_CACHE_KEY = 'plan_cache_v1';
+
+type SecureStoreModule = {
+  getItemAsync?: (key: string) => Promise<string | null>;
+  setItemAsync?: (
+    key: string,
+    value: string,
+    options?: { keychainAccessible?: unknown }
+  ) => Promise<void>;
+  deleteItemAsync?: (key: string) => Promise<void>;
+  WHEN_UNLOCKED_THIS_DEVICE_ONLY?: unknown;
+};
+
+let SecureStore: SecureStoreModule | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  SecureStore = require('expo-secure-store');
+} catch {
+  SecureStore = null;
+}
+
+async function readPlanCache(): Promise<string | null> {
+  try {
+    if (SecureStore?.getItemAsync) {
+      const secureCached = await SecureStore.getItemAsync(PLAN_CACHE_KEY);
+      if (secureCached) {
+        await AsyncStorage.removeItem(PLAN_CACHE_KEY).catch(() => {});
+        return secureCached;
+      }
+    }
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn('Failed to read secure plan cache', error);
+    }
+  }
+
+  try {
+    return await AsyncStorage.getItem(PLAN_CACHE_KEY);
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn('Failed to read plan cache', error);
+    }
+  }
+  return null;
+}
+
+async function writePlanCache(value: string): Promise<void> {
+  if (!value) return;
+  try {
+    if (SecureStore?.setItemAsync) {
+      await SecureStore.setItemAsync(PLAN_CACHE_KEY, value, {
+        keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY
+      } as any);
+      await AsyncStorage.removeItem(PLAN_CACHE_KEY).catch(() => {});
+      return;
+    }
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn('Failed to write secure plan cache', error);
+    }
+  }
+
+  try {
+    await AsyncStorage.setItem(PLAN_CACHE_KEY, value);
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn('Failed to write plan cache', error);
+    }
+  }
+}
+
+async function clearPlanCache(): Promise<void> {
+  SecureStore?.deleteItemAsync?.(PLAN_CACHE_KEY).catch(() => {});
+  AsyncStorage.removeItem(PLAN_CACHE_KEY).catch(() => {});
+}
+
 const MAX_FETCH_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 600;
 const VERSION_POLL_INTERVAL_MS = 15000;
@@ -165,7 +240,7 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
     setPlan(normalized);
     latestVersionRef.current =
       typeof normalized.planVersion === 'number' ? normalized.planVersion : 0;
-    AsyncStorage.setItem(PLAN_CACHE_KEY, JSON.stringify(normalized)).catch(() => {
+    writePlanCache(JSON.stringify(normalized)).catch(() => {
       // cache failures are non-blocking
     });
   }, []);
@@ -279,6 +354,7 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
       cacheLoadedRef.current = false;
       latestVersionRef.current = 0;
       setPlan(null);
+      clearPlanCache().catch(() => {});
       setError(null);
       setRefreshing(false);
       setLoading(false);
@@ -304,7 +380,7 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const cached = await AsyncStorage.getItem(PLAN_CACHE_KEY);
+        const cached = await readPlanCache();
         if (cached && !cancelled) {
           const parsed = normalizePlanPayload(JSON.parse(cached));
           cacheLoadedRef.current = true;

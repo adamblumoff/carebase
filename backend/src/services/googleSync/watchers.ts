@@ -85,6 +85,7 @@ export async function ensureCalendarWatchForUser(
 ): Promise<GoogleWatchChannel> {
   const normalizedCalendarId = normalizeCalendarId(calendarId);
   if (isTestEnv && testSchedulerOverride) {
+    const testToken = crypto.randomBytes(16).toString('hex');
     const existingTestChannel = await findGoogleWatchChannelByUser(userId, normalizedCalendarId, clerkUserId);
     if (existingTestChannel) {
       return existingTestChannel;
@@ -97,7 +98,7 @@ export async function ensureCalendarWatchForUser(
       resourceId: `test-resource-${userId}-${normalizedCalendarId}`,
       resourceUri: null,
       expiration: new Date(Date.now() + WATCH_RENEWAL_LOOKAHEAD_MS * 2),
-      channelToken: null
+      channelToken: testToken
     });
   }
 
@@ -232,6 +233,33 @@ export async function handleGoogleWatchNotification(
 
   if (!channel) {
     logWarn(`No matching Google watch channel for ${channelId}`);
+    return;
+  }
+
+  const tokenRequired = !isTestEnv;
+  if (tokenRequired) {
+    if (!channel.channelToken) {
+      logWarn('Google webhook missing stored token; ignoring notification', {
+        channelId,
+        resourceId,
+        messageType
+      });
+      return;
+    }
+    if (!channelToken || channelToken !== channel.channelToken) {
+      logWarn('Google webhook token mismatch; ignoring notification', {
+        channelId,
+        resourceId,
+        messageType
+      });
+      return;
+    }
+  } else if (channel.channelToken && channelToken && channelToken !== channel.channelToken) {
+    logWarn('Google webhook token mismatch in test environment; ignoring notification', {
+      channelId,
+      resourceId,
+      messageType
+    });
     return;
   }
 

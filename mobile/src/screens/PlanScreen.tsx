@@ -12,19 +12,12 @@ import {
   ActivityIndicator,
   Pressable,
   Animated,
-  Modal,
-  TextInput,
   Alert,
-  TouchableWithoutFeedback,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
 import type {
-  BillStatus,
-  PendingReviewDraft,
   PendingReviewItem,
   MedicationWithDetails,
   MedicationDraft,
@@ -37,8 +30,6 @@ import { usePlan } from '../plan/PlanProvider';
 import { formatCurrency } from '../utils/format';
 import { decideRefreshToast, findCollaboratorEmail, summarizePlan } from './plan/presenter';
 import { usePendingReviews } from '../hooks/usePendingReviews';
-import type { ReviewBillPayload } from '../api/review';
-import DateTimePickerModal from '../components/DateTimePickerModal';
 import { useMedications } from '../hooks/useMedications';
 import { useMedicationSummary } from './plan/medications/useMedicationSummary';
 import { MedicationSummaryList } from './plan/medications/MedicationSummaryList';
@@ -49,22 +40,7 @@ import {
   type DoseFormValue
 } from './plan/medications/MedicationFormSheet';
 import { useAuth } from '../auth/AuthContext';
-
-type DraftFormState = {
-  amount: string;
-  dueDate: string;
-  statementDate: string;
-  payUrl: string;
-  status: BillStatus;
-  notes: string;
-};
-
-const toIsoDate = (value: Date): string => {
-  const year = value.getFullYear();
-  const month = `${value.getMonth() + 1}`.padStart(2, '0');
-  const day = `${value.getDate()}`.padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
+import { PendingReviewModal } from './plan/PendingReviewModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Plan'>;
 
@@ -98,18 +74,6 @@ export default function PlanScreen({ navigation, route }: Props) {
   const canManageMedications = viewerCollaborator ? viewerCollaborator.role === 'owner' : false;
   const [reviewModalVisible, setReviewModalVisible] = useState(false);
   const [selectedReview, setSelectedReview] = useState<PendingReviewItem | null>(null);
-  const [draftForm, setDraftForm] = useState<DraftFormState>({
-    amount: '',
-    dueDate: '',
-    statementDate: '',
-    payUrl: '',
-    status: 'todo',
-    notes: '',
-  });
-  const [dueDateValue, setDueDateValue] = useState<Date | null>(null);
-  const [statementDateValue, setStatementDateValue] = useState<Date | null>(null);
-  const [reviewError, setReviewError] = useState<string | null>(null);
-  const [modalAction, setModalAction] = useState<'save' | 'approve' | null>(null);
   const [rejectingId, setRejectingId] = useState<number | null>(null);
 
   const medicationsState = useMedications();
@@ -172,46 +136,18 @@ export default function PlanScreen({ navigation, route }: Props) {
     );
   };
 
-  const hydrateDraft = useCallback((item: PendingReviewItem): DraftFormState => ({
-    amount: item.draft?.amount != null ? String(item.draft.amount) : '',
-    dueDate: item.draft?.dueDate ?? '',
-    statementDate: item.draft?.statementDate ?? '',
-    payUrl: item.draft?.payUrl ?? '',
-    status: item.draft?.status ?? 'todo',
-    notes: item.draft?.notes ?? '',
-  }), []);
-
   const openReviewModal = useCallback(
     (item: PendingReviewItem) => {
       setSelectedReview(item);
-      setDraftForm(hydrateDraft(item));
-      setReviewError(null);
-      setDueDateValue(item.draft?.dueDate ? parseServerDate(item.draft.dueDate) : null);
-      setStatementDateValue(item.draft?.statementDate ? parseServerDate(item.draft.statementDate) : null);
       setReviewModalVisible(true);
     },
-    [hydrateDraft]
+    []
   );
 
   const closeReviewModal = useCallback(() => {
     setReviewModalVisible(false);
     setSelectedReview(null);
-    setModalAction(null);
-    setReviewError(null);
-    setDueDateValue(null);
-    setStatementDateValue(null);
-    setPickerVisible(false);
   }, []);
-
-  const updateDraftField = useCallback(
-    <K extends keyof DraftFormState>(field: K, value: DraftFormState[K]) => {
-      setDraftForm((prev) => ({
-        ...prev,
-        [field]: value,
-      }));
-    },
-    []
-  );
 
   const formatReviewDate = useCallback(
     (value: string | null | undefined) => {
@@ -220,145 +156,6 @@ export default function PlanScreen({ navigation, route }: Props) {
     },
     []
   );
-
-  const [pickerVisible, setPickerVisible] = useState(false);
-  const [pickerMode, setPickerMode] = useState<'dueDate' | 'statementDate'>('dueDate');
-
-  const openDatePicker = useCallback((mode: 'dueDate' | 'statementDate') => {
-    setPickerMode(mode);
-    setPickerVisible(true);
-  }, []);
-
-  const closeDatePicker = useCallback(() => {
-    setPickerVisible(false);
-  }, []);
-
-  const dueDateDisplay = useMemo(() => {
-    if (dueDateValue) {
-      return formatDisplayDate(dueDateValue);
-    }
-    if (draftForm.dueDate?.trim()) {
-      try {
-        return formatDisplayDate(parseServerDate(draftForm.dueDate));
-      } catch {
-        return draftForm.dueDate;
-      }
-    }
-    return 'Select date';
-  }, [dueDateValue, draftForm.dueDate]);
-
-  const statementDateDisplay = useMemo(() => {
-    if (statementDateValue) {
-      return formatDisplayDate(statementDateValue);
-    }
-    if (draftForm.statementDate?.trim()) {
-      try {
-        return formatDisplayDate(parseServerDate(draftForm.statementDate));
-      } catch {
-        return draftForm.statementDate;
-      }
-    }
-    return 'Select date';
-  }, [statementDateValue, draftForm.statementDate]);
-
-  const handleDateConfirm = useCallback(
-    (selectedDate: Date) => {
-      if (pickerMode === 'dueDate') {
-        setDueDateValue(selectedDate);
-        updateDraftField('dueDate', toIsoDate(selectedDate));
-      } else {
-        setStatementDateValue(selectedDate);
-        updateDraftField('statementDate', toIsoDate(selectedDate));
-      }
-      closeDatePicker();
-    },
-    [closeDatePicker, pickerMode, updateDraftField]
-  );
-
-  const clearDueDate = useCallback(() => {
-    setDueDateValue(null);
-    updateDraftField('dueDate', '');
-  }, [updateDraftField]);
-
-  const clearStatementDate = useCallback(() => {
-    setStatementDateValue(null);
-    updateDraftField('statementDate', '');
-  }, [updateDraftField]);
-
-  const pickerValue = useMemo(() => {
-    if (pickerMode === 'dueDate') {
-      return dueDateValue ?? new Date();
-    }
-    return statementDateValue ?? new Date();
-  }, [pickerMode, dueDateValue, statementDateValue]);
-
-  const isActionPending = modalAction !== null;
-
-  const buildReviewPayload = useCallback((): ReviewBillPayload => {
-    const trimmedAmount = draftForm.amount.trim();
-    const amount = trimmedAmount.length > 0 ? Number(trimmedAmount) : null;
-    if (trimmedAmount.length > 0 && Number.isNaN(amount)) {
-      throw new Error('Enter a valid amount (numbers only).');
-    }
-
-    const normalize = (value: string) => {
-      const trimmed = value.trim();
-      return trimmed.length > 0 ? trimmed : null;
-    };
-
-    return {
-      amount,
-      dueDate: dueDateValue ? toIsoDate(dueDateValue) : normalize(draftForm.dueDate),
-      statementDate: statementDateValue ? toIsoDate(statementDateValue) : normalize(draftForm.statementDate),
-      payUrl: normalize(draftForm.payUrl),
-      status: draftForm.status ?? 'todo',
-      notes: normalize(draftForm.notes),
-    };
-  }, [draftForm, dueDateValue, statementDateValue]);
-
-  const handleSaveDraft = useCallback(async () => {
-    if (!selectedReview) return;
-    try {
-      const payload = buildReviewPayload();
-      setModalAction('save');
-      const draft = await pendingReviews.saveDraft(selectedReview.itemId, payload);
-      setDraftForm({
-        amount: draft.amount != null ? String(draft.amount) : '',
-        dueDate: draft.dueDate ?? '',
-        statementDate: draft.statementDate ?? '',
-        payUrl: draft.payUrl ?? '',
-        status: draft.status ?? 'todo',
-        notes: draft.notes ?? '',
-      });
-      setDueDateValue(draft.dueDate ? parseServerDate(draft.dueDate) : null);
-      setStatementDateValue(draft.statementDate ? parseServerDate(draft.statementDate) : null);
-      setReviewError(null);
-      toast.showToast('Draft saved');
-    } catch (error: any) {
-      const message = error?.message || error?.response?.data?.error || 'Unable to save draft right now.';
-      setReviewError(message);
-    } finally {
-      setModalAction(null);
-    }
-  }, [buildReviewPayload, pendingReviews, selectedReview, toast]);
-
-  const handleApprove = useCallback(async () => {
-    if (!selectedReview) return;
-    try {
-      const payload = buildReviewPayload();
-      setModalAction('approve');
-      await pendingReviews.approve(selectedReview.itemId, payload);
-      setReviewError(null);
-      toast.showToast('Bill approved and added to plan');
-      closeReviewModal();
-    } catch (error: any) {
-      const apiError = error?.response?.data?.error;
-      const message = apiError || error?.message || 'Unable to approve this bill right now.';
-      setReviewError(message);
-    } finally {
-      setModalAction(null);
-    }
-  }, [buildReviewPayload, closeReviewModal, pendingReviews, selectedReview, toast]);
 
   const executeReject = useCallback(
     async (item: PendingReviewItem) => {
@@ -1091,183 +888,16 @@ export default function PlanScreen({ navigation, route }: Props) {
         submitting={medicationFormSubmitting}
         error={medicationFormError}
       />
-
-      <Modal
+      <PendingReviewModal
         visible={reviewModalVisible}
-        animationType="slide"
-        transparent
-        onRequestClose={closeReviewModal}
-      >
-        <View style={styles.modalOverlay}>
-          <TouchableWithoutFeedback onPress={closeReviewModal}>
-            <View style={styles.modalBackdrop} />
-          </TouchableWithoutFeedback>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            keyboardVerticalOffset={32}
-            style={styles.modalSheet}
-          >
-            <View style={styles.modalSheetInner}>
-              <DateTimePickerModal
-                visible={pickerVisible}
-                mode="date"
-                value={pickerValue}
-                onDismiss={closeDatePicker}
-                onConfirm={handleDateConfirm}
-              />
-              <ScrollView
-                bounces={false}
-                keyboardShouldPersistTaps="handled"
-                contentContainerStyle={styles.modalScrollContent}
-              >
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Review bill</Text>
-                  <Text style={styles.modalSubtitle} numberOfLines={2}>
-                    {selectedReview?.source.subject || 'Bill candidate'}
-                  </Text>
-                </View>
-
-                <Text style={styles.modalLabel}>Amount</Text>
-                <TextInput
-                  value={draftForm.amount}
-                  onChangeText={(value) => updateDraftField('amount', value)}
-                  placeholder="e.g. 245.67"
-                  keyboardType="decimal-pad"
-                  style={styles.modalInput}
-                />
-
-                <Text style={styles.modalLabel}>Due date</Text>
-                <View style={styles.selectorRow}>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.selectorButton,
-                      pressed && styles.selectorButtonPressed,
-                    ]}
-                    onPress={() => openDatePicker('dueDate')}
-                  >
-                    <Text style={styles.selectorValue}>{dueDateDisplay}</Text>
-                  </Pressable>
-                  {dueDateValue || draftForm.dueDate ? (
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.selectorClearButton,
-                        pressed && styles.selectorClearButtonPressed,
-                      ]}
-                      onPress={clearDueDate}
-                    >
-                      <Text style={styles.selectorClearButtonText}>Clear</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-
-                <Text style={styles.modalLabel}>Statement date</Text>
-                <View style={styles.selectorRow}>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.selectorButton,
-                      pressed && styles.selectorButtonPressed,
-                    ]}
-                    onPress={() => openDatePicker('statementDate')}
-                  >
-                    <Text style={styles.selectorValue}>{statementDateDisplay}</Text>
-                  </Pressable>
-                  {statementDateValue || draftForm.statementDate ? (
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.selectorClearButton,
-                        pressed && styles.selectorClearButtonPressed,
-                      ]}
-                      onPress={clearStatementDate}
-                    >
-                      <Text style={styles.selectorClearButtonText}>Clear</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-
-                <Text style={styles.modalLabel}>Payment link</Text>
-                <TextInput
-                  value={draftForm.payUrl}
-                  onChangeText={(value) => updateDraftField('payUrl', value)}
-                  placeholder="https://billing.example.com/pay"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  style={styles.modalInput}
-                />
-
-                <Text style={styles.modalLabel}>Status</Text>
-                <View style={styles.statusSelectorRow}>
-                  {(['todo', 'overdue', 'paid'] as BillStatus[]).map((status) => {
-                    const isActive = draftForm.status === status;
-                    return (
-                      <Pressable
-                        key={status}
-                        style={({ pressed }) => [
-                          styles.statusPill,
-                          isActive && styles.statusPillActive,
-                          pressed && styles.statusPillPressed,
-                        ]}
-                        onPress={() => updateDraftField('status', status)}
-                      >
-                        <Text style={[styles.statusPillText, isActive && styles.statusPillTextActive]}>
-                          {status}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-
-                <Text style={styles.modalLabel}>Notes</Text>
-                <TextInput
-                  value={draftForm.notes}
-                  onChangeText={(value) => updateDraftField('notes', value)}
-                  placeholder="Optional reviewer note"
-                  multiline
-                  style={[styles.modalInput, styles.modalNotesInput]}
-                />
-
-                {reviewError && <Text style={styles.modalError}>{reviewError}</Text>}
-
-                <View style={styles.modalActions}>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.modalSecondaryButton,
-                      pressed && styles.modalSecondaryButtonPressed,
-                    ]}
-                    onPress={handleSaveDraft}
-                    disabled={isActionPending}
-                  >
-                    <Text style={styles.modalSecondaryButtonText}>
-                      {isActionPending && modalAction === 'save' ? 'Saving…' : 'Save draft'}
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.modalPrimaryButton,
-                      pressed && styles.modalPrimaryButtonPressed,
-                    ]}
-                    onPress={handleApprove}
-                    disabled={isActionPending}
-                  >
-                    <Text style={styles.modalPrimaryButtonText}>
-                      {isActionPending && modalAction === 'approve' ? 'Approving…' : 'Approve bill'}
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.modalLinkButton,
-                      pressed && styles.modalLinkButtonPressed,
-                    ]}
-                    onPress={closeReviewModal}
-                    disabled={isActionPending}
-                  >
-                    <Text style={styles.modalLinkButtonText}>Cancel</Text>
-                  </Pressable>
-                </View>
-              </ScrollView>
-            </View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
+        item={selectedReview}
+        onClose={closeReviewModal}
+        actions={{
+          saveDraft: pendingReviews.saveDraft,
+          approve: pendingReviews.approve
+        }}
+        toast={toast}
+      />
     </SafeAreaView>
   );
 }
@@ -1724,177 +1354,5 @@ const createStyles = (palette: Palette, shadow: Shadow) =>
     reviewSecondaryButtonText: {
       color: palette.textSecondary,
       fontWeight: '600',
-    },
-    modalOverlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.45)',
-      justifyContent: 'flex-end',
-    },
-    modalBackdrop: {
-      flex: 1,
-    },
-    modalSheet: {
-      width: '100%',
-      maxHeight: '88%',
-    },
-    modalSheetInner: {
-      backgroundColor: palette.surface,
-      borderTopLeftRadius: radius.lg,
-      borderTopRightRadius: radius.lg,
-      paddingHorizontal: spacing(3),
-      paddingTop: spacing(3),
-      paddingBottom: spacing(2.5),
-      flexGrow: 1,
-    },
-    modalScrollContent: {
-      paddingBottom: spacing(3),
-    },
-    modalHeader: {
-      gap: spacing(0.5),
-    },
-    modalTitle: {
-      fontSize: 20,
-      fontWeight: '700',
-      color: palette.textPrimary,
-    },
-    modalSubtitle: {
-      fontSize: 14,
-      color: palette.textSecondary,
-    },
-    modalLabel: {
-      marginTop: spacing(1.5),
-      fontSize: 12,
-      fontWeight: '600',
-      color: palette.textMuted,
-      textTransform: 'uppercase',
-    },
-    modalInput: {
-      marginTop: spacing(0.5),
-      borderRadius: radius.sm,
-      borderWidth: 1,
-      borderColor: palette.border,
-      paddingHorizontal: spacing(1.25),
-      paddingVertical: spacing(1),
-      fontSize: 15,
-      color: palette.textPrimary,
-    },
-    modalNotesInput: {
-      minHeight: 90,
-      textAlignVertical: 'top',
-    },
-    modalError: {
-      marginTop: spacing(1),
-      color: palette.danger,
-      fontSize: 13,
-    },
-    modalActions: {
-      marginTop: spacing(2),
-      gap: spacing(1),
-    },
-    modalSecondaryButton: {
-      backgroundColor: palette.surfaceMuted,
-      borderRadius: radius.sm,
-      paddingVertical: spacing(1.1),
-      alignItems: 'center',
-      borderWidth: 1,
-      borderColor: palette.border,
-    },
-    modalSecondaryButtonPressed: {
-      opacity: 0.85,
-    },
-    modalSecondaryButtonText: {
-      color: palette.textPrimary,
-      fontWeight: '600',
-    },
-    modalPrimaryButton: {
-      backgroundColor: palette.primary,
-      borderRadius: radius.sm,
-      paddingVertical: spacing(1.1),
-      alignItems: 'center',
-    },
-    modalPrimaryButtonPressed: {
-      opacity: 0.9,
-    },
-    modalPrimaryButtonText: {
-      color: '#fff',
-      fontWeight: '700',
-    },
-    modalLinkButton: {
-      paddingVertical: spacing(1),
-      alignItems: 'center',
-    },
-    modalLinkButtonPressed: {
-      opacity: 0.6,
-    },
-    modalLinkButtonText: {
-      color: palette.textSecondary,
-      fontWeight: '600',
-    },
-    selectorRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing(1),
-    },
-    selectorButton: {
-      flex: 1,
-      borderRadius: radius.sm,
-      borderWidth: 1,
-      borderColor: palette.border,
-      backgroundColor: palette.surfaceMuted,
-      paddingVertical: spacing(1),
-      paddingHorizontal: spacing(1.25),
-    },
-    selectorButtonPressed: {
-      opacity: 0.9,
-    },
-    selectorValue: {
-      fontSize: 15,
-      color: palette.textPrimary,
-    },
-    selectorClearButton: {
-      paddingVertical: spacing(0.75),
-      paddingHorizontal: spacing(1.25),
-      borderRadius: radius.sm,
-      borderWidth: 1,
-      borderColor: palette.border,
-      backgroundColor: palette.surface,
-    },
-    selectorClearButtonPressed: {
-      opacity: 0.85,
-    },
-    selectorClearButtonText: {
-      color: palette.textSecondary,
-      fontWeight: '600',
-      textTransform: 'uppercase',
-      fontSize: 12,
-    },
-    statusSelectorRow: {
-      flexDirection: 'row',
-      gap: spacing(1),
-      marginTop: spacing(0.75),
-    },
-    statusPill: {
-      paddingHorizontal: spacing(1.25),
-      paddingVertical: spacing(0.75),
-      borderRadius: radius.sm,
-      borderWidth: 1,
-      borderColor: palette.border,
-      backgroundColor: palette.surfaceMuted,
-    },
-    statusPillActive: {
-      backgroundColor: palette.primarySoft,
-      borderColor: palette.primary,
-    },
-    statusPillPressed: {
-      opacity: 0.8,
-    },
-    statusPillText: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: palette.textMuted,
-      textTransform: 'uppercase',
-    },
-    statusPillTextActive: {
-      color: palette.primary,
     },
   });

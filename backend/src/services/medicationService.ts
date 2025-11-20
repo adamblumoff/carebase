@@ -60,6 +60,11 @@ import {
   scheduleMedicationIntakeReminder
 } from './medicationReminderScheduler.js';
 import { combineDateWithTimeZone, getDefaultTimeZone } from '../utils/timezone.js';
+import {
+  buildOccurrences,
+  findOccurrenceForDose,
+  toOccurrenceDate
+} from './medicationOccurrenceUtils.js';
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_INTAKE_LOOKBACK_DAYS = 7;
@@ -743,49 +748,6 @@ function buildIntakeQueryOptions(options: MedicationListOptions | undefined) {
   const since = new Date(Date.now() - lookbackDays * DAY_IN_MS);
   const statuses = normalizeStatuses(options?.statuses);
   return { limit, since, statuses };
-}
-
-function toOccurrenceDate(date: Date): Date {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-}
-
-function groupEventsByIntake(events: MedicationIntakeEvent[]): Map<number, MedicationIntakeEvent[]> {
-  const map = new Map<number, MedicationIntakeEvent[]>();
-  for (const event of events) {
-    if (!map.has(event.intakeId)) {
-      map.set(event.intakeId, []);
-    }
-    map.get(event.intakeId)!.push(event);
-  }
-  return map;
-}
-
-function buildOccurrences(
-  summaries: MedicationOccurrenceSummary[],
-  events: MedicationIntakeEvent[]
-): MedicationDoseOccurrence[] {
-  if (summaries.length === 0) {
-    return [];
-  }
-  const historyByIntake = groupEventsByIntake(events);
-  return summaries.map((summary) => ({
-    intakeId: summary.intakeId,
-    medicationId: summary.medicationId,
-    doseId: summary.doseId,
-    occurrenceDate: summary.occurrenceDate,
-    status: summary.status,
-    acknowledgedAt: summary.acknowledgedAt,
-    acknowledgedByUserId: summary.acknowledgedByUserId,
-    overrideCount: summary.overrideCount ?? 0,
-    history: historyByIntake.get(summary.intakeId) ?? []
-  }));
-}
-
-function findOccurrenceForDose(
-  summaries: MedicationOccurrenceSummary[],
-  doseId: number | null
-): MedicationOccurrenceSummary | undefined {
-  return summaries.find((summary) => summary.doseId === doseId);
 }
 
 type MedicationIntakeList = Awaited<ReturnType<typeof listMedicationIntakes>>;

@@ -7,6 +7,7 @@ import type {
   GoogleSyncStatus,
   ItemType
 } from '@carebase/shared';
+import crypto from 'crypto';
 import { db } from './shared.js';
 import { encryptSecret, decryptSecret } from '../../utils/secretCipher.js';
 
@@ -131,7 +132,7 @@ async function ensureGoogleIntegrationSchema(): Promise<void> {
             resource_id TEXT NOT NULL,
             resource_uri TEXT,
             expiration TIMESTAMP,
-            channel_token TEXT,
+            channel_token TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
           )
@@ -144,6 +145,25 @@ async function ensureGoogleIntegrationSchema(): Promise<void> {
         );
         await db.query(
           `CREATE INDEX IF NOT EXISTS idx_google_watch_channels_expiration ON google_watch_channels(expiration)`
+        );
+        await db.query(
+          `CREATE INDEX IF NOT EXISTS idx_google_watch_channels_token ON google_watch_channels(channel_token)`
+        );
+        const channelsMissingToken = await db.query(
+          `SELECT channel_id FROM google_watch_channels WHERE channel_token IS NULL`
+        );
+        for (const row of channelsMissingToken.rows) {
+          const token = crypto.randomBytes(16).toString('hex');
+          await db.query(
+            `UPDATE google_watch_channels
+               SET channel_token = $1
+             WHERE channel_id = $2`,
+            [token, row.channel_id]
+          );
+        }
+        await db.query(
+          `ALTER TABLE google_watch_channels
+             ALTER COLUMN channel_token SET NOT NULL`
         );
         await db.query(
           `ALTER TABLE google_watch_channels
@@ -859,6 +879,7 @@ export async function upsertGoogleWatchChannel(channel: {
   channelToken?: string | null;
 }): Promise<GoogleWatchChannel> {
   await ensureGoogleIntegrationSchema();
+  const channelToken = channel.channelToken ?? crypto.randomBytes(16).toString('hex');
   let clerkUserId = channel.clerkUserId ?? null;
   if (!clerkUserId) {
     const lookup = await db.query('SELECT clerk_user_id FROM users WHERE id = $1', [channel.userId]);
@@ -887,7 +908,7 @@ export async function upsertGoogleWatchChannel(channel: {
       channel.resourceId,
       channel.resourceUri ?? null,
       channel.expiration ?? null,
-      channel.channelToken ?? null
+      channelToken
     ]
   );
 
