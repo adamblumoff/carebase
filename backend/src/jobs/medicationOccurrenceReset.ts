@@ -89,13 +89,17 @@ export async function runMedicationOccurrenceReset(): Promise<void> {
         continue;
       }
 
-      const intakes = await listMedicationIntakes(medication.id, {
+      let intakes = await listMedicationIntakes(medication.id, {
         since: intakeSince,
         limit: 100
       });
 
       if (intakes.length === 0) {
-        continue;
+        const latestIntake = await listMedicationIntakes(medication.id, { limit: 1 });
+        if (latestIntake.length === 0) {
+          continue;
+        }
+        intakes = latestIntake;
       }
 
       const doseIndex = new Map<number, MedicationDose>();

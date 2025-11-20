@@ -206,4 +206,72 @@ describe('runMedicationOccurrenceReset', () => {
     expect(planMocks.touchPlanForUser).not.toHaveBeenCalled();
     expect(reminderMocks.scheduleMedicationIntakeReminder).not.toHaveBeenCalled();
   });
+
+  it('recovers after outage by seeding from the latest historical intake', async () => {
+    queryMocks.listActiveMedications.mockResolvedValueOnce([
+      { id: 12, recipientId: 202, ownerId: 302 }
+    ]);
+
+    queryMocks.listMedicationDoses.mockResolvedValueOnce([
+      {
+        id: 7,
+        medicationId: 12,
+        label: 'Morning',
+        timeOfDay: '09:00:00',
+        timezone: 'UTC',
+        reminderWindowMinutes: 60,
+        isActive: true,
+        createdAt: new Date('2025-02-10T15:00:00Z'),
+        updatedAt: new Date('2025-02-10T15:00:00Z')
+      }
+    ]);
+
+    // First call (within lookback) returns nothing; fallback call returns the latest intake.
+    queryMocks.listMedicationIntakes
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 120,
+          medicationId: 12,
+          doseId: 7,
+          scheduledFor: new Date('2025-02-24T09:00:00Z'),
+          acknowledgedAt: new Date('2025-02-24T09:05:00Z'),
+          status: 'taken' as const,
+          actorUserId: 302,
+          occurrenceDate: new Date('2025-02-24T00:00:00Z'),
+          overrideCount: 0,
+          createdAt: new Date('2025-02-24T09:05:00Z'),
+          updatedAt: new Date('2025-02-24T09:05:00Z')
+        }
+      ]);
+
+    queryMocks.createMedicationIntake.mockImplementationOnce(async (_medicationId, payload) => ({
+      id: 121,
+      medicationId: 12,
+      doseId: payload.doseId ?? null,
+      scheduledFor: payload.scheduledFor,
+      acknowledgedAt: payload.acknowledgedAt ?? null,
+      status: payload.status,
+      actorUserId: payload.actorUserId ?? null,
+      occurrenceDate: payload.occurrenceDate ?? new Date('2025-02-25T00:00:00Z'),
+      overrideCount: payload.overrideCount ?? 0,
+      createdAt: new Date('2025-02-25T09:00:00Z'),
+      updatedAt: new Date('2025-02-25T09:00:00Z')
+    }));
+
+    recipientMocks.findRecipientById.mockResolvedValueOnce({ id: 202, userId: 402 });
+
+    await runMedicationOccurrenceReset();
+
+    expect(queryMocks.listMedicationIntakes).toHaveBeenCalledTimes(2);
+    expect(queryMocks.createMedicationIntake).toHaveBeenCalledTimes(1);
+    const [, payload] = queryMocks.createMedicationIntake.mock.calls[0] as [
+      number,
+      { occurrenceDate: Date; scheduledFor: Date }
+    ];
+    expect(payload.occurrenceDate.toISOString()).toBe('2025-02-25T00:00:00.000Z');
+    expect(payload.scheduledFor.toISOString()).toBe('2025-02-25T09:00:00.000Z');
+    expect(reminderMocks.scheduleMedicationIntakeReminder).toHaveBeenCalledTimes(1);
+    expect(planMocks.touchPlanForUser).toHaveBeenCalledWith(402);
+  });
 });
