@@ -32,6 +32,7 @@ import {
   migrateEventsToManagedCalendar,
   normalizeCalendarId
 } from './googleSync/managedCalendars.js';
+import { setGoogleCredentialReauth } from '../db/queries.js';
 import {
   ensureCalendarWatchForUser,
   handleGoogleWatchNotification as handleGoogleWatchNotificationInternal,
@@ -156,8 +157,21 @@ export async function syncUserWithGoogle(userId: number, options: GoogleSyncOpti
 
   let ensuredCalendarId: string | null = credential.managedCalendarId ?? credential.calendarId ?? null;
   if (needsManagedCalendar) {
-    const ensureResult = await ensureManagedCalendarForUser(credential, accessToken);
-    ensuredCalendarId = ensureResult.calendarId;
+    try {
+      const ensureResult = await ensureManagedCalendarForUser(credential, accessToken);
+      ensuredCalendarId = ensureResult.calendarId;
+    } catch (error) {
+      if (error instanceof GoogleSyncException && error.status === 403) {
+        await setGoogleCredentialReauth(userId, true);
+        throw new GoogleSyncException(
+          'Google permissions are missing. Please reconnect Google Calendar.',
+          403,
+          'needs_reauth',
+          { userId }
+        );
+      }
+      throw error;
+    }
   }
 
   const targetCalendarId = ensuredCalendarId ?? 'primary';
