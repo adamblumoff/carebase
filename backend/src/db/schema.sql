@@ -410,6 +410,25 @@ ALTER TABLE google_credentials
 
 CREATE INDEX IF NOT EXISTS idx_google_credentials_expires_at ON google_credentials(expires_at);
 
+-- Google webhook watch channels
+CREATE TABLE IF NOT EXISTS google_watch_channels (
+  channel_id TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  clerk_user_id VARCHAR(255),
+  calendar_id TEXT,
+  resource_id TEXT NOT NULL,
+  resource_uri TEXT,
+  expiration TIMESTAMP,
+  channel_token TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_google_watch_channels_user ON google_watch_channels(user_id);
+CREATE INDEX IF NOT EXISTS idx_google_watch_channels_resource ON google_watch_channels(resource_id);
+CREATE INDEX IF NOT EXISTS idx_google_watch_channels_expiration ON google_watch_channels(expiration);
+CREATE INDEX IF NOT EXISTS idx_google_watch_channels_token ON google_watch_channels(channel_token);
+
 -- Care collaborators table
 CREATE TABLE IF NOT EXISTS care_collaborators (
   id SERIAL PRIMARY KEY,

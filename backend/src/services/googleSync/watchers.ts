@@ -85,6 +85,7 @@ export async function ensureCalendarWatchForUser(
 ): Promise<GoogleWatchChannel> {
   const normalizedCalendarId = normalizeCalendarId(calendarId);
   if (isTestEnv && testSchedulerOverride) {
+    const testToken = crypto.randomBytes(16).toString('hex');
     const existingTestChannel = await findGoogleWatchChannelByUser(userId, normalizedCalendarId, clerkUserId);
     if (existingTestChannel) {
       return existingTestChannel;
@@ -97,7 +98,7 @@ export async function ensureCalendarWatchForUser(
       resourceId: `test-resource-${userId}-${normalizedCalendarId}`,
       resourceUri: null,
       expiration: new Date(Date.now() + WATCH_RENEWAL_LOOKAHEAD_MS * 2),
-      channelToken: null
+      channelToken: testToken
     });
   }
 
