@@ -235,6 +235,33 @@ export async function handleGoogleWatchNotification(
     return;
   }
 
+  const tokenRequired = !isTestEnv;
+  if (tokenRequired) {
+    if (!channel.channelToken) {
+      logWarn('Google webhook missing stored token; ignoring notification', {
+        channelId,
+        resourceId,
+        messageType
+      });
+      return;
+    }
+    if (!channelToken || channelToken !== channel.channelToken) {
+      logWarn('Google webhook token mismatch; ignoring notification', {
+        channelId,
+        resourceId,
+        messageType
+      });
+      return;
+    }
+  } else if (channel.channelToken && channelToken && channelToken !== channel.channelToken) {
+    logWarn('Google webhook token mismatch in test environment; ignoring notification', {
+      channelId,
+      resourceId,
+      messageType
+    });
+    return;
+  }
+
   logInfo('Received Google webhook', {
     channelId,
     userId: channel.userId,

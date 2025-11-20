@@ -3,6 +3,8 @@ import './env.js';
 
 // Now import everything else
 import express, { Request, Response, type RequestHandler, NextFunction } from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { clerkMiddleware } from '@clerk/express';
@@ -21,6 +23,32 @@ const app = express();
 const server = createServer(app);
 const PORT = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === 'production';
+const workerEnabled =
+  process.env.WORKER_ENABLED === 'true' ||
+  process.env.ROLE === 'worker' ||
+  process.env.NODE_ENV === 'development' ||
+  process.env.NODE_ENV === 'test';
+
+const defaultCorsOrigins = [
+  'https://carebase.dev',
+  'https://api.carebase.dev',
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:19006',
+  'exp://localhost',
+  'exp://127.0.0.1'
+];
+
+const configuredOrigins =
+  process.env.CORS_ORIGINS?.split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean) ?? [];
+
+const corsOrigins = configuredOrigins.length > 0 ? configuredOrigins : defaultCorsOrigins;
+const corsOptions = {
+  origin: corsOrigins,
+  credentials: true
+};
 
 function captureRawBody(req: Request, _res: Response, buffer: Buffer): void {
   if (buffer?.length) {
@@ -57,6 +85,13 @@ if (isProduction) {
 }
 
 // Middleware
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' }
+  })
+);
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '1mb', verify: captureRawBody }));
 app.use(express.urlencoded({ extended: true, limit: '1mb', verify: captureRawBody }));
 if (clerkMiddlewareHandler) {
@@ -89,18 +124,21 @@ registerRoutes(app);
 // Initialize realtime
 const io = new SocketIOServer(server, {
   cors: {
-    origin: '*',
-    credentials: true
+    ...corsOptions
   }
 });
 initRealtime(io);
 // Start Google sync polling only when explicitly enabled.
-if (process.env.GOOGLE_SYNC_POLLING_ENABLED === 'true') {
+if (workerEnabled && process.env.GOOGLE_SYNC_POLLING_ENABLED === 'true') {
   startGoogleSyncPolling();
+} else if (!workerEnabled && process.env.GOOGLE_SYNC_POLLING_ENABLED === 'true') {
+  console.log('[Startup] Skipping Google sync polling because worker role is disabled');
 }
 
-if (process.env.MEDICATION_RESET_ENABLED !== 'false') {
+if (workerEnabled && process.env.MEDICATION_RESET_ENABLED !== 'false') {
   startMedicationOccurrenceResetJob();
+} else if (!workerEnabled && process.env.MEDICATION_RESET_ENABLED !== 'false') {
+  console.log('[Startup] Skipping medication reset job because worker role is disabled');
 }
 
 // Start server

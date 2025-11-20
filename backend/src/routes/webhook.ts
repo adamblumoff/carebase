@@ -19,6 +19,14 @@ const rateLimitWindowMs = 60_000;
 const defaultRateLimit = Number.parseInt(process.env.INBOUND_WEBHOOK_RATE_LIMIT ?? '30', 10);
 const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
 
+function pruneRateLimitBuckets(now: number): void {
+  for (const [key, bucket] of rateLimitBuckets.entries()) {
+    if (bucket.resetAt <= now) {
+      rateLimitBuckets.delete(key);
+    }
+  }
+}
+
 function rateLimitInbound(req: Request, res: Response, next: NextFunction): void {
   if (!Number.isFinite(defaultRateLimit) || defaultRateLimit <= 0) {
     next();
@@ -26,6 +34,7 @@ function rateLimitInbound(req: Request, res: Response, next: NextFunction): void
   }
 
   const now = Date.now();
+  pruneRateLimitBuckets(now);
   const key =
     (req.ip && req.ip !== '::ffff:127.0.0.1' ? req.ip : req.headers['x-forwarded-for'])?.toString() ??
     'unknown';
