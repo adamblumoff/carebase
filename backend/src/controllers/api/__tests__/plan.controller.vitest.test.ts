@@ -77,7 +77,7 @@ describe('plan controllers', () => {
 
     await getPlan(req, res, vi.fn());
 
-    expect(buildPlanPayload).toHaveBeenCalledWith(user, undefined);
+    expect(buildPlanPayload).toHaveBeenCalledWith(user, 7);
     expect(res.json).toHaveBeenCalledWith(payload);
   });
 
