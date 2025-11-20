@@ -84,21 +84,26 @@ export async function runMedicationOccurrenceReset(): Promise<void> {
     let planTouched = false;
     try {
       const doses = await listMedicationDoses(medication.id);
-      if (doses.length === 0) {
+      const activeDoses = doses.filter((dose) => dose.isActive !== false);
+      if (activeDoses.length === 0) {
         continue;
       }
 
-      const intakes = await listMedicationIntakes(medication.id, {
+      let intakes = await listMedicationIntakes(medication.id, {
         since: intakeSince,
         limit: 100
       });
 
       if (intakes.length === 0) {
-        continue;
+        const latestIntake = await listMedicationIntakes(medication.id, { limit: 1 });
+        if (latestIntake.length === 0) {
+          continue;
+        }
+        intakes = latestIntake;
       }
 
       const doseIndex = new Map<number, MedicationDose>();
-      for (const dose of doses) {
+      for (const dose of activeDoses) {
         doseIndex.set(dose.id, dose);
       }
 
@@ -132,6 +137,12 @@ export async function runMedicationOccurrenceReset(): Promise<void> {
             await updateMedicationIntake(intake.id, medication.id, { doseId: matchingDose.id });
             intake.doseId = matchingDose.id;
           }
+        }
+
+        // If the associated dose is inactive/missing and there are multiple active doses,
+        // do not create a new occurrence for this intake.
+        if (!matchingDose && doseIndex.size > 1) {
+          continue;
         }
         const nextScheduledFor = computeNextScheduledFor(intake, matchingDose);
         const created = await createMedicationIntake(medication.id, {
