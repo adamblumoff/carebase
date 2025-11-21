@@ -13,6 +13,9 @@ export function SignOutButton() {
     try {
       await signOut()
       router.replace('/(auth)/sign-in')
+    } catch (error) {
+      console.error('Sign out failed:', error)
+      // Optionally show an error message to the user
     } finally {
       setLoading(false)
     }
