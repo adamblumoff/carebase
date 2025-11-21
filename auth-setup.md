@@ -34,6 +34,7 @@
 - `components/auth/` — shared button + banner + layout.
 - `components/SignOutButton.tsx` — sign out + redirect.
 - `app/_layout.tsx` — keep auth gate, wait on `isLoaded`.
+- Redirect URI: use `AuthSession.makeRedirectUri({ scheme: 'carebase' })` and add the resulting URI to Clerk/Google OAuth allowed redirects (Expo Go uses the `carebase://` scheme).
 
 ## Testing
 - Integration (Maestro/Detox): Google sign-in happy path to `(home)`; sign out returns to `/sign-in`.

@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Text, View } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useOAuth } from '@clerk/clerk-expo'
+import * as AuthSession from 'expo-auth-session'
 import { AuthLayout } from '@/components/auth/AuthLayout'
 import { PrimaryButton } from '@/components/auth/PrimaryButton'
 import { ErrorBanner } from '@/components/auth/ErrorBanner'
@@ -12,11 +13,17 @@ export default function SignInScreen() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const redirectUrl = AuthSession.makeRedirectUri({
+    scheme: 'carebase',
+    // For Expo Go/device; set preferLocalhost true if using a local dev client build
+    preferLocalhost: false,
+  })
+
   const handleGoogleSignIn = async () => {
     setLoading(true)
     setError(null)
     try {
-      const { createdSessionId, setActive, signIn, signUp } = await startOAuthFlow()
+      const { createdSessionId, setActive, signIn, signUp } = await startOAuthFlow({ redirectUrl })
 
       const sessionId =
         createdSessionId ??
