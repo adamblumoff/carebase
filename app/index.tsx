@@ -1,36 +1,24 @@
-import { Stack, Link } from 'expo-router';
+import { Stack, Link } from 'expo-router'
+import { View, Text } from 'react-native'
 
-import { View } from 'react-native';
-
-
-import { Button } from '@/components/Button';
-import { Container } from '@/components/Container';
-import { ScreenContent } from '@/components/ScreenContent';
-
-
+import { Button } from '@/components/Button'
+import { Container } from '@/components/Container'
+import { ScreenContent } from '@/components/ScreenContent'
+import { SignOutButton } from '@/components/SignOutButton'
 
 export default function Home() {
   return (
-    
-      <View className={styles.container}>
-    
+    <View className="flex flex-1 bg-white">
       <Stack.Screen options={{ title: 'Home' }} />
       <Container>
         <ScreenContent path="app/index.tsx" title="Home">
-        
+          <Text className="text-base text-gray-700 mb-4">You are signed in.</Text>
+          <SignOutButton />
         </ScreenContent>
         <Link href={{ pathname: '/details', params: { name: 'Dan' } }} asChild>
-          
-              <Button title="Show Details" />
-          
+          <Button title="Show Details" />
         </Link>
       </Container>
     </View>
-  );
+  )
 }
-
-
-const styles = {
-  container: "flex flex-1 bg-white",
-}
-
