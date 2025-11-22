@@ -2,9 +2,12 @@ import '../global.css';
 import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
 import { tokenCache } from '@clerk/clerk-expo/token-cache';
 import { Slot, useRouter, useSegments } from 'expo-router';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Text } from 'react-native';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+
+import { createQueryClient, createTrpcClient, trpc } from '@/app/(lib)/trpc/client';
 
 export default function Layout() {
   const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
@@ -22,9 +25,42 @@ export default function Layout() {
   return (
     <ClerkProvider tokenCache={tokenCache} publishableKey={publishableKey}>
       <SafeAreaProvider>
-        <AuthGate />
+        <TrpcProvider>
+          <AuthGate />
+        </TrpcProvider>
       </SafeAreaProvider>
     </ClerkProvider>
+  );
+}
+
+function TrpcProvider({ children }: { children: React.ReactNode }) {
+  const { getToken, isLoaded } = useAuth();
+  const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
+  const [queryClient] = useState(() => createQueryClient());
+  const [trpcClient, setTrpcClient] = useState<ReturnType<typeof createTrpcClient> | null>(null);
+
+  useEffect(() => {
+    if (!isLoaded || !apiBaseUrl) return;
+
+    setTrpcClient(() => createTrpcClient(() => getToken({ template: 'trpc' })));
+  }, [apiBaseUrl, getToken, isLoaded]);
+
+  if (!apiBaseUrl) {
+    return (
+      <Text style={{ marginTop: 48, textAlign: 'center' }}>
+        Missing EXPO_PUBLIC_API_BASE_URL in .env
+      </Text>
+    );
+  }
+
+  if (!isLoaded || !trpcClient) return null;
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <trpc.Provider client={trpcClient} queryClient={queryClient}>
+        {children}
+      </trpc.Provider>
+    </QueryClientProvider>
   );
 }
 

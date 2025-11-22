@@ -15,6 +15,9 @@ export default function Home() {
           <Text className="mb-4 text-base text-gray-700">You are signed in.</Text>
           <SignOutButton />
         </ScreenContent>
+        <Link href="/tasks" asChild>
+          <Button title="View Tasks" className="mb-3" />
+        </Link>
         <Link href={{ pathname: '/details', params: { name: 'Dan' } }} asChild>
           <Button title="Show Details" />
         </Link>
