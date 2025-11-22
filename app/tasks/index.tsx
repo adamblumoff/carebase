@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Text, TextInput, View } from 'react-native';
 import { Stack } from 'expo-router';
 
@@ -12,6 +12,12 @@ export default function TasksScreen() {
   const utils = trpc.useUtils();
 
   const tasksQuery = trpc.tasks.list.useQuery();
+
+  useEffect(() => {
+    if (tasksQuery.isError) {
+      console.error('tasks.list failed', tasksQuery.error);
+    }
+  }, [tasksQuery.isError, tasksQuery.error]);
 
   const createTask = trpc.tasks.create.useMutation({
     onMutate: async (input) => {
@@ -39,6 +45,7 @@ export default function TasksScreen() {
       return { previous, optimisticId };
     },
     onError: (_error, _input, context) => {
+      console.error('tasks.create failed', _error);
       if (context?.previous) {
         utils.tasks.list.setData(undefined, context.previous);
       }
