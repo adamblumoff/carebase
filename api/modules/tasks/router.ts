@@ -1,3 +1,4 @@
+import { TRPCError } from '@trpc/server';
 import { desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { caregivers, tasks } from '../../db/schema';
@@ -60,20 +61,34 @@ export const taskRouter = router({
       const identifier = input.id;
 
       if (identifier) {
-        const [existing] = await ctx.db
+        const [updated] = await ctx.db
           .update(caregivers)
           .set({ name: input.name, email: input.email })
           .where(eq(caregivers.id, identifier))
           .returning();
 
-        return existing;
+        if (!updated) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: `Caregiver not found for id ${identifier}`,
+          });
+        }
+
+        return updated;
       }
 
-      const [created] = await ctx.db
+      const [upserted] = await ctx.db
         .insert(caregivers)
         .values({ email: input.email, name: input.name })
+        .onConflictDoUpdate({
+          target: caregivers.email,
+          set: {
+            name: input.name,
+            email: input.email,
+          },
+        })
         .returning();
 
-      return created;
+      return upserted;
     }),
 });
