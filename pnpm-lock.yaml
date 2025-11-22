@@ -18,7 +18,7 @@ importers:
         specifier: ^7.1.6
         version: 7.1.21(react-native@0.81.5(@babel/core@7.28.5)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
       '@trpc/server':
-        specifier: ^11.0.0-rc.620
+        specifier: ^11.7.1
         version: 11.7.1(typescript@5.9.3)
       dotenv:
         specifier: ^16.4.5

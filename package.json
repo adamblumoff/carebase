@@ -19,7 +19,7 @@
     "@clerk/clerk-expo": "^2.19.4",
     "@expo/vector-icons": "^15.0.2",
     "@react-navigation/native": "^7.1.6",
-    "@trpc/server": "^11.0.0-rc.620",
+    "@trpc/server": "^11.7.1",
     "dotenv": "^16.4.5",
     "drizzle-orm": "^0.44.7",
     "expo": "^54.0.0",
