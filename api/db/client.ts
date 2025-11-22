@@ -14,5 +14,9 @@ const pool = new Pool({
   connectionString,
 });
 
+  pool.on('error', (err: any) => {
+     console.error('Unexpected error on idle client', err);
+  });
+
 export const db = drizzle(pool);
 export type DbClient = typeof db;
