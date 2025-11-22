@@ -99,7 +99,10 @@ export default function TasksScreen() {
             <ActivityIndicator />
           </View>
         ) : tasksQuery.isError ? (
-          <Text className="text-base text-red-600">Could not load tasks.</Text>
+          <View className="gap-2">
+            <Text className="text-base text-red-600">Could not load tasks.</Text>
+            <Text className="text-xs text-gray-500">{tasksQuery.error.message}</Text>
+          </View>
         ) : (
           <FlatList
             data={tasksQuery.data ?? []}

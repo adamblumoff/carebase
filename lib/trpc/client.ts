@@ -20,16 +20,28 @@ export const createQueryClient = () =>
     },
   });
 
-export const createTrpcClient = (getToken: () => Promise<string | null>) =>
-  trpc.createClient({
+export const createTrpcClient = (getToken: () => Promise<string | null>) => {
+  const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
+
+  if (!apiBaseUrl) {
+    console.warn('TRPC client init: missing EXPO_PUBLIC_API_BASE_URL');
+    throw new Error('Missing EXPO_PUBLIC_API_BASE_URL');
+  }
+
+  console.log(`TRPC client init: using ${apiBaseUrl}`);
+
+  return trpc.createClient({
     links: [
       httpBatchLink({
-        url: `${process.env.EXPO_PUBLIC_API_BASE_URL}/trpc`,
+        url: `${apiBaseUrl}/trpc`,
         async headers() {
           const token = await getToken();
-
+          if (!token) {
+            console.warn('TRPC client: no auth token returned for request');
+          }
           return token ? { Authorization: `Bearer ${token}` } : {};
         },
       }),
     ],
   });
+};
