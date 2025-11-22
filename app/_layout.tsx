@@ -5,7 +5,7 @@ import { Slot, useRouter, useSegments } from 'expo-router';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Text } from 'react-native';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo } from 'react';
 
 import { createQueryClient, createTrpcClient, trpc } from '@/lib/trpc/client';
 
@@ -36,15 +36,11 @@ export default function Layout() {
 function TrpcProvider({ children }: { children: React.ReactNode }) {
   const { getToken, isLoaded } = useAuth();
   const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
-  const [queryClient] = useState(() => createQueryClient());
-  const [trpcClient, setTrpcClient] = useState<ReturnType<typeof createTrpcClient> | null>(null);
-
-  useEffect(() => {
-    if (!isLoaded || !apiBaseUrl || trpcClient) return;
-
-    const client = createTrpcClient(() => getToken({ template: 'trpc' }));
-    setTrpcClient(client);
-  }, [apiBaseUrl, getToken, isLoaded, trpcClient]);
+  const queryClient = useMemo(() => createQueryClient(), []);
+  const trpcClient = useMemo(() => {
+    if (!apiBaseUrl) return null;
+    return createTrpcClient(() => getToken({ template: 'trpc' }));
+  }, [apiBaseUrl, getToken]);
 
   if (!apiBaseUrl) {
     return (
