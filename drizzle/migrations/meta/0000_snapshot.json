@@ -1,5 +1,5 @@
 {
-  "id": "c1165056-0b57-49e0-a436-f225e95b971c",
+  "id": "05ddbfac-d81f-4e74-8933-d3103709f14b",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -250,7 +250,17 @@
       "isRLSEnabled": false
     }
   },
-  "enums": {},
+  "enums": {
+    "public.task_status": {
+      "name": "task_status",
+      "schema": "public",
+      "values": [
+        "todo",
+        "in_progress",
+        "done"
+      ]
+    }
+  },
   "schemas": {},
   "sequences": {},
   "roles": {},

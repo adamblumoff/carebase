@@ -8,7 +8,7 @@ import {
     varchar,
 } from "drizzle-orm/pg-core";
 
-const taskStatus = pgEnum("task_status", ["todo", "in_progress", "done"]);
+export const taskStatus = pgEnum("task_status", ["todo", "in_progress", "done"]);
 
 export const caregivers = pgTable("caregivers", {
     id: uuid("id").defaultRandom().primaryKey(),
