@@ -28,4 +28,3 @@ android
 .env.*
 !.env.example
 .pnpm-store/
-.pnpm-store/
