@@ -7,7 +7,7 @@ const databaseUrl = process.env.DATABASE_URL;
 
 if (!databaseUrl) {
   throw new Error(
-    'DATABASE_URL is required. Set it in .env or your environment before running Drizzle.',
+    'DATABASE_URL is required. Set it in .env or your environment before running Drizzle.'
   );
 }
 
