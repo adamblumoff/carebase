@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ActivityIndicator, FlatList, Text, TextInput, View } from 'react-native';
 import { Stack } from 'expo-router';
 
-import { trpc } from '@/app/(lib)/trpc/client';
+import { trpc } from '@/lib/trpc/client';
 import { Button } from '@/components/Button';
 import { Container } from '@/components/Container';
 import { ScreenContent } from '@/components/ScreenContent';

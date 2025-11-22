@@ -7,7 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Text } from 'react-native';
 import React, { useEffect, useState } from 'react';
 
-import { createQueryClient, createTrpcClient, trpc } from '@/app/(lib)/trpc/client';
+import { createQueryClient, createTrpcClient, trpc } from '@/lib/trpc/client';
 
 export default function Layout() {
   const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
