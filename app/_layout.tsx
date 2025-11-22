@@ -40,10 +40,11 @@ function TrpcProvider({ children }: { children: React.ReactNode }) {
   const [trpcClient, setTrpcClient] = useState<ReturnType<typeof createTrpcClient> | null>(null);
 
   useEffect(() => {
-    if (!isLoaded || !apiBaseUrl) return;
+    if (!isLoaded || !apiBaseUrl || trpcClient) return;
 
-    setTrpcClient(() => createTrpcClient(() => getToken({ template: 'trpc' })));
-  }, [apiBaseUrl, getToken, isLoaded]);
+    const client = createTrpcClient(() => getToken({ template: 'trpc' }));
+    setTrpcClient(client);
+  }, [apiBaseUrl, getToken, isLoaded, trpcClient]);
 
   if (!apiBaseUrl) {
     return (
