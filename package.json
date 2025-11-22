@@ -13,7 +13,8 @@
     "api:dev": "tsx watch api/index.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "reset:deps": "rm -rf node_modules .expo .pnpm-store && pnpm install"
   },
   "dependencies": {
     "@clerk/clerk-expo": "^2.19.4",
