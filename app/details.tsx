@@ -1,4 +1,3 @@
-
 import { View } from 'react-native';
 
 import { Stack, useLocalSearchParams } from 'expo-router';
@@ -10,9 +9,7 @@ export default function Details() {
   const { name } = useLocalSearchParams();
 
   return (
-    
-      <View className={styles.container}>
-    
+    <View className={styles.container}>
       <Stack.Screen options={{ title: 'Details' }} />
       <Container>
         <ScreenContent path="screens/details.tsx" title={`Showing details for user ${name}`} />
@@ -21,7 +18,6 @@ export default function Details() {
   );
 }
 
-
 const styles = {
-  container: "flex flex-1 bg-white",
-}
+  container: 'flex flex-1 bg-white',
+};

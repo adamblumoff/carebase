@@ -1,49 +1,47 @@
-import React, { useState } from 'react'
-import { Text, View } from 'react-native'
-import { useRouter } from 'expo-router'
-import { useOAuth } from '@clerk/clerk-expo'
-import * as AuthSession from 'expo-auth-session'
-import { AuthLayout } from '@/components/auth/AuthLayout'
-import { PrimaryButton } from '@/components/auth/PrimaryButton'
-import { ErrorBanner } from '@/components/auth/ErrorBanner'
+import React, { useState } from 'react';
+import { Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useOAuth } from '@clerk/clerk-expo';
+import * as AuthSession from 'expo-auth-session';
+import { AuthLayout } from '@/components/auth/AuthLayout';
+import { PrimaryButton } from '@/components/auth/PrimaryButton';
+import { ErrorBanner } from '@/components/auth/ErrorBanner';
 
 export default function SignInScreen() {
-  const router = useRouter()
-  const { startOAuthFlow } = useOAuth({ strategy: 'oauth_google' })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const router = useRouter();
+  const { startOAuthFlow } = useOAuth({ strategy: 'oauth_google' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const redirectUrl = AuthSession.makeRedirectUri({
     scheme: 'carebase',
     // For Expo Go/device; set preferLocalhost true if using a local dev client build
     preferLocalhost: false,
-  })
+  });
 
   const handleGoogleSignIn = async () => {
-    setLoading(true)
-    setError(null)
+    setLoading(true);
+    setError(null);
     try {
-      const { createdSessionId, setActive, signIn, signUp } = await startOAuthFlow({ redirectUrl })
+      const { createdSessionId, setActive, signIn, signUp } = await startOAuthFlow({ redirectUrl });
 
-      const sessionId =
-        createdSessionId ??
-        signIn?.createdSessionId ??
-        signUp?.createdSessionId
+      const sessionId = createdSessionId ?? signIn?.createdSessionId ?? signUp?.createdSessionId;
 
       if (sessionId && setActive) {
-        await setActive({ session: sessionId })
-        router.replace('/')
-        return
+        await setActive({ session: sessionId });
+        router.replace('/');
+        return;
       }
 
-      setError('Could not complete Google sign-in. Please try again.')
+      setError('Could not complete Google sign-in. Please try again.');
     } catch (err: any) {
-      const message = err?.errors?.[0]?.message ?? err?.message ?? 'Something went wrong. Please try again.'
-      setError(message)
+      const message =
+        err?.errors?.[0]?.message ?? err?.message ?? 'Something went wrong. Please try again.';
+      setError(message);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <AuthLayout>
@@ -55,8 +53,12 @@ export default function SignInScreen() {
 
         <ErrorBanner message={error} />
 
-        <PrimaryButton title="Continue with Google" onPress={handleGoogleSignIn} loading={loading} />
+        <PrimaryButton
+          title="Continue with Google"
+          onPress={handleGoogleSignIn}
+          loading={loading}
+        />
       </View>
     </AuthLayout>
-  )
+  );
 }

@@ -75,9 +75,7 @@
         "caregivers_email_unique": {
           "name": "caregivers_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         }
       },
       "policies": {},
@@ -121,12 +119,8 @@
           "name": "task_assignments_task_id_tasks_id_fk",
           "tableFrom": "task_assignments",
           "tableTo": "tasks",
-          "columnsFrom": [
-            "task_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["task_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -134,12 +128,8 @@
           "name": "task_assignments_caregiver_id_caregivers_id_fk",
           "tableFrom": "task_assignments",
           "tableTo": "caregivers",
-          "columnsFrom": [
-            "caregiver_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["caregiver_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -220,12 +210,8 @@
           "name": "tasks_care_recipient_id_care_recipients_id_fk",
           "tableFrom": "tasks",
           "tableTo": "care_recipients",
-          "columnsFrom": [
-            "care_recipient_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["care_recipient_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -233,12 +219,8 @@
           "name": "tasks_created_by_id_caregivers_id_fk",
           "tableFrom": "tasks",
           "tableTo": "caregivers",
-          "columnsFrom": [
-            "created_by_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -254,11 +236,7 @@
     "public.task_status": {
       "name": "task_status",
       "schema": "public",
-      "values": [
-        "todo",
-        "in_progress",
-        "done"
-      ]
+      "values": ["todo", "in_progress", "done"]
     }
   },
   "schemas": {},
