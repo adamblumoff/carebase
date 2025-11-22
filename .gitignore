@@ -26,3 +26,6 @@ android
 # Environment
 /.env
 .env.*
+!.env.example
+.pnpm-store/
+.pnpm-store/

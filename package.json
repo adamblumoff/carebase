@@ -9,13 +9,18 @@
     "prebuild": "expo prebuild",
     "lint": "eslint \"**/*.{js,jsx,ts,tsx}\" && prettier -c \"**/*.{js,jsx,ts,tsx,json}\"",
     "format": "eslint \"**/*.{js,jsx,ts,tsx}\" --fix && prettier \"**/*.{js,jsx,ts,tsx,json}\" --write",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "api:dev": "tsx watch api/index.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push"
   },
   "dependencies": {
-    "//": "React 18.x is required for @clerk/clerk-expo v2.19.x compatibility",
     "@clerk/clerk-expo": "^2.19.4",
     "@expo/vector-icons": "^15.0.2",
     "@react-navigation/native": "^7.1.6",
+    "@trpc/server": "^11.0.0-rc.620",
+    "dotenv": "^16.4.5",
     "expo": "^54.0.0",
     "expo-constants": "~18.0.9",
     "expo-font": "~14.0.9",
@@ -25,7 +30,9 @@
     "expo-status-bar": "~3.0.8",
     "expo-system-ui": "~6.0.7",
     "expo-web-browser": "~15.0.7",
+    "fastify": "^4.28.1",
     "nativewind": "latest",
+    "pg": "^8.13.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-native": "0.81.5",
@@ -34,17 +41,21 @@
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
     "react-native-web": "^0.21.0",
-    "react-native-worklets": "0.5.1"
+    "react-native-worklets": "0.5.1",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
+    "@types/node": "^22.10.2",
     "@types/react": "~19.1.10",
     "eslint": "^9.25.1",
     "eslint-config-expo": "~10.0.0",
     "eslint-config-prettier": "^10.1.2",
+    "drizzle-kit": "^0.30.0",
     "prettier": "^3.2.5",
     "prettier-plugin-tailwindcss": "^0.5.11",
     "tailwindcss": "^3.4.0",
+    "tsx": "^4.19.1",
     "typescript": "~5.9.2"
   },
   "private": true
