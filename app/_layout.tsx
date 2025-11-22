@@ -1,14 +1,13 @@
-
-import '../global.css'
-import { ClerkProvider, useAuth } from '@clerk/clerk-expo'
-import { tokenCache } from '@clerk/clerk-expo/token-cache'
-import { Slot, useRouter, useSegments } from 'expo-router'
-import { SafeAreaProvider } from 'react-native-safe-area-context'
-import { Text } from 'react-native'
-import React, { useEffect } from 'react'
+import '../global.css';
+import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
+import { tokenCache } from '@clerk/clerk-expo/token-cache';
+import { Slot, useRouter, useSegments } from 'expo-router';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Text } from 'react-native';
+import React, { useEffect } from 'react';
 
 export default function Layout() {
-  const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY
+  const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
   if (!publishableKey) {
     return (
@@ -17,7 +16,7 @@ export default function Layout() {
           Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY in .env
         </Text>
       </SafeAreaProvider>
-    )
+    );
   }
 
   return (
@@ -26,24 +25,24 @@ export default function Layout() {
         <AuthGate />
       </SafeAreaProvider>
     </ClerkProvider>
-  )
+  );
 }
 
 function AuthGate() {
-  const { isLoaded, isSignedIn } = useAuth()
-  const segments = useSegments()
-  const router = useRouter()
+  const { isLoaded, isSignedIn } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
 
   useEffect(() => {
-    if (!isLoaded) return
-    const inAuthGroup = segments[0] === '(auth)'
+    if (!isLoaded) return;
+    const inAuthGroup = segments[0] === '(auth)';
     if (!isSignedIn && !inAuthGroup) {
-      router.replace('/(auth)/sign-in')
+      router.replace('/(auth)/sign-in');
     } else if (isSignedIn && inAuthGroup) {
-      router.replace('/')
+      router.replace('/');
     }
-  }, [isLoaded, isSignedIn, segments, router])
+  }, [isLoaded, isSignedIn, segments, router]);
 
-  if (!isLoaded) return null
-  return <Slot />
+  if (!isLoaded) return null;
+  return <Slot />;
 }

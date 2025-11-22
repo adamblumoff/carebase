@@ -1,10 +1,10 @@
-import { Stack, Link } from 'expo-router'
-import { View, Text } from 'react-native'
+import { Stack, Link } from 'expo-router';
+import { View, Text } from 'react-native';
 
-import { Button } from '@/components/Button'
-import { Container } from '@/components/Container'
-import { ScreenContent } from '@/components/ScreenContent'
-import { SignOutButton } from '@/components/SignOutButton'
+import { Button } from '@/components/Button';
+import { Container } from '@/components/Container';
+import { ScreenContent } from '@/components/ScreenContent';
+import { SignOutButton } from '@/components/SignOutButton';
 
 export default function Home() {
   return (
@@ -12,7 +12,7 @@ export default function Home() {
       <Stack.Screen options={{ title: 'Home' }} />
       <Container>
         <ScreenContent path="app/index.tsx" title="Home">
-          <Text className="text-base text-gray-700 mb-4">You are signed in.</Text>
+          <Text className="mb-4 text-base text-gray-700">You are signed in.</Text>
           <SignOutButton />
         </ScreenContent>
         <Link href={{ pathname: '/details', params: { name: 'Dan' } }} asChild>
@@ -20,5 +20,5 @@ export default function Home() {
         </Link>
       </Container>
     </View>
-  )
+  );
 }
