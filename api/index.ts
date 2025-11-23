@@ -11,25 +11,28 @@ const server = fastify({
   logger: true,
 });
 
-await server.register(cors, {
-  origin:
-    process.env.CORS_ORIGIN?.split(',')
-      .map((o) => o.trim())
-      .filter(Boolean) || '*',
-});
+const registerPlugins = async () => {
+  await server.register(cors, {
+    origin:
+      process.env.CORS_ORIGIN?.split(',')
+        .map((o) => o.trim())
+        .filter(Boolean) || '*',
+  });
 
-server.get('/healthz', async () => ({ ok: true }));
+  server.get('/healthz', async () => ({ ok: true }));
 
-server.register(fastifyTRPCPlugin, {
-  prefix: '/trpc',
-  trpcOptions: { router: appRouter, createContext },
-});
+  server.register(fastifyTRPCPlugin, {
+    prefix: '/trpc',
+    trpcOptions: { router: appRouter, createContext },
+  });
+};
 
 const port = Number(process.env.PORT ?? process.env.API_PORT ?? 8080);
 const host = process.env.API_HOST ?? '0.0.0.0';
 
 const start = async () => {
   try {
+    await registerPlugins();
     await server.listen({ port, host });
     server.log.info(`API running on http://${host}:${port}`);
   } catch (error) {
