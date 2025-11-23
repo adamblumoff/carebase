@@ -2,16 +2,16 @@ import { TRPCError } from '@trpc/server';
 import { desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { caregivers, tasks } from '../../db/schema';
-import { procedure, router } from '../../trpc/trpc';
+import { authedProcedure, router } from '../../trpc/trpc';
 
 const statusEnum = z.enum(['todo', 'in_progress', 'done']);
 
 export const taskRouter = router({
-  list: procedure.query(async ({ ctx }) => {
+  list: authedProcedure.query(async ({ ctx }) => {
     return ctx.db.select().from(tasks).orderBy(desc(tasks.createdAt));
   }),
 
-  byCaregiver: procedure
+  byCaregiver: authedProcedure
     .input(
       z.object({
         caregiverId: z.string().uuid(),
@@ -25,7 +25,7 @@ export const taskRouter = router({
         .orderBy(desc(tasks.createdAt));
     }),
 
-  create: procedure
+  create: authedProcedure
     .input(
       z.object({
         title: z.string().min(1),
@@ -41,7 +41,7 @@ export const taskRouter = router({
         description: input.description,
         status: input.status ?? 'todo',
         careRecipientId: input.careRecipientId,
-        createdById: input.createdById,
+        createdById: input.createdById ?? null,
       };
 
       const [inserted] = await ctx.db.insert(tasks).values(payload).returning();
@@ -49,7 +49,7 @@ export const taskRouter = router({
       return inserted;
     }),
 
-  upsertCaregiver: procedure
+  upsertCaregiver: authedProcedure
     .input(
       z.object({
         email: z.string().email(),
