@@ -4,7 +4,6 @@ import { Stack } from 'expo-router';
 import { useColorScheme } from 'nativewind';
 
 import { Container } from '@/components/Container';
-import { ScreenContent } from '@/components/ScreenContent';
 import { SignOutButton } from '@/components/SignOutButton';
 
 export default function ProfileScreen() {
@@ -23,12 +22,6 @@ export default function ProfileScreen() {
     <View className="flex flex-1 bg-surface px-4 dark:bg-surface-dark">
       <Stack.Screen options={{ title: 'Profile' }} />
       <Container>
-        <ScreenContent path="app/(tabs)/profile.tsx" title="Profile & Preferences">
-          <Text className="text-base text-text dark:text-text-dark">
-            Control how the app looks and sign out.
-          </Text>
-        </ScreenContent>
-
         <View className="mt-4 w-full gap-4 rounded-xl border border-border bg-white p-4 dark:border-border-dark dark:bg-surface-card-dark">
           <View className="flex-row items-center justify-between">
             <View className="gap-1">

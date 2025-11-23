@@ -1,5 +1,5 @@
 import { TRPCError } from '@trpc/server';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { caregivers, tasks } from '../../db/schema';
 import { authedProcedure, router } from '../../trpc/trpc';
@@ -47,6 +47,71 @@ export const taskRouter = router({
       const [inserted] = await ctx.db.insert(tasks).values(payload).returning();
 
       return inserted;
+    }),
+
+  delete: authedProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const [deleted] = await ctx.db.delete(tasks).where(eq(tasks.id, input.id)).returning();
+
+      if (!deleted) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
+      }
+
+      return { id: deleted.id };
+    }),
+
+  toggleStatus: authedProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        const [updated] = await ctx.db
+          .update(tasks)
+          .set({
+            status: sql`(CASE WHEN ${tasks.status} = 'done' THEN 'todo' ELSE 'done' END)::task_status`,
+            updatedAt: new Date(),
+          })
+          .where(eq(tasks.id, input.id))
+          .returning();
+
+        if (!updated) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
+        }
+
+        return updated;
+      } catch (error) {
+        ctx.req?.log?.error({ err: error }, 'toggleStatus failed');
+        throw error;
+      }
+    }),
+
+  updateTitle: authedProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        title: z.string().min(1),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const [updated] = await ctx.db
+        .update(tasks)
+        .set({ title: input.title, updatedAt: new Date() })
+        .where(eq(tasks.id, input.id))
+        .returning();
+
+      if (!updated) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
+      }
+
+      return updated;
     }),
 
   upsertCaregiver: authedProcedure
