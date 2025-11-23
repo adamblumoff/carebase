@@ -10,6 +10,7 @@
 ## Build, Test, and Development Commands (PNPM-first)
 - `pnpm install` — install via lockfile (corepack).  
 - `pnpm start` — `expo start --tunnel --clear` for Metro/Expo; `pnpm ios` / `pnpm android` / `pnpm web` for targets.  
+- `pnpm api:dev` — start Fastify+tRPC API (required for data screens; ensure `EXPO_PUBLIC_API_BASE_URL` points to it).  
 - `pnpm prebuild` — create native projects when custom modules are needed.  
 - `pnpm lint` — ESLint + Prettier check; `pnpm format` to fix.  
 - Add `pnpm test` after wiring Jest + React Native Testing Library.  
@@ -29,7 +30,7 @@
 - 4-space indentation, Unix line endings, trailing newline; prefer explicit imports.  
 - Files use `kebab-case.tsx`; components/classes `PascalCase`, functions/vars `camelCase`.  
 - Co-locate routes, styles, and tests; keep modules small.  
-- Run `pnpm format` before PRs; lint/type-check enforced in CI.
+- Run `pnpm format` before commits and PRs; lint/type-check enforced in CI.
 
 ## Commit & Pull Request Guidelines
 - Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`); one logical change per commit.  
