@@ -46,6 +46,7 @@
     "fastify": "^4.28.1",
     "nativewind": "latest",
     "pg": "^8.13.1",
+    "posthog-node": "^4.1.0",
     "posthog-react-native": "^4.12.4",
     "posthog-react-native-session-replay": "^1.2.1",
     "react": "19.1.0",

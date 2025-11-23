@@ -28,6 +28,8 @@ Carebase is a caregiver-first mobile app that pulls every stream of care informa
 - `API_HOST` / `API_PORT`: Fastify server bind values.
 - `PORT`: If set by the host (e.g., Railway), the API binds to this instead of `API_PORT`.
 - `DATABASE_URL`: Postgres connection string for Drizzle/pg.
+- `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW`: Rate limiting settings.
+- `POSTHOG_API_KEY` / `POSTHOG_HOST`: Backend PostHog ingestion (optional; required if you want server events).
 
 ## Project layout
 - `app/` — routes/screens (Expo Router file-based).

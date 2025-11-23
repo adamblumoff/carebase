@@ -5,6 +5,7 @@ import rateLimit from '@fastify/rate-limit';
 import { fastifyTRPCPlugin } from '@trpc/server/adapters/fastify';
 import { appRouter } from './trpc/root';
 import { createContext } from './trpc/context';
+import { posthog } from './lib/posthog';
 
 config({ path: '.env' });
 
@@ -28,6 +29,24 @@ const registerPlugins = async () => {
   server.register(fastifyTRPCPlugin, {
     prefix: '/trpc',
     trpcOptions: { router: appRouter, createContext },
+  });
+
+  // telemetry hook
+  server.addHook('onResponse', async (request, reply) => {
+    if (!posthog) return;
+
+    const durationMs = reply.getResponseTime();
+    posthog.capture({
+      distinctId: request.headers['x-user-id']?.toString() ?? 'anonymous',
+      event: 'api_request',
+      properties: {
+        path: request.url,
+        method: request.method,
+        status: reply.statusCode,
+        duration_ms: durationMs,
+        request_id: request.id,
+      },
+    });
   });
 };
 
