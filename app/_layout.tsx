@@ -7,6 +7,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Text } from 'react-native';
 import React, { useEffect, useMemo } from 'react';
 import { PostHogProvider } from 'posthog-react-native';
+import { useFonts } from 'expo-font';
+import { Roboto_500Medium } from '@expo-google-fonts/roboto';
 
 import { createQueryClient, createTrpcClient, trpc } from '@/lib/trpc/client';
 
@@ -14,6 +16,17 @@ export default function Layout() {
   const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
   const posthogKey = process.env.EXPO_PUBLIC_POSTHOG_KEY;
+  const [fontsLoaded] = useFonts({
+    Roboto_500Medium,
+  });
+
+  if (!fontsLoaded) {
+    return (
+      <SafeAreaProvider>
+        <Text style={{ marginTop: 48, textAlign: 'center' }}>Loading fonts...</Text>
+      </SafeAreaProvider>
+    );
+  }
 
   if (!publishableKey) {
     return (

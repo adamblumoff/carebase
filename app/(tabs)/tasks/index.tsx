@@ -72,16 +72,18 @@ export default function TasksScreen() {
   };
 
   return (
-    <View className="flex flex-1 bg-white">
+    <View className="flex flex-1 bg-surface px-4 dark:bg-surface-dark">
       <Stack.Screen options={{ title: 'Tasks' }} />
       <Container>
-        <ScreenContent path="app/tasks/index.tsx" title="Tasks">
-          <Text className="text-base text-gray-700">Track and add caregiver tasks.</Text>
+        <ScreenContent path="app/(tabs)/tasks/index.tsx" title="Tasks">
+          <Text className="text-base text-text dark:text-text-dark">
+            Track and add caregiver tasks.
+          </Text>
         </ScreenContent>
 
         <View className="mb-6 gap-3">
           <TextInput
-            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-base"
+            className="rounded-lg border border-border bg-white px-3 py-2 text-base dark:border-border-dark dark:bg-surface-card-dark dark:text-text-dark"
             placeholder="New task title"
             value={title}
             onChangeText={setTitle}
@@ -101,7 +103,9 @@ export default function TasksScreen() {
         ) : tasksQuery.isError ? (
           <View className="gap-2">
             <Text className="text-base text-red-600">Could not load tasks.</Text>
-            <Text className="text-xs text-gray-500">{tasksQuery.error.message}</Text>
+            <Text className="text-xs text-text-muted dark:text-text-muted-dark">
+              {tasksQuery.error.message}
+            </Text>
           </View>
         ) : (
           <FlatList
@@ -109,9 +113,11 @@ export default function TasksScreen() {
             keyExtractor={(item) => item.id}
             contentContainerStyle={{ gap: 12, paddingBottom: 24 }}
             renderItem={({ item }) => (
-              <View className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
-                <Text className="text-base font-semibold text-gray-900">{item.title}</Text>
-                <Text className="text-sm text-gray-600">
+              <View className="rounded-lg border border-border bg-surface-strong px-4 py-3 dark:border-border-dark dark:bg-surface-card-dark">
+                <Text className="text-base font-semibold text-text dark:text-text-dark">
+                  {item.title}
+                </Text>
+                <Text className="text-sm text-text-muted dark:text-text-muted-dark">
                   Status: {item.status.replace('_', ' ')}
                 </Text>
               </View>

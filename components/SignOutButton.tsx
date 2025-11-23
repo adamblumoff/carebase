@@ -23,11 +23,13 @@ export function SignOutButton() {
 
   return (
     <Pressable
-      className="mt-4 rounded-md border border-gray-300 px-3 py-2"
+      className="mt-4 rounded-md border border-border px-3 py-2 dark:border-border-dark"
       onPress={handleSignOut}
       disabled={loading}
       style={({ pressed }) => ({ opacity: loading ? 0.5 : pressed ? 0.8 : 1 })}>
-      <Text className="text-base text-gray-800">{loading ? 'Signing out…' : 'Sign out'}</Text>
+      <Text className="text-base text-text dark:text-text-dark">
+        {loading ? 'Signing out…' : 'Sign out'}
+      </Text>
     </Pressable>
   );
 }

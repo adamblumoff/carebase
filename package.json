@@ -22,6 +22,7 @@
   "dependencies": {
     "@clerk/backend": "^2.23.2",
     "@clerk/clerk-expo": "^2.19.4",
+    "@expo-google-fonts/roboto": "^0.4.1",
     "@expo/vector-icons": "^15.0.2",
     "@fastify/cors": "^8.4.2",
     "@fastify/rate-limit": "^8.1.1",

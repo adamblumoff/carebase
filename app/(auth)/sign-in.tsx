@@ -4,8 +4,8 @@ import { useRouter } from 'expo-router';
 import { useOAuth } from '@clerk/clerk-expo';
 import * as AuthSession from 'expo-auth-session';
 import { AuthLayout } from '@/components/auth/AuthLayout';
-import { PrimaryButton } from '@/components/auth/PrimaryButton';
 import { ErrorBanner } from '@/components/auth/ErrorBanner';
+import { GoogleButton } from '@/components/GoogleButton';
 
 export default function SignInScreen() {
   const router = useRouter();
@@ -47,17 +47,15 @@ export default function SignInScreen() {
     <AuthLayout>
       <View className="gap-6">
         <View className="gap-2">
-          <Text className="text-2xl font-semibold">Welcome back</Text>
-          <Text className="text-base text-gray-600">Sign in with Google to continue.</Text>
+          <Text className="text-2xl font-semibold text-text dark:text-text-dark">Welcome back</Text>
+          <Text className="text-base text-text-muted dark:text-text-muted-dark">
+            Sign in with Google to continue.
+          </Text>
         </View>
 
         <ErrorBanner message={error} />
 
-        <PrimaryButton
-          title="Continue with Google"
-          onPress={handleGoogleSignIn}
-          loading={loading}
-        />
+        <GoogleButton title="Continue with Google" onPress={handleGoogleSignIn} loading={loading} />
       </View>
     </AuthLayout>
   );
