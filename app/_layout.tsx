@@ -25,30 +25,26 @@ export default function Layout() {
     );
   }
 
-  if (!posthogKey) {
-    return (
-      <SafeAreaProvider>
-        <Text style={{ marginTop: 48, textAlign: 'center' }}>
-          Missing EXPO_PUBLIC_POSTHOG_KEY in .env
-        </Text>
-      </SafeAreaProvider>
-    );
-  }
-
   return (
     <ClerkProvider tokenCache={tokenCache} publishableKey={publishableKey}>
       <SafeAreaProvider>
-        <PostHogProvider
-          apiKey={posthogKey}
-          options={{
-            host: process.env.EXPO_PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog.com',
-            enableSessionReplay: false,
-          }}
-          autocapture>
+        {posthogKey ? (
+          <PostHogProvider
+            apiKey={posthogKey}
+            options={{
+              host: process.env.EXPO_PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog.com',
+              enableSessionReplay: false,
+            }}
+            autocapture>
+            <TrpcProvider>
+              <AuthGate />
+            </TrpcProvider>
+          </PostHogProvider>
+        ) : (
           <TrpcProvider>
             <AuthGate />
           </TrpcProvider>
-        </PostHogProvider>
+        )}
       </SafeAreaProvider>
     </ClerkProvider>
   );
@@ -65,6 +61,14 @@ function TrpcProvider({ children }: { children: React.ReactNode }) {
     if (!apiBaseUrl) return null;
     return createTrpcClient(() => getToken({ template: 'trpc' }));
   }, [apiBaseUrl, getToken]);
+
+  if (!apiBaseUrl) {
+    return (
+      <Text style={{ marginTop: 48, textAlign: 'center' }}>
+        Missing EXPO_PUBLIC_API_BASE_URL in .env
+      </Text>
+    );
+  }
 
   if (!isLoaded || !trpcClient) return null;
 
