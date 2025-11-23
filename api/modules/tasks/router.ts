@@ -1,14 +1,21 @@
 import { TRPCError } from '@trpc/server';
-import { desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
+import { v5 as uuidv5 } from 'uuid';
 import { z } from 'zod';
 import { caregivers, tasks } from '../../db/schema';
 import { authedProcedure, router } from '../../trpc/trpc';
 
 const statusEnum = z.enum(['todo', 'in_progress', 'done']);
+const USER_NAMESPACE = '6ba7b810-9dad-11d1-80b4-00c04fd430c8'; // DNS namespace; stable for deriving UUIDs
 
 export const taskRouter = router({
   list: authedProcedure.query(async ({ ctx }) => {
-    return ctx.db.select().from(tasks).orderBy(desc(tasks.createdAt));
+    const caregiverId = await ensureCaregiver(ctx);
+    return ctx.db
+      .select()
+      .from(tasks)
+      .where(eq(tasks.createdById, caregiverId))
+      .orderBy(desc(tasks.createdAt));
   }),
 
   byCaregiver: authedProcedure
@@ -18,10 +25,14 @@ export const taskRouter = router({
       })
     )
     .query(async ({ ctx, input }) => {
+      const caregiverId = await ensureCaregiver(ctx);
+      if (input.caregiverId !== caregiverId) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
       return ctx.db
         .select()
         .from(tasks)
-        .where(eq(tasks.createdById, input.caregiverId))
+        .where(eq(tasks.createdById, caregiverId))
         .orderBy(desc(tasks.createdAt));
     }),
 
@@ -32,16 +43,17 @@ export const taskRouter = router({
         description: z.string().optional(),
         status: statusEnum.optional(),
         careRecipientId: z.string().uuid().optional(),
-        createdById: z.string().uuid().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const caregiverId = await ensureCaregiver(ctx);
+
       const payload = {
         title: input.title,
         description: input.description,
         status: input.status ?? 'todo',
         careRecipientId: input.careRecipientId,
-        createdById: input.createdById ?? null,
+        createdById: caregiverId,
       };
 
       const [inserted] = await ctx.db.insert(tasks).values(payload).returning();
@@ -56,7 +68,12 @@ export const taskRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const [deleted] = await ctx.db.delete(tasks).where(eq(tasks.id, input.id)).returning();
+      const caregiverId = await ensureCaregiver(ctx);
+
+      const [deleted] = await ctx.db
+        .delete(tasks)
+        .where(and(eq(tasks.id, input.id), eq(tasks.createdById, caregiverId)))
+        .returning();
 
       if (!deleted) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
@@ -72,6 +89,8 @@ export const taskRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const caregiverId = await ensureCaregiver(ctx);
+
       try {
         const [updated] = await ctx.db
           .update(tasks)
@@ -79,7 +98,7 @@ export const taskRouter = router({
             status: sql`(CASE WHEN ${tasks.status} = 'done' THEN 'todo' ELSE 'done' END)::task_status`,
             updatedAt: new Date(),
           })
-          .where(eq(tasks.id, input.id))
+          .where(and(eq(tasks.id, input.id), eq(tasks.createdById, caregiverId)))
           .returning();
 
         if (!updated) {
@@ -101,10 +120,12 @@ export const taskRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const caregiverId = await ensureCaregiver(ctx);
+
       const [updated] = await ctx.db
         .update(tasks)
         .set({ title: input.title, updatedAt: new Date() })
-        .where(eq(tasks.id, input.id))
+        .where(and(eq(tasks.id, input.id), eq(tasks.createdById, caregiverId)))
         .returning();
 
       if (!updated) {
@@ -157,3 +178,20 @@ export const taskRouter = router({
       return upserted;
     }),
 });
+
+async function ensureCaregiver(ctx: any) {
+  const userId = ctx.auth?.userId;
+  if (!userId) {
+    throw new TRPCError({ code: 'UNAUTHORIZED' });
+  }
+  const caregiverId = uuidv5(userId, USER_NAMESPACE);
+  await ctx.db
+    .insert(caregivers)
+    .values({
+      id: caregiverId,
+      name: userId,
+      email: `${userId}@local`,
+    })
+    .onConflictDoNothing();
+  return caregiverId;
+}
