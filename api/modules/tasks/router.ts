@@ -49,7 +49,7 @@ export const taskRouter = router({
       return inserted;
     }),
 
-  upsertCaregiver: procedure
+  upsertCaregiver: authedProcedure
     .input(
       z.object({
         email: z.string().email(),
