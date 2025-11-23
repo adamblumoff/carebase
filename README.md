@@ -25,7 +25,9 @@ Carebase is a caregiver-first mobile app that pulls every stream of care informa
 - `CLERK_SECRET_KEY`: Backend Clerk secret.
 - `EXPO_PUBLIC_API_BASE_URL`: Base URL for the tRPC API (used by the Expo app). The app requests Clerk tokens using the `trpc` template, so configure that template in Clerk.
 - `API_HOST` / `API_PORT`: Fastify server bind values.
+- `PORT`: If set by the host (e.g., Railway), the API binds to this instead of `API_PORT`.
 - `DATABASE_URL`: Postgres connection string for Drizzle/pg.
+- `CORS_ORIGIN`: Comma-separated allowlist for web origins (e.g., `http://localhost:19006,http://localhost:3000`); use `*` for open APIs.
 
 ## Project layout
 - `app/` — routes/screens (Expo Router file-based).
