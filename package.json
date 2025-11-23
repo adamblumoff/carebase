@@ -7,7 +7,7 @@
     "ios": "expo start --ios",
     "start": "expo start --tunnel --clear --reset-cache",
     "start:dev": "expo start --tunnel --clear --reset-cache",
-    "start:prod": "NODE_ENV=production expo start --tunnel --clear --reset-cache",
+    "start:prod": "APP_ENV=prod NODE_ENV=production expo start --tunnel --clear --reset-cache",
     "prebuild": "expo prebuild",
     "lint": "eslint \"**/*.{js,jsx,ts,tsx}\" && prettier -c \"**/*.{js,jsx,ts,tsx,json}\"",
     "format": "eslint \"**/*.{js,jsx,ts,tsx}\" --fix && prettier \"**/*.{js,jsx,ts,tsx,json}\" --write",
