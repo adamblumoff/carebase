@@ -44,4 +44,4 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
       - name: Check Drizzle migrations
-        run: pnpm db:migrate --verify
+        run: pnpm db:migrate
