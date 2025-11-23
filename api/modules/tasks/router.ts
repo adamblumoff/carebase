@@ -41,7 +41,7 @@ export const taskRouter = router({
         description: input.description,
         status: input.status ?? 'todo',
         careRecipientId: input.careRecipientId,
-        createdById: input.createdById ?? ctx.auth?.userId,
+        createdById: input.createdById ?? null,
       };
 
       const [inserted] = await ctx.db.insert(tasks).values(payload).returning();
