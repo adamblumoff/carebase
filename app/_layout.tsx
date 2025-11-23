@@ -55,17 +55,21 @@ function TrpcProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useMemo(() => createQueryClient(), []);
   const [trpcClient, setTrpcClient] = useState<ReturnType<typeof createTrpcClient> | null>(null);
   const [clientError, setClientError] = useState<Error | null>(null);
+  // Stable token getter so we don't recreate the TRPC client every render
+  // getToken reference is unstable; freeze the callback to avoid recreating client each render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const tokenGetter = useMemo(() => () => getToken({ template: 'trpc' }), []);
 
   useEffect(() => {
     try {
-      const client = createTrpcClient(() => getToken({ template: 'trpc' }));
+      const client = createTrpcClient(tokenGetter);
       setTrpcClient(client);
       setClientError(null);
     } catch (error: any) {
       setClientError(error instanceof Error ? error : new Error(String(error)));
       setTrpcClient(null);
     }
-  }, [getToken]);
+  }, [tokenGetter]);
 
   if (clientError) {
     return (
