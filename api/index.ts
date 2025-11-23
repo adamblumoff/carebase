@@ -1,6 +1,7 @@
 import { config } from 'dotenv';
 import fastify from 'fastify';
 import cors from '@fastify/cors';
+import rateLimit from '@fastify/rate-limit';
 import { fastifyTRPCPlugin } from '@trpc/server/adapters/fastify';
 import { appRouter } from './trpc/root';
 import { createContext } from './trpc/context';
@@ -14,6 +15,12 @@ const server = fastify({
 const registerPlugins = async () => {
   await server.register(cors, {
     origin: '*',
+  });
+
+  await server.register(rateLimit, {
+    max: Number(process.env.RATE_LIMIT_MAX ?? 100),
+    timeWindow: process.env.RATE_LIMIT_WINDOW ?? '1 minute',
+    hook: 'onSend',
   });
 
   server.get('/healthz', async () => ({ ok: true }));
