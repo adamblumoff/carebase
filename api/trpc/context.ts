@@ -1,9 +1,7 @@
 import { inferAsyncReturnType } from '@trpc/server';
-import { createClerkClient } from '@clerk/backend';
+import { verifyToken } from '@clerk/backend';
 import type { CreateFastifyContextOptions } from '@trpc/server/adapters/fastify';
 import { db } from '../db/client';
-
-const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY ?? '' });
 
 type AuthContext = {
   userId: string;
@@ -20,7 +18,10 @@ export const createContext = async ({ req }: CreateFastifyContextOptions) => {
 
   if (bearer && process.env.CLERK_SECRET_KEY) {
     try {
-      const verified = await clerk.verifyToken(bearer, { template: 'trpc' });
+      const verified = await verifyToken(bearer, {
+        secretKey: process.env.CLERK_SECRET_KEY,
+        template: 'trpc',
+      });
       auth = {
         userId: verified.sub,
         sessionId: (verified as any).sid ?? null,
