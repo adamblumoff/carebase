@@ -25,7 +25,7 @@ server.register(fastifyTRPCPlugin, {
   trpcOptions: { router: appRouter, createContext },
 });
 
-const port = Number(process.env.PORT ?? process.env.API_PORT ?? 3000);
+const port = Number(process.env.PORT ?? process.env.API_PORT ?? 8080);
 const host = process.env.API_HOST ?? '0.0.0.0';
 
 const start = async () => {

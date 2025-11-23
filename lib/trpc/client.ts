@@ -21,7 +21,10 @@ export const createQueryClient = () =>
   });
 
 export const createTrpcClient = (getToken: () => Promise<string | null>) => {
-  const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
+  const apiBaseUrl =
+    (process.env.NODE_ENV === 'production'
+      ? (process.env.EXPO_PUBLIC_API_BASE_URL_PROD ?? process.env.EXPO_PUBLIC_API_BASE_URL)
+      : process.env.EXPO_PUBLIC_API_BASE_URL) ?? process.env.EXPO_PUBLIC_API_BASE_URL_PROD;
 
   if (!apiBaseUrl) {
     console.warn('TRPC client init: missing EXPO_PUBLIC_API_BASE_URL');
