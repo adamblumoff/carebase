@@ -64,7 +64,7 @@ export default function Layout() {
 }
 
 function TrpcProvider({ children }: { children: React.ReactNode }) {
-  const { getToken, isLoaded } = useAuth();
+  const { getToken, isLoaded, isSignedIn } = useAuth();
   const apiBaseUrl =
     process.env.NODE_ENV === 'production'
       ? (process.env.EXPO_PUBLIC_API_BASE_URL_PROD ?? process.env.EXPO_PUBLIC_API_BASE_URL)
@@ -74,6 +74,12 @@ function TrpcProvider({ children }: { children: React.ReactNode }) {
     if (!apiBaseUrl) return null;
     return createTrpcClient(() => getToken({ template: 'trpc' }));
   }, [apiBaseUrl, getToken]);
+
+  // Clear all cached data when the signed-in user changes to avoid cross-account leakage.
+  useEffect(() => {
+    if (!isLoaded) return;
+    queryClient.clear();
+  }, [isLoaded, isSignedIn, queryClient]);
 
   if (!apiBaseUrl) {
     return (
