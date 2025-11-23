@@ -28,7 +28,6 @@ Carebase is a caregiver-first mobile app that pulls every stream of care informa
 - `API_HOST` / `API_PORT`: Fastify server bind values.
 - `PORT`: If set by the host (e.g., Railway), the API binds to this instead of `API_PORT`.
 - `DATABASE_URL`: Postgres connection string for Drizzle/pg.
-- `CORS_ORIGIN`: Comma-separated allowlist for web origins (e.g., `http://localhost:19006,http://localhost:3000`); use `*` for open APIs.
 
 ## Project layout
 - `app/` — routes/screens (Expo Router file-based).
