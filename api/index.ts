@@ -13,10 +13,9 @@ const server = fastify({
 
 const registerPlugins = async () => {
   await server.register(cors, {
-    origin:
-      process.env.CORS_ORIGIN?.split(',')
-        .map((o) => o.trim())
-        .filter(Boolean) || '*',
+    origin: process.env.CORS_ORIGIN?.split(',')
+      .map((o) => o.trim())
+      .filter(Boolean) || ['http://localhost:19006', 'http://localhost:3000'],
   });
 
   server.get('/healthz', async () => ({ ok: true }));
