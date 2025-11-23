@@ -5,7 +5,7 @@ import { Slot, useRouter, useSegments } from 'expo-router';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Text } from 'react-native';
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { PostHogProvider } from 'posthog-react-native';
 
 import { createQueryClient, createTrpcClient, trpc } from '@/lib/trpc/client';
@@ -52,20 +52,25 @@ export default function Layout() {
 
 function TrpcProvider({ children }: { children: React.ReactNode }) {
   const { getToken, isLoaded } = useAuth();
-  const apiBaseUrl =
-    process.env.NODE_ENV === 'production'
-      ? (process.env.EXPO_PUBLIC_API_BASE_URL_PROD ?? process.env.EXPO_PUBLIC_API_BASE_URL)
-      : process.env.EXPO_PUBLIC_API_BASE_URL;
   const queryClient = useMemo(() => createQueryClient(), []);
-  const trpcClient = useMemo(() => {
-    if (!apiBaseUrl) return null;
-    return createTrpcClient(() => getToken({ template: 'trpc' }));
-  }, [apiBaseUrl, getToken]);
+  const [trpcClient, setTrpcClient] = useState<ReturnType<typeof createTrpcClient> | null>(null);
+  const [clientError, setClientError] = useState<Error | null>(null);
 
-  if (!apiBaseUrl) {
+  useEffect(() => {
+    try {
+      const client = createTrpcClient(() => getToken({ template: 'trpc' }));
+      setTrpcClient(client);
+      setClientError(null);
+    } catch (error: any) {
+      setClientError(error instanceof Error ? error : new Error(String(error)));
+      setTrpcClient(null);
+    }
+  }, [getToken]);
+
+  if (clientError) {
     return (
       <Text style={{ marginTop: 48, textAlign: 'center' }}>
-        Missing EXPO_PUBLIC_API_BASE_URL in .env
+        {clientError.message || 'Failed to init API client'}
       </Text>
     );
   }
