@@ -1,5 +1,7 @@
 # Repository Guidelines
 
+> Context: We’re a small company with very few users today. Bias advice toward speed and pragmatism over heavyweight process; prefer incremental, low-overhead solutions that keep us shipping quickly while staying safe enough (env/secret hygiene, basic monitoring).
+
 ## Project Structure & Module Organization
 - Expo app at root; routes in `app/` (file/folder maps to screen).  
 - Shared UI/hooks in `components/` or `app/(components|hooks)`; global styles live in `global.css`.  
