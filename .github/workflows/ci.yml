@@ -21,7 +21,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
+          cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
       - name: Lint
@@ -40,8 +40,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
+          cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
       - name: Check Drizzle migrations (skip if no DATABASE_URL)
-        run: |\n          if [ -z \"${{ secrets.CI_DATABASE_URL }}\" ]; then\n            echo \"CI_DATABASE_URL not set; skipping migrate check\";\n            exit 0;\n          fi\n          export DATABASE_URL=\"${{ secrets.CI_DATABASE_URL }}\"\n          pnpm db:migrate\n*** End Patch\ഴിഞ്ഞರು"## Test Output Reasoning
+        env:
+          CI_DATABASE_URL: ${{ secrets.CI_DATABASE_URL }}
+        run: |
+          if [ -z "$CI_DATABASE_URL" ]; then
+            echo "CI_DATABASE_URL not set; skipping migrate check"
+            exit 0
+          fi
+          export DATABASE_URL="$CI_DATABASE_URL"
+          pnpm db:migrate
