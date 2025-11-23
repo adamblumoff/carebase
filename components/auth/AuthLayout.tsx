@@ -7,8 +7,8 @@ type Props = {
 
 export function AuthLayout({ children }: Props) {
   return (
-    <View className="flex-1 bg-surface dark:bg-surface-dark">
-      <View className="flex-1 px-6 pt-16">{children}</View>
+    <View className="flex-1 items-center justify-center bg-surface px-6 dark:bg-surface-dark">
+      <View className="w-full max-w-sm">{children}</View>
     </View>
   );
 }
