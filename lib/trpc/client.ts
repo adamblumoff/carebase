@@ -21,7 +21,10 @@ export const createQueryClient = () =>
   });
 
 export const createTrpcClient = (getToken: () => Promise<string | null>) => {
-  const useProd = process.env.APP_ENV === 'prod' || process.env.NODE_ENV === 'production';
+  const useProd =
+    process.env.EXPO_PUBLIC_APP_ENV === 'prod' ||
+    process.env.APP_ENV === 'prod' ||
+    process.env.NODE_ENV === 'production';
   const apiBaseUrl = useProd
     ? (process.env.EXPO_PUBLIC_API_BASE_URL_PROD ?? process.env.EXPO_PUBLIC_API_BASE_URL)
     : process.env.EXPO_PUBLIC_API_BASE_URL;
