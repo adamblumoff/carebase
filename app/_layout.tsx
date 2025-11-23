@@ -3,6 +3,7 @@ import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
 import { tokenCache } from '@clerk/clerk-expo/token-cache';
 import { Slot, useRouter, useSegments } from 'expo-router';
 import { QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Text } from 'react-native';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -12,6 +13,8 @@ import { createQueryClient, createTrpcClient, trpc } from '@/lib/trpc/client';
 
 export default function Layout() {
   const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+
+  const posthogKey = process.env.EXPO_PUBLIC_POSTHOG_KEY;
 
   const posthogKey = process.env.EXPO_PUBLIC_POSTHOG_KEY;
 
@@ -28,6 +31,23 @@ export default function Layout() {
   return (
     <ClerkProvider tokenCache={tokenCache} publishableKey={publishableKey}>
       <SafeAreaProvider>
+        {posthogKey ? (
+          <PostHogProvider
+            apiKey={posthogKey}
+            options={{
+              host: process.env.EXPO_PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog.com',
+              enableSessionReplay: false,
+            }}
+            autocapture>
+            <TrpcProvider>
+              <AuthGate />
+            </TrpcProvider>
+          </PostHogProvider>
+        ) : (
+          <TrpcProvider>
+            <AuthGate />
+          </TrpcProvider>
+        )}
         {posthogKey ? (
           <PostHogProvider
             apiKey={posthogKey}
