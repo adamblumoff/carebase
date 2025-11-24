@@ -171,7 +171,7 @@ export const taskRouter = router({
       const nextState = input.action === 'approve' ? 'approved' : 'ignored';
 
       const updatePayload: Partial<typeof tasks.$inferInsert> = {
-        reviewState: nextState as (typeof reviewStateEnum)['enum'][number],
+        reviewState: nextState as z.infer<typeof reviewStateEnum>,
         updatedAt: new Date(),
       };
 

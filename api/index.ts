@@ -30,7 +30,6 @@ const registerPlugins = async () => {
   await server.register(rateLimit, {
     max: Number(process.env.RATE_LIMIT_MAX ?? 100),
     timeWindow: process.env.RATE_LIMIT_WINDOW ?? '1 minute',
-    hook: 'onSend',
   });
 
   server.get('/healthz', async () => ({ ok: true }));
@@ -46,9 +45,11 @@ const registerPlugins = async () => {
       try {
         const { caregiverId } = verifyState(state);
         const client = createOAuthClient();
-        client.redirectUri = process.env.GOOGLE_REDIRECT_URI;
+        // use bracket notation to avoid TypeScript error for private property
+        (client as any)['redirectUri'] = process.env.GOOGLE_REDIRECT_URI;
 
-        const { tokens } = await client.getToken({ code, scope: googleScope });
+        const tokenResponse = client.getToken(code);
+        const tokens = (await tokenResponse).tokens;
 
         if (!tokens.refresh_token) {
           throw new Error(
