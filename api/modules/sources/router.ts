@@ -1,12 +1,10 @@
 import { TRPCError } from '@trpc/server';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { createOAuthClient, hasGoogleConfig } from '../../lib/google';
+import { createOAuthClient, googleScope, hasGoogleConfig, signState } from '../../lib/google';
 import { ensureCaregiver } from '../../lib/caregiver';
 import { sources } from '../../db/schema';
 import { authedProcedure, router } from '../../trpc/trpc';
-
-const googleScope = ['https://www.googleapis.com/auth/gmail.readonly'];
 
 export const sourcesRouter = router({
   list: authedProcedure.query(async ({ ctx }) => {
@@ -16,10 +14,15 @@ export const sourcesRouter = router({
 
   authorizeUrl: authedProcedure
     .input(z.object({ redirectUri: z.string().url().optional() }).optional())
-    .query(({ input }) => {
+    .query(async ({ ctx, input }) => {
       if (!hasGoogleConfig()) {
         throw new TRPCError({ code: 'FAILED_PRECONDITION', message: 'Google config missing' });
       }
+
+      const caregiverId = await ensureCaregiver(ctx);
+
+      // carry caregiver in state to allow backend-only exchange if app can't capture code
+      const state = signState({ caregiverId });
 
       const client = createOAuthClient();
       if (input?.redirectUri) {
@@ -31,6 +34,7 @@ export const sourcesRouter = router({
         access_type: 'offline',
         prompt: 'consent',
         include_granted_scopes: true,
+        state,
       });
 
       return { url };

@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useColorScheme } from 'nativewind';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { Stack } from 'expo-router';
@@ -41,6 +41,13 @@ export default function ConnectionsScreen() {
   const sourcesQuery = trpc.sources.list.useQuery();
   const authUrlQuery = trpc.sources.authorizeUrl.useQuery({ redirectUri }, { enabled: false });
 
+  const [connectError, setConnectError] = useState<string | null>(null);
+
+  const hasRedirect = Boolean(redirectUri);
+  const gmailSources = sourcesQuery.data?.filter((s) => s.provider === 'gmail') ?? [];
+  const activeGmail = gmailSources.filter((s) => s.status === 'active');
+  const hasGmail = activeGmail.length > 0;
+
   const connectGoogle = trpc.sources.connectGoogle.useMutation({
     onSuccess: () => {
       sourcesQuery.refetch();
@@ -57,22 +64,50 @@ export default function ConnectionsScreen() {
 
   const handleConnect = useCallback(async () => {
     try {
+      if (!hasRedirect) {
+        console.warn('Missing Google redirect URI');
+        return;
+      }
+
+      setConnectError(null);
+
       const { data } = await authUrlQuery.refetch();
       const url = data?.url;
       if (!url) return;
 
       const result = await WebBrowser.openAuthSessionAsync(url, redirectUri);
+
+      // Always refetch after browser closes to pick up server-side exchange
+      await sourcesQuery.refetch();
+      const nowHasGmail =
+        sourcesQuery.data?.some((s) => s.provider === 'gmail' && s.status === 'active') ?? false;
+
+      if (nowHasGmail) {
+        setConnectError(null);
+        return;
+      }
+
+      if (result.type !== 'success') {
+        setConnectError('Google sign-in was cancelled.');
+        return;
+      }
+
       if (result.type === 'success' && result.url) {
         const parsed = new URL(result.url);
         const code = parsed.searchParams.get('code');
         if (code) {
           await connectGoogle.mutateAsync({ code, redirectUri });
+        } else {
+          setConnectError('No code returned from Google.');
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.warn('connect google failed', error);
+      setConnectError(error?.message ?? 'Connect failed');
+    } finally {
+      sourcesQuery.refetch();
     }
-  }, [authUrlQuery, connectGoogle, redirectUri]);
+  }, [authUrlQuery, connectGoogle, redirectUri, hasRedirect, sourcesQuery]);
 
   const handleSync = useCallback(
     async (id: string) => {
@@ -102,10 +137,21 @@ export default function ConnectionsScreen() {
             read-only access and store the refresh token server-side.
           </Text>
           <Button
-            title={connectGoogle.isLoading ? 'Connecting…' : 'Connect Google'}
+            title={
+              hasGmail ? 'Connected' : connectGoogle.isLoading ? 'Connecting…' : 'Connect Google'
+            }
             onPress={handleConnect}
-            disabled={isBusy}
+            disabled={isBusy || hasGmail || !hasRedirect}
           />
+          {!hasRedirect ? (
+            <Text className="text-xs text-red-600">
+              Set EXPO_PUBLIC_GOOGLE_REDIRECT_URI to enable Google connect.
+            </Text>
+          ) : null}
+          {connectGoogle.isError ? (
+            <Text className="text-xs text-red-600">{connectGoogle.error.message}</Text>
+          ) : null}
+          {connectError ? <Text className="text-xs text-red-600">{connectError}</Text> : null}
         </View>
 
         <View className="mt-4 gap-3">
@@ -116,56 +162,60 @@ export default function ConnectionsScreen() {
           ) : sourcesQuery.isError ? (
             <Text className="text-sm text-red-600">Failed to load sources.</Text>
           ) : sourcesQuery.data?.length ? (
-            sourcesQuery.data.map((source) => {
-              const tone = statusStyles[source.status] ?? statusStyles.active;
-              return (
-                <View
-                  key={source.id}
-                  className="gap-2 rounded-2xl border border-border bg-white p-4 dark:border-border-dark dark:bg-surface-card-dark">
-                  <View className="flex-row items-center justify-between">
-                    <View>
-                      <Text className="text-base font-semibold text-text dark:text-text-dark">
-                        {source.accountEmail}
-                      </Text>
-                      <Text className="text-xs text-text-muted dark:text-text-muted-dark">
-                        Provider: {source.provider}
-                      </Text>
+            sourcesQuery.data
+              .filter((source) => source.provider === 'gmail' && source.status !== 'disconnected')
+              .map((source) => {
+                const tone = statusStyles[source.status] ?? statusStyles.active;
+                return (
+                  <View
+                    key={source.id}
+                    className="gap-2 rounded-2xl border border-border bg-white p-4 dark:border-border-dark dark:bg-surface-card-dark">
+                    <View className="flex-row items-center justify-between">
+                      <View>
+                        <Text className="text-base font-semibold text-text dark:text-text-dark">
+                          {source.accountEmail}
+                        </Text>
+                        <Text className="text-xs text-text-muted dark:text-text-muted-dark">
+                          Provider: {source.provider}
+                        </Text>
+                      </View>
+                      <View className={`rounded-full px-2 py-1 ${tone}`}>
+                        <Text className="text-[11px] font-semibold capitalize">
+                          {source.status}
+                        </Text>
+                      </View>
                     </View>
-                    <View className={`rounded-full px-2 py-1 ${tone}`}>
-                      <Text className="text-[11px] font-semibold capitalize">{source.status}</Text>
+                    <Text className="text-xs text-text-muted dark:text-text-muted-dark">
+                      Last sync:{' '}
+                      {source.lastSyncAt ? new Date(source.lastSyncAt).toLocaleString() : 'never'}
+                    </Text>
+                    <View className="flex-row items-center gap-3">
+                      <Pressable
+                        onPress={() => handleSync(source.id)}
+                        disabled={syncNow.isLoading || source.status !== 'active'}
+                        className="flex-1 items-center justify-center rounded-full bg-primary px-4 py-3"
+                        style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
+                        {syncNow.isLoading ? (
+                          <ActivityIndicator color="#fff" />
+                        ) : (
+                          <Text className="text-base font-semibold text-white">Sync now</Text>
+                        )}
+                      </Pressable>
+                      <Pressable
+                        onPress={() => handleDisconnect(source.id)}
+                        disabled={disconnect.isLoading}
+                        className="flex-1 items-center justify-center rounded-full border border-border px-4 py-3 dark:border-border-dark"
+                        style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}>
+                        {disconnect.isLoading ? (
+                          <ActivityIndicator />
+                        ) : (
+                          <Text className="text-base font-semibold text-text">Disconnect</Text>
+                        )}
+                      </Pressable>
                     </View>
                   </View>
-                  <Text className="text-xs text-text-muted dark:text-text-muted-dark">
-                    Last sync:{' '}
-                    {source.lastSyncAt ? new Date(source.lastSyncAt).toLocaleString() : 'never'}
-                  </Text>
-                  <View className="flex-row items-center gap-3">
-                    <Pressable
-                      onPress={() => handleSync(source.id)}
-                      disabled={syncNow.isLoading || source.status === 'disconnected'}
-                      className="flex-1 items-center justify-center rounded-full bg-primary px-4 py-3"
-                      style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
-                      {syncNow.isLoading ? (
-                        <ActivityIndicator color="#fff" />
-                      ) : (
-                        <Text className="text-base font-semibold text-white">Sync now</Text>
-                      )}
-                    </Pressable>
-                    <Pressable
-                      onPress={() => handleDisconnect(source.id)}
-                      disabled={disconnect.isLoading}
-                      className="flex-1 items-center justify-center rounded-full border border-border px-4 py-3 dark:border-border-dark"
-                      style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}>
-                      {disconnect.isLoading ? (
-                        <ActivityIndicator />
-                      ) : (
-                        <Text className="text-base font-semibold text-text">Disconnect</Text>
-                      )}
-                    </Pressable>
-                  </View>
-                </View>
-              );
-            })
+                );
+              })
           ) : (
             <Text className="text-sm text-text-muted dark:text-text-muted-dark">
               No connected sources yet.

@@ -1,4 +1,5 @@
 import { config } from 'dotenv';
+import { createHmac } from 'crypto';
 import { google } from 'googleapis';
 
 config({ path: '.env' });
@@ -27,3 +28,25 @@ export const createGmailClient = (refreshToken: string) => {
 };
 
 export const gmailQuery = 'subject:(appointment OR medication OR bill)';
+
+export const googleScope = ['https://www.googleapis.com/auth/gmail.readonly'];
+
+const stateSecret =
+  process.env.GOOGLE_STATE_SECRET || process.env.CLERK_SECRET_KEY || 'state-dev-secret';
+
+export const signState = (payload: { caregiverId: string }) => {
+  const raw = JSON.stringify(payload);
+  const signature = createHmac('sha256', stateSecret).update(raw).digest('base64url');
+  return `${Buffer.from(raw).toString('base64url')}.${signature}`;
+};
+
+export const verifyState = (state: string) => {
+  const [rawB64, sig] = state.split('.');
+  if (!rawB64 || !sig) throw new Error('Invalid state');
+  const raw = Buffer.from(rawB64, 'base64url').toString('utf8');
+  const expected = createHmac('sha256', stateSecret).update(raw).digest('base64url');
+  if (expected !== sig) throw new Error('Invalid state signature');
+  const parsed = JSON.parse(raw) as { caregiverId: string };
+  if (!parsed?.caregiverId) throw new Error('Invalid state payload');
+  return parsed;
+};

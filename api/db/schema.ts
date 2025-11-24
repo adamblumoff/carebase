@@ -113,6 +113,11 @@ export const sources = pgTable(
     lastSyncAt: timestamp('last_sync_at', { withTimezone: true }),
     status: sourceStatus('status').default('active').notNull(),
     errorMessage: text('error_message'),
+    watchId: text('watch_id'),
+    watchExpiration: timestamp('watch_expiration', { withTimezone: true }),
+    calendarChannelId: text('calendar_channel_id'),
+    calendarResourceId: text('calendar_resource_id'),
+    calendarSyncToken: text('calendar_sync_token'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .default(sql`now()`)
       .notNull(),
@@ -138,6 +143,7 @@ export const ingestionEvents = pgTable('ingestion_events', {
     .notNull()
     .references(() => caregivers.id),
   provider: sourceProvider('provider').notNull(),
+  type: text('type').default('gmail').notNull(),
   ingestionId: text('ingestion_id'),
   historyId: text('history_id'),
   startedAt: timestamp('started_at', { withTimezone: true })
@@ -149,4 +155,5 @@ export const ingestionEvents = pgTable('ingestion_events', {
   skippedCount: integer('skipped_count').default(0).notNull(),
   errorCount: integer('error_count').default(0).notNull(),
   errorMessage: text('error_message'),
+  durationMs: integer('duration_ms'),
 });

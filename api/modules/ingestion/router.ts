@@ -146,81 +146,97 @@ async function upsertTaskFromMessage({
   return { action: 'created', id: inserted.id };
 }
 
+export async function syncSource({
+  ctx,
+  sourceId,
+  caregiverIdOverride,
+  reason = 'manual',
+}: {
+  ctx: any;
+  sourceId: string;
+  caregiverIdOverride?: string;
+  reason?: string;
+}) {
+  const [source] = await ctx.db.select().from(sources).where(eq(sources.id, sourceId)).limit(1);
+
+  if (!source) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: 'Source not found' });
+  }
+
+  const caregiverId = caregiverIdOverride ?? source.caregiverId;
+
+  if (source.status === 'disconnected') {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Source is disconnected' });
+  }
+
+  const { gmail } = createGmailClient(source.refreshToken);
+
+  const startedAt = new Date();
+
+  const { messageIds, nextHistoryId } = await fetchMessages(
+    gmail,
+    source.accountEmail,
+    source.historyId
+  );
+
+  const results = { created: 0, updated: 0, skipped: 0, errors: 0 };
+
+  for (const id of messageIds) {
+    try {
+      const { data } = await gmail.users.messages.get({
+        userId: 'me',
+        id,
+        format: 'metadata',
+        metadataHeaders: ['Subject', 'From', 'Date'],
+      });
+
+      const outcome = await upsertTaskFromMessage({ ctx, source, caregiverId, message: data });
+      if (outcome.action === 'created') results.created += 1;
+      if (outcome.action === 'updated') results.updated += 1;
+    } catch (error) {
+      ctx.req?.log?.error({ err: error }, 'sync message failed');
+      results.errors += 1;
+    }
+  }
+
+  await ctx.db
+    .update(sources)
+    .set({ historyId: nextHistoryId ?? source.historyId, lastSyncAt: new Date() })
+    .where(eq(sources.id, source.id));
+
+  await ctx.db.insert(ingestionEvents).values({
+    sourceId: source.id,
+    caregiverId,
+    provider: source.provider,
+    type: 'gmail',
+    ingestionId: `${reason}-${Date.now()}`,
+    historyId: nextHistoryId ?? source.historyId ?? undefined,
+    startedAt,
+    finishedAt: new Date(),
+    createdCount: results.created,
+    updatedCount: results.updated,
+    skippedCount: results.skipped,
+    errorCount: results.errors,
+    durationMs: new Date().getTime() - startedAt.getTime(),
+  });
+
+  return {
+    ...results,
+    historyId: nextHistoryId ?? source.historyId,
+    messageCount: messageIds.length,
+  };
+}
+
 export const ingestionRouter = router({
   syncNow: authedProcedure
     .input(z.object({ sourceId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const caregiverId = await ensureCaregiver(ctx);
-
-      const [source] = await ctx.db
-        .select()
-        .from(sources)
-        .where(eq(sources.id, input.sourceId))
-        .limit(1);
-
-      if (!source || source.caregiverId !== caregiverId) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Source not found' });
-      }
-
-      if (source.status === 'disconnected') {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Source is disconnected' });
-      }
-
-      const { gmail } = createGmailClient(source.refreshToken);
-
-      const startedAt = new Date();
-
-      const { messageIds, nextHistoryId } = await fetchMessages(
-        gmail,
-        source.accountEmail,
-        source.historyId
-      );
-
-      const results = { created: 0, updated: 0, skipped: 0, errors: 0 };
-
-      for (const id of messageIds) {
-        try {
-          const { data } = await gmail.users.messages.get({
-            userId: 'me',
-            id,
-            format: 'metadata',
-            metadataHeaders: ['Subject', 'From', 'Date'],
-          });
-
-          const outcome = await upsertTaskFromMessage({ ctx, source, caregiverId, message: data });
-          if (outcome.action === 'created') results.created += 1;
-          if (outcome.action === 'updated') results.updated += 1;
-        } catch (error) {
-          ctx.req?.log?.error({ err: error }, 'sync message failed');
-          results.errors += 1;
-        }
-      }
-
-      // update source cursor
-      await ctx.db
-        .update(sources)
-        .set({ historyId: nextHistoryId ?? source.historyId, lastSyncAt: new Date() })
-        .where(eq(sources.id, source.id));
-
-      // log ingestion event
-      await ctx.db.insert(ingestionEvents).values({
-        sourceId: source.id,
-        caregiverId,
-        provider: source.provider,
-        ingestionId: `manual-${Date.now()}`,
-        historyId: nextHistoryId ?? source.historyId ?? undefined,
-        startedAt,
-        finishedAt: new Date(),
-        createdCount: results.created,
-        updatedCount: results.updated,
-        skippedCount: results.skipped,
-        errorCount: results.errors,
+      return syncSource({
+        ctx,
+        sourceId: input.sourceId,
+        caregiverIdOverride: caregiverId,
+        reason: 'manual',
       });
-
-      return {
-        ...results,
-        historyId: nextHistoryId ?? source.historyId,
-        messageCount: messageIds.length,
-      };
     }),
 });
