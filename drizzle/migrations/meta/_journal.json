@@ -15,6 +15,13 @@
       "when": 1763923200000,
       "tag": "0001_themed_caregivers",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1764005762557,
+      "tag": "0002_numerous_norman_osborn",
+      "breakpoints": true
     }
   ]
 }
