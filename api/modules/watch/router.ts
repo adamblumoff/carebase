@@ -42,6 +42,7 @@ export const watchRouter = router({
 
         return updated;
       } catch (err: any) {
+        if (err instanceof TRPCError) throw err;
         ctx.req?.log?.error({ err }, 'watch.register failed');
         const hint =
           err?.code === 403
