@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useColorScheme } from 'nativewind';
 import {
   ActivityIndicator,
   Alert,
@@ -17,6 +18,7 @@ import { Button } from '@/components/Button';
 import { Container } from '@/components/Container';
 
 export default function TasksScreen() {
+  useColorScheme();
   const [title, setTitle] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);

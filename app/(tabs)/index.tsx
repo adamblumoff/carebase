@@ -1,10 +1,12 @@
 import { Stack } from 'expo-router';
 import { useEffect } from 'react';
+import { useColorScheme } from 'nativewind';
 import { View } from 'react-native';
 
 import { trpc } from '@/lib/trpc/client';
 
 export default function Home() {
+  useColorScheme();
   const utils = trpc.useUtils();
 
   useEffect(() => {
