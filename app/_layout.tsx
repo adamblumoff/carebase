@@ -9,10 +9,13 @@ import React, { useEffect, useMemo } from 'react';
 import { PostHogProvider } from 'posthog-react-native';
 import { useFonts } from 'expo-font';
 import { Roboto_500Medium } from '@expo-google-fonts/roboto';
+import { useColorScheme } from 'nativewind';
 
 import { createQueryClient, createTrpcClient, trpc } from '@/lib/trpc/client';
+import { useUserTheme } from '@/app/(hooks)/useUserTheme';
 
 export default function Layout() {
+  useColorScheme();
   const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
   const posthogKey = process.env.EXPO_PUBLIC_POSTHOG_KEY;
@@ -94,7 +97,7 @@ function TrpcProvider({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <trpc.Provider client={trpcClient} queryClient={queryClient}>
-        {children}
+        <ThemeGate>{children}</ThemeGate>
       </trpc.Provider>
     </QueryClientProvider>
   );
@@ -117,4 +120,11 @@ function AuthGate() {
 
   if (!isLoaded) return null;
   return <Slot />;
+}
+
+function ThemeGate({ children }: { children: React.ReactNode }) {
+  const { themeReady } = useUserTheme();
+
+  if (!themeReady) return null;
+  return <>{children}</>;
 }
