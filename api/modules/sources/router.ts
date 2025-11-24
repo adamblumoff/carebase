@@ -102,32 +102,5 @@ export const sourcesRouter = router({
       return row;
     }),
 
-  disconnect: authedProcedure
-    .input(z.object({ id: z.string().uuid() }))
-    .mutation(async ({ ctx, input }) => {
-      const caregiverId = await ensureCaregiver(ctx);
-
-      // Verify ownership before modifying
-      const [existing] = await ctx.db
-        .select({ caregiverId: sources.caregiverId })
-        .from(sources)
-        .where(eq(sources.id, input.id))
-        .limit(1);
-
-      if (!existing || existing.caregiverId !== caregiverId) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Source not found' });
-      }
-
-      const [updated] = await ctx.db
-        .update(sources)
-        .set({ status: 'disconnected', updatedAt: new Date() })
-        .where(and(eq(sources.id, input.id), eq(sources.caregiverId, caregiverId)))
-        .returning();
-
-      if (!updated) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Source not found' });
-      }
-
-      return { id: updated.id, status: updated.status };
-    }),
+import { and, eq } from 'drizzle-orm';
 });
