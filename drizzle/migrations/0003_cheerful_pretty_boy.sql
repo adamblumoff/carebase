@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "sources_caregiver_provider_email_idx" ON "sources" USING btree ("caregiver_id","provider","account_email");

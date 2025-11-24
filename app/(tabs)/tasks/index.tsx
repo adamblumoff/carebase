@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useColorScheme } from 'nativewind';
 import {
   ActivityIndicator,
@@ -17,15 +17,54 @@ import { trpc } from '@/lib/trpc/client';
 import { Button } from '@/components/Button';
 import { Container } from '@/components/Container';
 
+const filterOptions = ['all', 'appointment', 'bill', 'medication', 'general'] as const;
+type TaskTypeFilter = (typeof filterOptions)[number];
+const createTypeOptions = ['general', 'appointment', 'bill', 'medication'] as const;
+type CreateTaskType = (typeof createTypeOptions)[number];
+
+const formatConfidence = (value?: number | string | null) => {
+  if (value === null || value === undefined) return '—';
+  const parsed = typeof value === 'string' ? parseFloat(value) : value;
+  if (Number.isNaN(parsed)) return '—';
+  return `${Math.round(parsed * 100)}%`;
+};
+
+const formatType = (type?: string | null) => {
+  if (!type) return 'General';
+  return type.charAt(0).toUpperCase() + type.slice(1);
+};
+
+const badgeToneStyles: Record<string, string> = {
+  neutral: 'bg-surface-strong text-text',
+  muted: 'bg-surface text-text-muted',
+  warn: 'bg-amber-100 text-amber-800',
+};
+
+type BadgeTone = keyof typeof badgeToneStyles;
+
+const Badge = ({ label, tone = 'neutral' }: { label: string; tone?: BadgeTone }) => (
+  <View
+    className={`rounded-full px-2 py-1 ${badgeToneStyles[tone]}`}
+    style={{ borderRadius: 9999 }}>
+    <Text className="text-[11px] font-semibold capitalize">{label}</Text>
+  </View>
+);
+
 export default function TasksScreen() {
   useColorScheme();
   const [title, setTitle] = useState('');
+  const [newTaskType, setNewTaskType] = useState<CreateTaskType>('general');
+  const [selectedType, setSelectedType] = useState<TaskTypeFilter>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
+  const listInput = useMemo(
+    () => (selectedType === 'all' ? undefined : { type: selectedType }),
+    [selectedType]
+  );
   const utils = trpc.useUtils();
 
-  const tasksQuery = trpc.tasks.list.useQuery();
+  const tasksQuery = trpc.tasks.list.useQuery(listInput);
 
   useEffect(() => {
     if (tasksQuery.isError) {
@@ -33,21 +72,53 @@ export default function TasksScreen() {
     }
   }, [tasksQuery.isError, tasksQuery.error]);
 
+  const pendingReview = useMemo(
+    () => tasksQuery.data?.find((item) => item.reviewState === 'pending'),
+    [tasksQuery.data]
+  );
+
   const createTask = trpc.tasks.create.useMutation({
     onMutate: async (input) => {
       const optimisticId = `temp-${Date.now()}`;
-      await utils.tasks.list.cancel();
+      await Promise.all([utils.tasks.list.cancel(listInput), utils.tasks.list.cancel()]);
 
-      const previous = utils.tasks.list.getData();
+      const previousAll = utils.tasks.list.getData();
+      const previousFiltered = utils.tasks.list.getData(listInput);
 
       const optimisticTask = {
         id: optimisticId,
         title: input.title,
         description: input.description ?? null,
+        type: input.type ?? 'general',
         status: input.status ?? 'todo',
-        dueAt: null,
+        reviewState: 'approved' as const,
+        dueAt: input.dueAt ?? null,
+        provider: null,
+        sourceId: null,
+        sourceLink: null,
+        sender: null,
+        rawSnippet: null,
+        confidence: null,
+        syncedAt: null,
+        ingestionId: null,
         careRecipientId: input.careRecipientId ?? null,
-        createdById: input.createdById ?? null,
+        createdById: null,
+        startAt: null,
+        endAt: null,
+        location: null,
+        organizer: null,
+        attendees: null,
+        amount: null,
+        currency: null,
+        vendor: null,
+        referenceNumber: null,
+        statementPeriod: null,
+        medicationName: null,
+        dosage: null,
+        frequency: null,
+        route: null,
+        nextDoseAt: null,
+        prescribingProvider: null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -56,24 +127,38 @@ export default function TasksScreen() {
         current ? [optimisticTask, ...current] : [optimisticTask]
       );
 
-      return { previous, optimisticId };
+      utils.tasks.list.setData(listInput, (current) => {
+        if (!current) return listInput ? current : [optimisticTask];
+        if (listInput?.type && listInput.type !== optimisticTask.type) return current;
+        return [optimisticTask, ...current];
+      });
+
+      return { previousAll, previousFiltered, optimisticId };
     },
     onError: (_error, _input, context) => {
       console.error('tasks.create failed', _error);
-      if (context?.previous) {
-        utils.tasks.list.setData(undefined, context.previous);
+      if (context?.previousAll) {
+        utils.tasks.list.setData(undefined, context.previousAll);
+      }
+      if (context?.previousFiltered) {
+        utils.tasks.list.setData(listInput, context.previousFiltered);
       }
     },
     onSuccess: (task, _input, context) => {
       utils.tasks.list.setData(undefined, (current) => {
         if (!current) return [task];
         if (!context) return [task, ...current];
-
         return current.map((item) => (item.id === context.optimisticId ? task : item));
+      });
+
+      utils.tasks.list.setData(listInput, (current) => {
+        if (!current) return listInput ? current : [task];
+        return current.map((item) => (item.id === context?.optimisticId ? task : item));
       });
     },
     onSettled: () => {
       utils.tasks.list.invalidate();
+      setTitle('');
     },
   });
 
@@ -85,11 +170,15 @@ export default function TasksScreen() {
       utils.tasks.list.setData(undefined, (current) =>
         current ? current.filter((item) => item.id !== input.id) : current
       );
+      utils.tasks.list.setData(listInput, (current) =>
+        current ? current.filter((item) => item.id !== input.id) : current
+      );
       return { previous };
     },
     onError: (_error, _input, context) => {
       if (context?.previous) {
         utils.tasks.list.setData(undefined, context.previous);
+        utils.tasks.list.setData(listInput, context.previous);
       }
     },
     onSettled: () => {
@@ -102,8 +191,7 @@ export default function TasksScreen() {
     const trimmed = title.trim();
     if (!trimmed) return;
 
-    createTask.mutate({ title: trimmed, status: 'todo' });
-    setTitle('');
+    createTask.mutate({ title: trimmed, status: 'todo', type: newTaskType });
   };
 
   const confirmDelete = (id: string) => {
@@ -136,11 +224,17 @@ export default function TasksScreen() {
           ? current.map((item) => (item.id === input.id ? { ...item, title: input.title } : item))
           : current
       );
+      utils.tasks.list.setData(listInput, (current) =>
+        current
+          ? current.map((item) => (item.id === input.id ? { ...item, title: input.title } : item))
+          : current
+      );
       return { previous };
     },
     onError: (_error, _input, context) => {
       if (context?.previous) {
         utils.tasks.list.setData(undefined, context.previous);
+        utils.tasks.list.setData(listInput, context.previous);
       }
     },
     onSettled: () => {
@@ -174,11 +268,21 @@ export default function TasksScreen() {
             )
           : current
       );
+      utils.tasks.list.setData(listInput, (current) =>
+        current
+          ? current.map((item) =>
+              item.id === input.id
+                ? { ...item, status: item.status === 'done' ? 'todo' : 'done' }
+                : item
+            )
+          : current
+      );
       return { previous };
     },
     onError: (_error, _input, context) => {
       if (context?.previous) {
         utils.tasks.list.setData(undefined, context.previous);
+        utils.tasks.list.setData(listInput, context.previous);
       }
     },
     onSettled: () => {
@@ -190,10 +294,117 @@ export default function TasksScreen() {
     toggleStatus.mutate({ id });
   };
 
+  const reviewTask = trpc.tasks.review.useMutation({
+    onMutate: async (input) => {
+      await Promise.all([utils.tasks.list.cancel(listInput), utils.tasks.list.cancel()]);
+      const previousSpecific = utils.tasks.list.getData(listInput);
+      const previousAll = utils.tasks.list.getData();
+
+      const updateReview = (current: typeof previousSpecific) =>
+        current
+          ? current.map((item) =>
+              item.id === input.id
+                ? {
+                    ...item,
+                    reviewState: input.action === 'approve' ? 'approved' : 'ignored',
+                    status: input.action === 'ignore' ? 'snoozed' : item.status,
+                  }
+                : item
+            )
+          : current;
+
+      utils.tasks.list.setData(listInput, updateReview);
+      utils.tasks.list.setData(undefined, updateReview);
+
+      return { previousSpecific, previousAll };
+    },
+    onError: (_error, _input, context) => {
+      if (context?.previousSpecific) {
+        utils.tasks.list.setData(listInput, context.previousSpecific);
+      }
+      if (context?.previousAll) {
+        utils.tasks.list.setData(undefined, context.previousAll);
+      }
+    },
+    onSettled: () => {
+      utils.tasks.list.invalidate(listInput);
+      utils.tasks.list.invalidate();
+    },
+  });
+
+  const handleReview = (action: 'approve' | 'ignore') => {
+    if (!pendingReview) return;
+    reviewTask.mutate({ id: pendingReview.id, action });
+  };
+
   return (
     <View className="flex flex-1 bg-surface px-4 dark:bg-surface-dark">
       <Stack.Screen options={{ title: 'Tasks' }} />
       <Container>
+        {pendingReview ? (
+          <View className="mb-4 gap-2 rounded-2xl border border-amber-300 bg-amber-50 p-4 shadow-sm">
+            <View className="flex-row items-center justify-between">
+              <Text className="text-base font-semibold text-amber-900">Needs review</Text>
+              <Text className="text-xs text-amber-800">
+                {formatConfidence(pendingReview.confidence)} confident
+              </Text>
+            </View>
+            <Text className="text-sm font-semibold text-text">{pendingReview.title}</Text>
+            <Text className="text-xs text-text-muted dark:text-text-muted-dark">
+              From {pendingReview.sender ?? 'unknown sender'}{' '}
+              {pendingReview.provider ? `• ${pendingReview.provider}` : ''}
+            </Text>
+            <View className="mt-3 flex-row items-center gap-3">
+              <Pressable
+                onPress={() => handleReview('approve')}
+                disabled={reviewTask.isLoading}
+                className="flex-1 items-center justify-center rounded-full bg-primary px-4 py-2"
+                style={({ pressed }) => ({
+                  opacity: reviewTask.isLoading ? 0.6 : pressed ? 0.85 : 1,
+                })}>
+                {reviewTask.isLoading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text className="text-base font-semibold text-white">Looks good</Text>
+                )}
+              </Pressable>
+              <Pressable
+                onPress={() => handleReview('ignore')}
+                disabled={reviewTask.isLoading}
+                className="flex-1 items-center justify-center rounded-full border border-border px-4 py-2 dark:border-border-dark"
+                style={({ pressed }) => ({
+                  opacity: reviewTask.isLoading ? 0.6 : pressed ? 0.75 : 1,
+                })}>
+                <Text className="text-base font-semibold text-text">Ignore</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+
+        <View className="mb-3 flex-row flex-wrap gap-2">
+          {filterOptions.map((option) => {
+            const isActive = selectedType === option;
+            return (
+              <Pressable
+                key={option}
+                onPress={() => setSelectedType(option)}
+                className={`rounded-full border px-3 py-2 ${
+                  isActive
+                    ? 'border-primary bg-primary/10'
+                    : 'border-border dark:border-border-dark'
+                }`}
+                style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}>
+                <Text
+                  className={`text-sm font-semibold ${
+                    isActive ? 'text-primary' : 'text-text dark:text-text-dark'
+                  }`}>
+                  {option === 'all' ? 'All' : formatType(option)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
         <View className="mb-6 mt-2 gap-3">
           <TextInput
             className="rounded-lg border border-border bg-white px-3 text-base dark:border-border-dark dark:bg-surface-card-dark dark:text-text-dark"
@@ -203,6 +414,31 @@ export default function TasksScreen() {
             editable={!createTask.isLoading}
             style={{ fontSize: 15, lineHeight: 18, paddingVertical: 8 }}
           />
+
+          <View className="flex-row flex-wrap gap-2">
+            {createTypeOptions.map((option) => {
+              const isActive = newTaskType === option;
+              return (
+                <Pressable
+                  key={option}
+                  onPress={() => setNewTaskType(option)}
+                  className={`rounded-full border px-3 py-2 ${
+                    isActive
+                      ? 'border-primary bg-primary/10'
+                      : 'border-border dark:border-border-dark'
+                  }`}
+                  style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}>
+                  <Text
+                    className={`text-sm font-semibold ${
+                      isActive ? 'text-primary' : 'text-text dark:text-text-dark'
+                    }`}>
+                    {formatType(option)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
           <Button
             title={createTask.isLoading ? 'Adding...' : 'Add task'}
             onPress={handleAddTask}
@@ -247,12 +483,25 @@ export default function TasksScreen() {
                       </View>
                     </Pressable>
                     <View className="flex-1">
+                      <View className="mb-1 flex-row flex-wrap items-center gap-2">
+                        <Badge label={formatType(item.type)} />
+                        {item.provider ? <Badge label={item.provider} tone="muted" /> : null}
+                        {item.reviewState === 'pending' ? (
+                          <Badge label="Needs review" tone="warn" />
+                        ) : null}
+                      </View>
                       <Text className="text-base font-semibold text-text dark:text-text-dark">
                         {item.title}
                       </Text>
-                      <Text className="text-sm text-text-muted dark:text-text-muted-dark">
-                        Status: {item.status.replace('_', ' ')}
+                      <Text className="text-xs text-text-muted dark:text-text-muted-dark">
+                        Status: {item.status.replace('_', ' ')} • Confidence{' '}
+                        {formatConfidence(item.confidence)}
                       </Text>
+                      {item.sender ? (
+                        <Text className="text-xs text-text-muted dark:text-text-muted-dark">
+                          From {item.sender}
+                        </Text>
+                      ) : null}
                     </View>
                   </View>
                   <View className="flex-row items-center gap-3">

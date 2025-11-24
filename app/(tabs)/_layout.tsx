@@ -52,6 +52,15 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="connections"
+        options={{
+          title: 'Sync',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="cloud-download-outline" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',

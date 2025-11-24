@@ -5,17 +5,37 @@ import { caregivers, tasks } from '../../db/schema';
 import { authedProcedure, router } from '../../trpc/trpc';
 import { ensureCaregiver } from '../../lib/caregiver';
 
-const statusEnum = z.enum(['todo', 'in_progress', 'done']);
+const statusEnum = z.enum(['todo', 'in_progress', 'scheduled', 'snoozed', 'done']);
+const typeEnum = z.enum(['appointment', 'bill', 'medication', 'general']);
+const reviewStateEnum = z.enum(['pending', 'approved', 'ignored']);
 
 export const taskRouter = router({
-  list: authedProcedure.query(async ({ ctx }) => {
-    const caregiverId = await ensureCaregiver(ctx);
-    return ctx.db
-      .select()
-      .from(tasks)
-      .where(eq(tasks.createdById, caregiverId))
-      .orderBy(desc(tasks.createdAt));
-  }),
+  list: authedProcedure
+    .input(
+      z
+        .object({
+          type: typeEnum.optional(),
+          reviewState: reviewStateEnum.optional(),
+        })
+        .optional()
+    )
+    .query(async ({ ctx, input }) => {
+      const caregiverId = await ensureCaregiver(ctx);
+
+      const conditions = [eq(tasks.createdById, caregiverId)];
+
+      if (input?.type) {
+        conditions.push(eq(tasks.type, input.type));
+      }
+
+      if (input?.reviewState) {
+        conditions.push(eq(tasks.reviewState, input.reviewState));
+      }
+
+      const predicate = conditions.length === 1 ? conditions[0] : and(...conditions);
+
+      return ctx.db.select().from(tasks).where(predicate).orderBy(desc(tasks.createdAt));
+    }),
 
   byCaregiver: authedProcedure
     .input(
@@ -41,7 +61,9 @@ export const taskRouter = router({
         title: z.string().min(1),
         description: z.string().optional(),
         status: statusEnum.optional(),
+        type: typeEnum.optional(),
         careRecipientId: z.string().uuid().optional(),
+        dueAt: z.coerce.date().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -51,8 +73,10 @@ export const taskRouter = router({
         title: input.title,
         description: input.description,
         status: input.status ?? 'todo',
+        type: input.type ?? 'general',
         careRecipientId: input.careRecipientId,
         createdById: caregiverId,
+        dueAt: input.dueAt,
       };
 
       const [inserted] = await ctx.db.insert(tasks).values(payload).returning();
@@ -124,6 +148,40 @@ export const taskRouter = router({
       const [updated] = await ctx.db
         .update(tasks)
         .set({ title: input.title, updatedAt: new Date() })
+        .where(and(eq(tasks.id, input.id), eq(tasks.createdById, caregiverId)))
+        .returning();
+
+      if (!updated) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
+      }
+
+      return updated;
+    }),
+
+  review: authedProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        action: z.enum(['approve', 'ignore']),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const caregiverId = await ensureCaregiver(ctx);
+
+      const nextState = input.action === 'approve' ? 'approved' : 'ignored';
+
+      const updatePayload: Partial<typeof tasks.$inferInsert> = {
+        reviewState: nextState as z.infer<typeof reviewStateEnum>,
+        updatedAt: new Date(),
+      };
+
+      if (input.action === 'ignore') {
+        updatePayload.status = 'snoozed';
+      }
+
+      const [updated] = await ctx.db
+        .update(tasks)
+        .set(updatePayload)
         .where(and(eq(tasks.id, input.id), eq(tasks.createdById, caregiverId)))
         .returning();
 
