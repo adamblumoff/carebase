@@ -70,7 +70,13 @@ export const sourcesRouter = router({
       }
 
       const tokenInfo = await client.getTokenInfo(tokens.access_token ?? '');
-      const accountEmail = tokenInfo.email ?? 'unknown';
+      if (!tokenInfo.email) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to retrieve account email from Google token',
+        });
+      }
+      const accountEmail = tokenInfo.email;
 
       const [row] = await ctx.db
         .insert(sources)
