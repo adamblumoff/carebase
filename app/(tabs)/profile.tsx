@@ -1,21 +1,21 @@
 import React from 'react';
 import { View, Text, Switch } from 'react-native';
 import { Stack } from 'expo-router';
-import { useColorScheme } from 'nativewind';
 
 import { Container } from '@/components/Container';
 import { SignOutButton } from '@/components/SignOutButton';
+import { useUserTheme } from '@/app/(hooks)/useUserTheme';
 
 export default function ProfileScreen() {
-  const { colorScheme, setColorScheme, systemColorScheme } = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const { colorScheme, systemColorScheme, isDark, setUserTheme, resetTheme, isUpdating } =
+    useUserTheme();
 
   const toggleTheme = (value: boolean) => {
-    setColorScheme(value ? 'dark' : 'light');
+    setUserTheme(value ? 'dark' : 'light');
   };
 
   const resetToSystem = () => {
-    if (systemColorScheme) setColorScheme(systemColorScheme);
+    resetTheme();
   };
 
   return (
@@ -32,10 +32,14 @@ export default function ProfileScreen() {
                 Follow system by default; override anytime.
               </Text>
             </View>
-            <Switch value={isDark} onValueChange={toggleTheme} />
+            <Switch
+              value={isDark}
+              onValueChange={toggleTheme}
+              disabled={isUpdating}
+            />
           </View>
           <Text className="text-sm font-semibold text-accent underline" onPress={resetToSystem}>
-            Reset to system theme ({systemColorScheme ?? 'auto'})
+            Reset to system theme ({systemColorScheme ?? 'light'})
           </Text>
         </View>
 
