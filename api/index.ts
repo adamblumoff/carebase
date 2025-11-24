@@ -86,7 +86,11 @@ const registerPlugins = async () => {
     }
 
     const escapeHtml = (str: string) =>
-      str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
 
     const html = `<!doctype html>
 <html>
