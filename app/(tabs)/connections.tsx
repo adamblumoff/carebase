@@ -1,8 +1,9 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useColorScheme } from 'nativewind';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Pressable, Text, View } from 'react-native';
 import { Stack } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
+import * as Haptics from 'expo-haptics';
 
 import { trpc } from '@/lib/trpc/client';
 import { Container } from '@/components/Container';
@@ -40,6 +41,7 @@ export default function ConnectionsScreen() {
 
   const sourcesQuery = trpc.sources.list.useQuery();
   const authUrlQuery = trpc.sources.authorizeUrl.useQuery({ redirectUri }, { enabled: false });
+  const eventsQuery = trpc.ingestionEvents.recent.useQuery({ limit: 5 });
 
   const [connectError, setConnectError] = useState<string | null>(null);
 
@@ -62,6 +64,47 @@ export default function ConnectionsScreen() {
     onSuccess: () => sourcesQuery.refetch(),
   });
 
+  const registerWatch = trpc.watch.register.useMutation({
+    onSuccess: () => sourcesQuery.refetch(),
+  });
+
+  const autoWatchRequested = useRef<Set<string>>(new Set());
+
+  const triggerWatchIfNeeded = useCallback(
+    (sources?: typeof sourcesQuery.data) => {
+      const gmail = sources?.filter((s) => s.provider === 'gmail' && s.status === 'active') ?? [];
+      const now = new Date();
+      gmail.forEach((src) => {
+        const needsWatch = !src.watchExpiration || new Date(src.watchExpiration) <= now;
+        if (needsWatch && !autoWatchRequested.current.has(src.id) && !registerWatch.isLoading) {
+          autoWatchRequested.current.add(src.id);
+          registerWatch.mutate(
+            { sourceId: src.id },
+            {
+              onError: () => autoWatchRequested.current.delete(src.id),
+            }
+          );
+        }
+      });
+    },
+    [registerWatch, sourcesQuery]
+  );
+
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const toastOpacity = useRef(new Animated.Value(0)).current;
+
+  const showToast = useCallback(
+    (message: string) => {
+      setSyncMessage(message);
+      Animated.sequence([
+        Animated.timing(toastOpacity, { toValue: 1, duration: 120, useNativeDriver: true }),
+        Animated.delay(1800),
+        Animated.timing(toastOpacity, { toValue: 0, duration: 150, useNativeDriver: true }),
+      ]).start(() => setSyncMessage(null));
+    },
+    [toastOpacity]
+  );
+
   const handleConnect = useCallback(async () => {
     try {
       if (!hasRedirect) {
@@ -78,9 +121,12 @@ export default function ConnectionsScreen() {
       const result = await WebBrowser.openAuthSessionAsync(url, redirectUri);
 
       // Always refetch after browser closes to pick up server-side exchange
-      await sourcesQuery.refetch();
+      const refreshed = await sourcesQuery.refetch();
       const nowHasGmail =
-        sourcesQuery.data?.some((s) => s.provider === 'gmail' && s.status === 'active') ?? false;
+        refreshed.data?.some((s) => s.provider === 'gmail' && s.status === 'active') ?? false;
+      if (nowHasGmail) {
+        triggerWatchIfNeeded(refreshed.data);
+      }
 
       if (nowHasGmail) {
         setConnectError(null);
@@ -92,11 +138,13 @@ export default function ConnectionsScreen() {
         return;
       }
 
-      if (result.type === 'success' && result.url) {
+      if (result.url) {
         const parsed = new URL(result.url);
         const code = parsed.searchParams.get('code');
         if (code) {
           await connectGoogle.mutateAsync({ code, redirectUri });
+          const refreshedAfterConnect = await sourcesQuery.refetch();
+          triggerWatchIfNeeded(refreshedAfterConnect.data);
         } else {
           setConnectError('No code returned from Google.');
         }
@@ -107,20 +155,43 @@ export default function ConnectionsScreen() {
     } finally {
       sourcesQuery.refetch();
     }
-  }, [authUrlQuery, connectGoogle, redirectUri, hasRedirect, sourcesQuery]);
+  }, [authUrlQuery, connectGoogle, redirectUri, hasRedirect, sourcesQuery, triggerWatchIfNeeded]);
+
+  useEffect(() => {
+    if (hasGmail && connectError) {
+      setConnectError(null);
+    }
+  }, [hasGmail, connectError]);
+
+  useEffect(() => {
+    triggerWatchIfNeeded(sourcesQuery.data);
+  }, [sourcesQuery.data, triggerWatchIfNeeded]);
 
   const handleSync = useCallback(
     async (id: string) => {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       await syncNow.mutateAsync({ sourceId: id });
+      showToast('Just synced');
     },
-    [syncNow]
+    [syncNow, showToast]
   );
 
   const handleDisconnect = useCallback(
     async (id: string) => {
-      await disconnect.mutateAsync({ id });
+      Alert.alert('Disconnect Google', 'Are you sure you want to disconnect?', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Disconnect',
+          style: 'destructive',
+          onPress: async () => {
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            await disconnect.mutateAsync({ id });
+            showToast('Disconnected');
+          },
+        },
+      ]);
     },
-    [disconnect]
+    [disconnect, showToast]
   );
 
   const isBusy =
@@ -152,6 +223,10 @@ export default function ConnectionsScreen() {
             <Text className="text-xs text-red-600">{connectGoogle.error.message}</Text>
           ) : null}
           {connectError ? <Text className="text-xs text-red-600">{connectError}</Text> : null}
+          {registerWatch.isError ? (
+            <Text className="text-xs text-red-600">{registerWatch.error.message}</Text>
+          ) : null}
+          {syncMessage ? <Text className="text-xs text-emerald-700">{syncMessage}</Text> : null}
         </View>
 
         <View className="mt-4 gap-3">
@@ -166,6 +241,11 @@ export default function ConnectionsScreen() {
               .filter((source) => source.provider === 'gmail' && source.status !== 'disconnected')
               .map((source) => {
                 const tone = statusStyles[source.status] ?? statusStyles.active;
+                const watchStatus = source.watchExpiration
+                  ? new Date(source.watchExpiration) > new Date()
+                    ? 'Active (push)'
+                    : 'Renewing/polling'
+                  : 'Polling';
                 return (
                   <View
                     key={source.id}
@@ -176,7 +256,7 @@ export default function ConnectionsScreen() {
                           {source.accountEmail}
                         </Text>
                         <Text className="text-xs text-text-muted dark:text-text-muted-dark">
-                          Provider: {source.provider}
+                          Provider: {source.provider} • {watchStatus}
                         </Text>
                       </View>
                       <View className={`rounded-full px-2 py-1 ${tone}`}>
@@ -222,6 +302,57 @@ export default function ConnectionsScreen() {
             </Text>
           )}
         </View>
+
+        <View className="mt-6 gap-2">
+          <Text className="text-sm font-semibold text-text dark:text-text-dark">Recent syncs</Text>
+          {eventsQuery.isLoading ? (
+            <ActivityIndicator />
+          ) : eventsQuery.isError ? (
+            <Text className="text-xs text-red-600">Could not load sync events.</Text>
+          ) : eventsQuery.data && eventsQuery.data.length > 0 ? (
+            eventsQuery.data.map((ev) => (
+              <View
+                key={ev.id}
+                className="rounded-lg border border-border bg-white p-3 dark:border-border-dark dark:bg-surface-card-dark">
+                <Text className="text-sm font-semibold text-text dark:text-text-dark">
+                  {new Date(ev.startedAt).toLocaleString()} • {ev.type ?? ev.provider}
+                </Text>
+                <Text className="text-xs text-text-muted dark:text-text-muted-dark">
+                  {ev.created} created • {ev.updated} updated • {ev.errors} errors
+                </Text>
+                {ev.errorMessage ? (
+                  <Text className="text-xs text-amber-700">{ev.errorMessage}</Text>
+                ) : null}
+              </View>
+            ))
+          ) : (
+            <Text className="text-xs text-text-muted dark:text-text-muted-dark">No syncs yet.</Text>
+          )}
+        </View>
+
+        {syncMessage ? (
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              bottom: 24,
+              left: 16,
+              right: 16,
+              opacity: toastOpacity,
+              transform: [
+                {
+                  translateY: toastOpacity.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [12, 0],
+                  }),
+                },
+              ],
+            }}>
+            <View className="items-center justify-center rounded-xl bg-emerald-600 px-4 py-3 shadow-lg">
+              <Text className="text-sm font-semibold text-white">{syncMessage}</Text>
+            </View>
+          </Animated.View>
+        ) : null}
       </Container>
     </View>
   );
