@@ -31,8 +31,10 @@ export const gmailQuery = 'subject:(appointment OR medication OR bill)';
 
 export const googleScope = ['https://www.googleapis.com/auth/gmail.readonly'];
 
-const stateSecret =
-  process.env.GOOGLE_STATE_SECRET || process.env.CLERK_SECRET_KEY || 'state-dev-secret';
+const stateSecret = process.env.GOOGLE_STATE_SECRET;
+if (!stateSecret) {
+  throw new Error('GOOGLE_STATE_SECRET environment variable is required');
+}
 
 export const signState = (payload: { caregiverId: string }) => {
   const raw = JSON.stringify(payload);
