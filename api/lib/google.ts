@@ -1,5 +1,5 @@
 import { config } from 'dotenv';
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { google } from 'googleapis';
 
 config({ path: '.env' });
@@ -29,7 +29,10 @@ export const createGmailClient = (refreshToken: string) => {
 
 export const gmailQuery = 'subject:(appointment OR medication OR bill)';
 
-export const googleScope = ['https://www.googleapis.com/auth/gmail.readonly'];
+export const googleScope = [
+  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/calendar.readonly',
+];
 
 const stateSecret = process.env.GOOGLE_STATE_SECRET;
 if (!stateSecret) {
@@ -41,8 +44,6 @@ export const signState = (payload: { caregiverId: string }) => {
   const signature = createHmac('sha256', stateSecret).update(raw).digest('base64url');
   return `${Buffer.from(raw).toString('base64url')}.${signature}`;
 };
-
-import { createHmac, timingSafeEqual } from 'crypto';
 
 export const verifyState = (state: string) => {
   const [rawB64, sig] = state.split('.');
