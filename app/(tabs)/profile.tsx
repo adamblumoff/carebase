@@ -1,34 +1,26 @@
 import React from 'react';
 import { View, Text, Switch } from 'react-native';
 import { Stack } from 'expo-router';
-import { useColorScheme } from 'nativewind';
 
 import { Container } from '@/components/Container';
-import { ScreenContent } from '@/components/ScreenContent';
 import { SignOutButton } from '@/components/SignOutButton';
+import { useUserTheme } from '@/app/(hooks)/useUserTheme';
 
 export default function ProfileScreen() {
-  const { colorScheme, setColorScheme, systemColorScheme } = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const { systemColorScheme, isDark, setUserTheme, resetTheme, isUpdating } = useUserTheme();
 
   const toggleTheme = (value: boolean) => {
-    setColorScheme(value ? 'dark' : 'light');
+    setUserTheme(value ? 'dark' : 'light');
   };
 
   const resetToSystem = () => {
-    if (systemColorScheme) setColorScheme(systemColorScheme);
+    resetTheme();
   };
 
   return (
     <View className="flex flex-1 bg-surface px-4 dark:bg-surface-dark">
       <Stack.Screen options={{ title: 'Profile' }} />
       <Container>
-        <ScreenContent path="app/(tabs)/profile.tsx" title="Profile & Preferences">
-          <Text className="text-base text-text dark:text-text-dark">
-            Control how the app looks and sign out.
-          </Text>
-        </ScreenContent>
-
         <View className="mt-4 w-full gap-4 rounded-xl border border-border bg-white p-4 dark:border-border-dark dark:bg-surface-card-dark">
           <View className="flex-row items-center justify-between">
             <View className="gap-1">
@@ -39,10 +31,10 @@ export default function ProfileScreen() {
                 Follow system by default; override anytime.
               </Text>
             </View>
-            <Switch value={isDark} onValueChange={toggleTheme} />
+            <Switch value={isDark} onValueChange={toggleTheme} disabled={isUpdating} />
           </View>
           <Text className="text-sm font-semibold text-accent underline" onPress={resetToSystem}>
-            Reset to system theme ({systemColorScheme ?? 'auto'})
+            Reset to system theme ({systemColorScheme ?? 'light'})
           </Text>
         </View>
 

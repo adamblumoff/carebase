@@ -47,8 +47,10 @@ export default function SignInScreen() {
     <AuthLayout>
       <View className="gap-6">
         <View className="gap-2">
-          <Text className="text-2xl font-semibold text-text dark:text-text-dark">Welcome back</Text>
-          <Text className="text-base text-text-muted dark:text-text-muted-dark">
+          <Text className="text-center text-2xl font-semibold text-text dark:text-text-dark">
+            Welcome back
+          </Text>
+          <Text className="text-center text-base text-text-muted dark:text-text-muted-dark">
             Sign in with Google to continue.
           </Text>
         </View>

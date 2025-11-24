@@ -1,14 +1,20 @@
 import { TRPCError } from '@trpc/server';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { caregivers, tasks } from '../../db/schema';
 import { authedProcedure, router } from '../../trpc/trpc';
+import { ensureCaregiver } from '../../lib/caregiver';
 
 const statusEnum = z.enum(['todo', 'in_progress', 'done']);
 
 export const taskRouter = router({
   list: authedProcedure.query(async ({ ctx }) => {
-    return ctx.db.select().from(tasks).orderBy(desc(tasks.createdAt));
+    const caregiverId = await ensureCaregiver(ctx);
+    return ctx.db
+      .select()
+      .from(tasks)
+      .where(eq(tasks.createdById, caregiverId))
+      .orderBy(desc(tasks.createdAt));
   }),
 
   byCaregiver: authedProcedure
@@ -18,10 +24,14 @@ export const taskRouter = router({
       })
     )
     .query(async ({ ctx, input }) => {
+      const caregiverId = await ensureCaregiver(ctx);
+      if (input.caregiverId !== caregiverId) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
       return ctx.db
         .select()
         .from(tasks)
-        .where(eq(tasks.createdById, input.caregiverId))
+        .where(eq(tasks.createdById, caregiverId))
         .orderBy(desc(tasks.createdAt));
     }),
 
@@ -32,21 +42,96 @@ export const taskRouter = router({
         description: z.string().optional(),
         status: statusEnum.optional(),
         careRecipientId: z.string().uuid().optional(),
-        createdById: z.string().uuid().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const caregiverId = await ensureCaregiver(ctx);
+
       const payload = {
         title: input.title,
         description: input.description,
         status: input.status ?? 'todo',
         careRecipientId: input.careRecipientId,
-        createdById: input.createdById ?? null,
+        createdById: caregiverId,
       };
 
       const [inserted] = await ctx.db.insert(tasks).values(payload).returning();
 
       return inserted;
+    }),
+
+  delete: authedProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const caregiverId = await ensureCaregiver(ctx);
+
+      const [deleted] = await ctx.db
+        .delete(tasks)
+        .where(and(eq(tasks.id, input.id), eq(tasks.createdById, caregiverId)))
+        .returning();
+
+      if (!deleted) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
+      }
+
+      return { id: deleted.id };
+    }),
+
+  toggleStatus: authedProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const caregiverId = await ensureCaregiver(ctx);
+
+      try {
+        const [updated] = await ctx.db
+          .update(tasks)
+          .set({
+            status: sql`(CASE WHEN ${tasks.status} = 'done' THEN 'todo' ELSE 'done' END)::task_status`,
+            updatedAt: new Date(),
+          })
+          .where(and(eq(tasks.id, input.id), eq(tasks.createdById, caregiverId)))
+          .returning();
+
+        if (!updated) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
+        }
+
+        return updated;
+      } catch (error) {
+        ctx.req?.log?.error({ err: error }, 'toggleStatus failed');
+        throw error;
+      }
+    }),
+
+  updateTitle: authedProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        title: z.string().min(1),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const caregiverId = await ensureCaregiver(ctx);
+
+      const [updated] = await ctx.db
+        .update(tasks)
+        .set({ title: input.title, updatedAt: new Date() })
+        .where(and(eq(tasks.id, input.id), eq(tasks.createdById, caregiverId)))
+        .returning();
+
+      if (!updated) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
+      }
+
+      return updated;
     }),
 
   upsertCaregiver: authedProcedure

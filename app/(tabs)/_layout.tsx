@@ -17,6 +17,11 @@ export default function TabsLayout() {
 
   return (
     <Tabs
+      lazy={false}
+      detachInactiveScreens={false}
+      sceneContainerStyle={{
+        backgroundColor: isDark ? headerDark : headerLight,
+      }}
       screenOptions={{
         headerStyle: { backgroundColor: isDark ? headerDark : headerLight },
         headerShadowVisible: false,
