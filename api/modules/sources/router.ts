@@ -100,13 +100,25 @@ export const sourcesRouter = router({
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const caregiverId = await ensureCaregiver(ctx);
+
+      // Verify ownership before modifying
+      const [existing] = await ctx.db
+        .select({ caregiverId: sources.caregiverId })
+        .from(sources)
+        .where(eq(sources.id, input.id))
+        .limit(1);
+
+      if (!existing || existing.caregiverId !== caregiverId) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Source not found' });
+      }
+
       const [updated] = await ctx.db
         .update(sources)
         .set({ status: 'disconnected', updatedAt: new Date() })
-        .where(eq(sources.id, input.id))
+        .where(and(eq(sources.id, input.id), eq(sources.caregiverId, caregiverId)))
         .returning();
 
-      if (!updated || updated.caregiverId !== caregiverId) {
+      if (!updated) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Source not found' });
       }
 
