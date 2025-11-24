@@ -20,6 +20,25 @@ const topicShort = useProd
 
 const pubsubProject = process.env.GOOGLE_PUBSUB_PROJECT;
 
+const webhookUrl = useProd ? process.env.GOOGLE_WEBHOOK_URL_PROD : process.env.GOOGLE_WEBHOOK_URL;
+
+const getWebhookAddress = () => {
+  if (webhookUrl) return webhookUrl;
+  // Derive from configured OAuth redirect host as a fallback
+  const redirect = process.env.GOOGLE_REDIRECT_URI;
+  try {
+    if (redirect) {
+      const u = new URL(redirect);
+      u.pathname = '/webhooks/google/push';
+      u.search = '';
+      return u.toString();
+    }
+  } catch {
+    // ignore
+  }
+  return undefined;
+};
+
 const toTopicPath = (short?: string) => {
   if (!short) return undefined;
   if (short.startsWith('projects/')) return short;
@@ -59,8 +78,8 @@ export const registerCalendarWatch = async (
   calendar: ReturnType<typeof google.calendar>,
   callbackToken?: string
 ) => {
-  const topicName = getWatchTopic();
-  if (!topicName) throw new Error('Missing Pub/Sub topic env');
+  const address = getWebhookAddress();
+  if (!address) throw new Error('Missing webhook URL env for calendar watch');
 
   const channelId = randomUUID();
 
@@ -68,8 +87,8 @@ export const registerCalendarWatch = async (
     calendarId: 'primary',
     requestBody: {
       id: channelId,
-      type: 'pubsub',
-      address: topicName,
+      type: 'web_hook',
+      address,
       token: callbackToken,
     },
   });

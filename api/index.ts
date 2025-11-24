@@ -106,15 +106,18 @@ const registerPlugins = async () => {
     return reply.header('Content-Type', 'text/html').send(html);
   });
 
-  server.post('/webhooks/google/push', async (request, reply) => {
+  server.post('/webhooks/google/push', { logLevel: 'warn' }, async (request, reply) => {
     const authHeader = request.headers.authorization;
     const audience = `https://${request.headers.host}/webhooks/google/push`;
 
-    try {
-      await verifyPubsubJwt(authHeader, audience);
-    } catch (err) {
-      request.log.error({ err }, 'pubsub jwt verification failed');
-      return reply.status(401).send({ ok: false });
+    // Gmail Pub/Sub push includes a JWT; Calendar web_hook does not. Only verify when present.
+    if (authHeader) {
+      try {
+        await verifyPubsubJwt(authHeader, audience);
+      } catch (err) {
+        request.log.error({ err }, 'pubsub jwt verification failed');
+        return reply.status(401).send({ ok: false });
+      }
     }
 
     const token = process.env.GOOGLE_PUBSUB_VERIFICATION_TOKEN;
@@ -127,18 +130,41 @@ const registerPlugins = async () => {
     const channelId = request.headers['x-goog-channel-id'] as string | undefined;
     const resourceId = request.headers['x-goog-resource-id'] as string | undefined;
 
-    if (!channelId && !resourceId) {
-      return reply.status(400).send({ ok: false, message: 'missing channel/resource id' });
+    // Pub/Sub push payload (Gmail) comes in the body and lacks channel headers.
+    const pubsubMessage = (request.body as any)?.message;
+    let pubsubEmail: string | undefined;
+    if (pubsubMessage?.data) {
+      try {
+        const decoded = JSON.parse(Buffer.from(pubsubMessage.data, 'base64').toString('utf8'));
+        pubsubEmail = decoded?.emailAddress;
+      } catch (err) {
+        if (process.env.DEBUG_PUSH_LOGS === 'true') {
+          request.log.debug({ err }, 'pubsub decode failed');
+        }
+      }
+    }
+
+    if (!channelId && !resourceId && !pubsubEmail) {
+      if (process.env.DEBUG_PUSH_LOGS === 'true') {
+        request.log.debug('push missing channel/resource id');
+      }
+      return reply.status(202).send({ ok: true, message: 'missing channel/resource id' });
     }
 
     const [source] = await db
       .select()
       .from(sources)
-      .where(sql`${sources.watchId} = ${channelId} OR ${sources.calendarChannelId} = ${channelId}`)
+      .where(
+        pubsubEmail
+          ? sql`${sources.accountEmail} = ${pubsubEmail}`
+          : sql`${sources.watchId} = ${channelId} OR ${sources.calendarChannelId} = ${channelId}`
+      )
       .limit(1);
 
     if (!source) {
-      request.log.warn({ channelId }, 'no source for channel');
+      if (process.env.DEBUG_PUSH_LOGS === 'true') {
+        request.log.debug({ channelId }, 'no source for channel');
+      }
       return reply.status(202).send({ ok: true });
     }
 
