@@ -118,7 +118,7 @@ export function useUserTheme() {
   const resetTheme = useCallback(() => {
     const fallback = 'dark';
     setUserTheme(fallback as ThemePreference);
-  }, [setUserTheme, systemColorScheme]);
+  }, [setUserTheme]);
 
   return {
     colorScheme,
@@ -128,10 +128,6 @@ export function useUserTheme() {
     resetTheme,
     isFetching: themeQuery.isLoading || themeQuery.isRefetching,
     isUpdating: updateTheme.isPending,
-    themeReady:
-      !isSignedIn ||
-      (!themeQuery.enabled) ||
-      themeQuery.isSuccess ||
-      hasTriedFetch,
+    themeReady: !isSignedIn || !themeQuery.enabled || themeQuery.isSuccess || hasTriedFetch,
   };
 }
