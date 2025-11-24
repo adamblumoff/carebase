@@ -42,12 +42,18 @@ export const signState = (payload: { caregiverId: string }) => {
   return `${Buffer.from(raw).toString('base64url')}.${signature}`;
 };
 
+import { createHmac, timingSafeEqual } from 'crypto';
+
 export const verifyState = (state: string) => {
   const [rawB64, sig] = state.split('.');
   if (!rawB64 || !sig) throw new Error('Invalid state');
   const raw = Buffer.from(rawB64, 'base64url').toString('utf8');
   const expected = createHmac('sha256', stateSecret).update(raw).digest('base64url');
-  if (expected !== sig) throw new Error('Invalid state signature');
+  const sigBuffer = Buffer.from(sig);
+  const expectedBuffer = Buffer.from(expected);
+  if (sigBuffer.length !== expectedBuffer.length || !timingSafeEqual(sigBuffer, expectedBuffer)) {
+    throw new Error('Invalid state signature');
+  }
   const parsed = JSON.parse(raw) as { caregiverId: string };
   if (!parsed?.caregiverId) throw new Error('Invalid state payload');
   return parsed;
