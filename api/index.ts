@@ -84,12 +84,15 @@ const registerPlugins = async () => {
       }
     }
 
+    const escapeHtml = (str: string) =>
+      str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
     const html = `<!doctype html>
 <html>
   <head><title>Carebase</title></head>
   <body style="font-family: sans-serif; display:flex; align-items:center; justify-content:center; height:100vh;">
     <div>
-      <h2>${message}</h2>
+      <h2>${escapeHtml(message)}</h2>
       <p>You can close this window.</p>
     </div>
     <script>
