@@ -79,7 +79,7 @@ const registerPlugins = async () => {
             },
           });
       } catch (err: any) {
-        request.log.error({ err }, 'oauth callback failed');
+        _request.log.error({ err }, 'oauth callback failed');
         message = `Google connect failed: ${err?.message ?? 'unknown error'}`;
       }
     }
