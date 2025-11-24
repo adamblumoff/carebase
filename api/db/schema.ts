@@ -7,6 +7,7 @@ import {
   text,
   timestamp,
   uuid,
+  uniqueIndex,
   varchar,
 } from 'drizzle-orm/pg-core';
 
@@ -96,27 +97,37 @@ export const taskAssignments = pgTable('task_assignments', {
     .notNull(),
 });
 
-export const sources = pgTable('sources', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  caregiverId: uuid('caregiver_id')
-    .notNull()
-    .references(() => caregivers.id),
-  provider: sourceProvider('provider').notNull(),
-  accountEmail: varchar('account_email', { length: 255 }).notNull(),
-  refreshToken: text('refresh_token').notNull(),
-  scopes: text('scopes').array(),
-  historyId: text('history_id'),
-  cursor: text('cursor'),
-  lastSyncAt: timestamp('last_sync_at', { withTimezone: true }),
-  status: sourceStatus('status').default('active').notNull(),
-  errorMessage: text('error_message'),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .default(sql`now()`)
-    .notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true })
-    .default(sql`now()`)
-    .notNull(),
-});
+export const sources = pgTable(
+  'sources',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    caregiverId: uuid('caregiver_id')
+      .notNull()
+      .references(() => caregivers.id),
+    provider: sourceProvider('provider').notNull(),
+    accountEmail: varchar('account_email', { length: 255 }).notNull(),
+    refreshToken: text('refresh_token').notNull(),
+    scopes: text('scopes').array(),
+    historyId: text('history_id'),
+    cursor: text('cursor'),
+    lastSyncAt: timestamp('last_sync_at', { withTimezone: true }),
+    status: sourceStatus('status').default('active').notNull(),
+    errorMessage: text('error_message'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .default(sql`now()`)
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .default(sql`now()`)
+      .notNull(),
+  },
+  (table) => ({
+    caregiverProviderEmailIdx: uniqueIndex('sources_caregiver_provider_email_idx').on(
+      table.caregiverId,
+      table.provider,
+      table.accountEmail
+    ),
+  })
+);
 
 export const ingestionEvents = pgTable('ingestion_events', {
   id: uuid('id').defaultRandom().primaryKey(),

@@ -48,6 +48,7 @@
     "expo-system-ui": "~6.0.7",
     "expo-web-browser": "~15.0.7",
     "fastify": "^4.28.1",
+    "googleapis": "^166.0.0",
     "nativewind": "latest",
     "pg": "^8.13.1",
     "posthog-node": "^4.1.0",
