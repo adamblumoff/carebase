@@ -22,9 +22,23 @@ export const watchRouter = router({
         }
 
         const { gmail, auth } = createGmailClient(source.refreshToken);
+        const calendar = google.calendar({ version: 'v3', auth });
 
         const gmailWatch = await registerGmailWatch(gmail);
-        const calendarWatch = await registerCalendarWatch(google.calendar({ version: 'v3', auth }));
+        const calendarWatch = await registerCalendarWatch(calendar);
+
+        let nextSyncToken: string | null = null;
+        try {
+          const resList = await calendar.events.list({
+            calendarId: 'primary',
+            maxResults: 1,
+            singleEvents: false,
+          });
+          nextSyncToken = resList.data.nextSyncToken ?? null;
+        } catch (listErr) {
+          ctx.req?.log?.warn({ err: listErr }, 'calendar list for syncToken failed');
+        }
+        const resolvedSyncToken = nextSyncToken ?? source.calendarSyncToken ?? null;
 
         const [updated] = await ctx.db
           .update(sources)
@@ -34,7 +48,7 @@ export const watchRouter = router({
             historyId: gmailWatch.historyId ?? source.historyId,
             calendarChannelId: calendarWatch.channelId ?? source.calendarChannelId,
             calendarResourceId: calendarWatch.resourceId ?? source.calendarResourceId,
-            calendarSyncToken: calendarWatch.syncToken ?? source.calendarSyncToken,
+            calendarSyncToken: resolvedSyncToken,
             updatedAt: new Date(),
           })
           .where(eq(sources.id, source.id))
