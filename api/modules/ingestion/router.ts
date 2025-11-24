@@ -1,5 +1,5 @@
 import { TRPCError } from '@trpc/server';
-import { and, desc, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { google } from 'googleapis';
 import { z } from 'zod';
 
@@ -122,28 +122,22 @@ async function upsertTaskFromMessage({
     updatedAt: new Date(),
   } satisfies Partial<typeof tasks.$inferInsert>;
 
-  const existing = await ctx.db
-    .select()
-    .from(tasks)
-    .where(and(eq(tasks.createdById, caregiverId), eq(tasks.sourceId, message.id ?? '')))
-    .orderBy(desc(tasks.createdAt))
-    .limit(1);
-
-  if (existing.length > 0) {
-    const [row] = existing;
-    await ctx.db.update(tasks).set(payload).where(eq(tasks.id, row.id));
-    return { action: 'updated', id: row.id };
-  }
-
-  const [inserted] = await ctx.db
+  const [result] = await ctx.db
     .insert(tasks)
     .values({
       ...payload,
       createdAt: new Date(),
     })
+    .onConflictDoUpdate({
+      target: [tasks.createdById, tasks.sourceId],
+      set: {
+        ...payload,
+        updatedAt: new Date(),
+      },
+    })
     .returning({ id: tasks.id });
 
-  return { action: 'created', id: inserted.id };
+  return { action: 'upserted', id: result.id };
 }
 
 export async function syncSource({

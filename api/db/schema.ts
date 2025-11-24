@@ -42,47 +42,56 @@ export const careRecipients = pgTable('care_recipients', {
     .notNull(),
 });
 
-export const tasks = pgTable('tasks', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  type: taskType('type').default('general').notNull(),
-  title: text('title').notNull(),
-  description: text('description'),
-  status: taskStatus('status').default('todo').notNull(),
-  dueAt: timestamp('due_at', { withTimezone: true }),
-  reviewState: reviewState('review_state').default('approved').notNull(),
-  provider: sourceProvider('provider'),
-  sourceId: text('source_id'),
-  sourceLink: text('source_link'),
-  sender: text('sender'),
-  rawSnippet: text('raw_snippet'),
-  confidence: numeric('confidence', { precision: 3, scale: 2 }),
-  syncedAt: timestamp('synced_at', { withTimezone: true }),
-  ingestionId: text('ingestion_id'),
-  careRecipientId: uuid('care_recipient_id').references(() => careRecipients.id),
-  createdById: uuid('created_by_id').references(() => caregivers.id),
-  startAt: timestamp('start_at', { withTimezone: true }),
-  endAt: timestamp('end_at', { withTimezone: true }),
-  location: text('location'),
-  organizer: text('organizer'),
-  attendees: text('attendees').array(),
-  amount: numeric('amount', { precision: 12, scale: 2 }),
-  currency: varchar('currency', { length: 8 }),
-  vendor: text('vendor'),
-  referenceNumber: text('reference_number'),
-  statementPeriod: text('statement_period'),
-  medicationName: text('medication_name'),
-  dosage: text('dosage'),
-  frequency: text('frequency'),
-  route: text('route'),
-  nextDoseAt: timestamp('next_dose_at', { withTimezone: true }),
-  prescribingProvider: text('prescribing_provider'),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .default(sql`now()`)
-    .notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true })
-    .default(sql`now()`)
-    .notNull(),
-});
+export const tasks = pgTable(
+  'tasks',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    type: taskType('type').default('general').notNull(),
+    title: text('title').notNull(),
+    description: text('description'),
+    status: taskStatus('status').default('todo').notNull(),
+    dueAt: timestamp('due_at', { withTimezone: true }),
+    reviewState: reviewState('review_state').default('approved').notNull(),
+    provider: sourceProvider('provider'),
+    sourceId: text('source_id'),
+    sourceLink: text('source_link'),
+    sender: text('sender'),
+    rawSnippet: text('raw_snippet'),
+    confidence: numeric('confidence', { precision: 3, scale: 2 }),
+    syncedAt: timestamp('synced_at', { withTimezone: true }),
+    ingestionId: text('ingestion_id'),
+    careRecipientId: uuid('care_recipient_id').references(() => careRecipients.id),
+    createdById: uuid('created_by_id').references(() => caregivers.id),
+    startAt: timestamp('start_at', { withTimezone: true }),
+    endAt: timestamp('end_at', { withTimezone: true }),
+    location: text('location'),
+    organizer: text('organizer'),
+    attendees: text('attendees').array(),
+    amount: numeric('amount', { precision: 12, scale: 2 }),
+    currency: varchar('currency', { length: 8 }),
+    vendor: text('vendor'),
+    referenceNumber: text('reference_number'),
+    statementPeriod: text('statement_period'),
+    medicationName: text('medication_name'),
+    dosage: text('dosage'),
+    frequency: text('frequency'),
+    route: text('route'),
+    nextDoseAt: timestamp('next_dose_at', { withTimezone: true }),
+    prescribingProvider: text('prescribing_provider'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .default(sql`now()`)
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .default(sql`now()`)
+      .notNull(),
+  },
+  (table) => ({
+    createdBySourceUnique: uniqueIndex('tasks_created_by_source_uidx').on(
+      table.createdById,
+      table.sourceId
+    ),
+  })
+);
 
 export const taskAssignments = pgTable('task_assignments', {
   id: uuid('id').defaultRandom().primaryKey(),
