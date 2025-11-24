@@ -1,12 +1,11 @@
 import { TRPCError } from '@trpc/server';
 import { and, desc, eq, sql } from 'drizzle-orm';
-import { v5 as uuidv5 } from 'uuid';
 import { z } from 'zod';
 import { caregivers, tasks } from '../../db/schema';
 import { authedProcedure, router } from '../../trpc/trpc';
+import { ensureCaregiver } from '../../lib/caregiver';
 
 const statusEnum = z.enum(['todo', 'in_progress', 'done']);
-const USER_NAMESPACE = '6ba7b810-9dad-11d1-80b4-00c04fd430c8'; // DNS namespace; stable for deriving UUIDs
 
 export const taskRouter = router({
   list: authedProcedure.query(async ({ ctx }) => {
@@ -178,20 +177,3 @@ export const taskRouter = router({
       return upserted;
     }),
 });
-
-async function ensureCaregiver(ctx: any) {
-  const userId = ctx.auth?.userId;
-  if (!userId) {
-    throw new TRPCError({ code: 'UNAUTHORIZED' });
-  }
-  const caregiverId = uuidv5(userId, USER_NAMESPACE);
-  await ctx.db
-    .insert(caregivers)
-    .values({
-      id: caregiverId,
-      name: userId,
-      email: `${userId}@local`,
-    })
-    .onConflictDoNothing();
-  return caregiverId;
-}
