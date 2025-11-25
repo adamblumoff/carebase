@@ -204,21 +204,24 @@ export async function syncSource({
     .set({ historyId: nextHistoryId ?? source.historyId, lastSyncAt: new Date() })
     .where(eq(sources.id, source.id));
 
-  await ctx.db.insert(ingestionEvents).values({
-    sourceId: source.id,
-    caregiverId,
-    provider: source.provider,
-    type: 'gmail',
-    ingestionId: `${reason}-${Date.now()}`,
-    historyId: nextHistoryId ?? source.historyId ?? undefined,
-    startedAt,
-    finishedAt: new Date(),
-    createdCount: results.created,
-    updatedCount: results.updated,
-    skippedCount: results.skipped,
-    errorCount: results.errors,
-    durationMs: new Date().getTime() - startedAt.getTime(),
-  });
+  const changed = results.created + results.updated + results.errors;
+  if (changed > 0) {
+    await ctx.db.insert(ingestionEvents).values({
+      sourceId: source.id,
+      caregiverId,
+      provider: source.provider,
+      type: 'gmail',
+      ingestionId: `${reason}-${Date.now()}`,
+      historyId: nextHistoryId ?? source.historyId ?? undefined,
+      startedAt,
+      finishedAt: new Date(),
+      createdCount: results.created,
+      updatedCount: results.updated,
+      skippedCount: results.skipped,
+      errorCount: results.errors,
+      durationMs: new Date().getTime() - startedAt.getTime(),
+    });
+  }
 
   return {
     ...results,

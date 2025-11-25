@@ -136,7 +136,8 @@ export default function ConnectionsScreen() {
     if (!eventsQuery.data || eventsQuery.data.length === 0) return;
     const newest = eventsQuery.data[0];
     const ts = newest.startedAt?.toString?.() ?? newest.startedAt;
-    if (ts && lastPushRef.current && lastPushRef.current !== ts) {
+    const changed = (newest.created ?? 0) + (newest.updated ?? 0);
+    if (ts && lastPushRef.current && lastPushRef.current !== ts && changed > 0) {
       showToast('New email synced');
       void prefetchTasks();
     }
