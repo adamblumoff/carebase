@@ -6,6 +6,7 @@ import {
   FlatList,
   Modal,
   Pressable,
+  ScrollView,
   Text,
   TextInput,
   View,
@@ -16,6 +17,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { trpc } from '@/lib/trpc/client';
 import { Button } from '@/components/Button';
 import { Container } from '@/components/Container';
+import { TaskDetailsSheet, TaskLike } from '@/components/TaskDetailsSheet';
+import { EditTaskSheet } from '@/components/EditTaskSheet';
 
 const filterOptions = ['all', 'appointment', 'bill', 'medication', 'general'] as const;
 type TaskTypeFilter = (typeof filterOptions)[number];
@@ -64,8 +67,8 @@ export default function TasksScreen() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedType, setSelectedType] = useState<TaskTypeFilter>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingTitle, setEditingTitle] = useState('');
+  const [detailsId, setDetailsId] = useState<string | null>(null);
+  const [editTask, setEditTask] = useState<Task | null>(null);
   const listInput = useMemo(
     () => (selectedType === 'all' ? undefined : { type: selectedType }),
     [selectedType]
@@ -81,12 +84,7 @@ export default function TasksScreen() {
   }, [tasksQuery.isError, tasksQuery.error]);
 
   const pendingReview = useMemo(() => {
-    const threshold = 0.75;
-    return tasksQuery.data?.find((item) => {
-      if (item.reviewState !== 'pending') return false;
-      const conf = toConfidenceNumber(item.confidence);
-      return conf !== null && conf >= threshold;
-    });
+    return tasksQuery.data?.find((item) => item.reviewState === 'pending');
   }, [tasksQuery.data]);
 
   const createTask = trpc.tasks.create.useMutation({
@@ -239,49 +237,8 @@ export default function TasksScreen() {
     );
   };
 
-  const startEdit = (id: string, currentTitle: string) => {
-    setEditingId(id);
-    setEditingTitle(currentTitle);
-  };
-
-  const updateTitle = trpc.tasks.updateTitle.useMutation({
-    onMutate: async (input) => {
-      await utils.tasks.list.cancel();
-      const previous = utils.tasks.list.getData();
-      utils.tasks.list.setData(undefined, (current) =>
-        current
-          ? current.map((item) => (item.id === input.id ? { ...item, title: input.title } : item))
-          : current
-      );
-      utils.tasks.list.setData(listInput, (current) =>
-        current
-          ? current.map((item) => (item.id === input.id ? { ...item, title: input.title } : item))
-          : current
-      );
-      return { previous };
-    },
-    onError: (_error, _input, context) => {
-      if (context?.previous) {
-        utils.tasks.list.setData(undefined, context.previous);
-        utils.tasks.list.setData(listInput, context.previous);
-      }
-    },
-    onSettled: () => {
-      utils.tasks.list.invalidate();
-      setEditingId(null);
-      setEditingTitle('');
-    },
-  });
-
-  const handleSaveEdit = () => {
-    const trimmed = editingTitle.trim();
-    if (!editingId || !trimmed) return;
-    updateTitle.mutate({ id: editingId, title: trimmed });
-  };
-
-  const closeEdit = () => {
-    setEditingId(null);
-    setEditingTitle('');
+  const startEdit = (task: Task) => {
+    openEditSheet(task);
   };
 
   type Task = NonNullable<typeof tasksQuery.data>[number];
@@ -297,6 +254,23 @@ export default function TasksScreen() {
       : null;
     if (fromFiltered) return fromFiltered;
     return utils.tasks.list.getData()?.find((t) => t.id === id) ?? null;
+  };
+
+  const openDetails = (id: string) => {
+    setDetailsId(id);
+  };
+
+  const closeDetails = () => setDetailsId(null);
+  const handleDetailsUpdated = (updated: TaskLike) => {
+    applyTaskPatch((item) => (item.id === updated.id ? { ...item, ...updated } : item));
+  };
+
+  const openEditSheet = (task: Task) => {
+    setEditTask(task);
+  };
+
+  const closeEditSheet = () => {
+    setEditTask(null);
   };
 
   const toggleStatus = trpc.tasks.toggleStatus.useMutation({
@@ -353,18 +327,19 @@ export default function TasksScreen() {
       const previousSpecific = utils.tasks.list.getData(listInput);
       const previousAll = utils.tasks.list.getData();
 
-      const updateReview = (current: typeof previousSpecific) =>
-        current
-          ? current.map((item) =>
-              item.id === input.id
-                ? {
-                    ...item,
-                    reviewState: input.action === 'approve' ? 'approved' : 'ignored',
-                    status: input.action === 'ignore' ? 'snoozed' : item.status,
-                  }
-                : item
-            )
-          : current;
+      const updateReview = (current: typeof previousSpecific) => {
+        if (!current) return current;
+        if (input.action === 'ignore') return current.filter((item) => item.id !== input.id);
+        return current.map((item) =>
+          item.id === input.id
+            ? {
+                ...item,
+                reviewState: 'approved',
+                status: item.status,
+              }
+            : item
+        );
+      };
 
       utils.tasks.list.setData(listInput, updateReview);
       utils.tasks.list.setData(undefined, updateReview);
@@ -418,7 +393,7 @@ export default function TasksScreen() {
                 {reviewTask.isLoading ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text className="text-base font-semibold text-white">Looks good</Text>
+                  <Text className="text-base font-semibold text-white">Accept</Text>
                 )}
               </Pressable>
               <Pressable
@@ -434,7 +409,17 @@ export default function TasksScreen() {
           </View>
         ) : null}
 
-        <View className="mb-3 flex-row flex-wrap gap-2">
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{
+            gap: 8,
+            paddingRight: 8,
+            alignItems: 'center',
+            paddingVertical: 2,
+          }}
+          style={{ minHeight: 44 }}
+          className="mb-2">
           {filterOptions.map((option) => {
             const isActive = selectedType === option;
             return (
@@ -456,7 +441,7 @@ export default function TasksScreen() {
               </Pressable>
             );
           })}
-        </View>
+        </ScrollView>
 
         <View className="mb-6 mt-2">
           <Button
@@ -489,68 +474,80 @@ export default function TasksScreen() {
             renderItem={({ item }) => {
               const isDone = item.status === 'done';
               return (
-                <View className="flex-row items-center justify-between rounded-lg border border-border bg-surface-strong px-4 py-3 dark:border-border-dark dark:bg-surface-card-dark">
-                  <View className="flex-1 flex-row items-center gap-3 pr-3">
-                    <Pressable
-                      accessibilityLabel={isDone ? 'Mark task as todo' : 'Mark task as done'}
-                      onPress={() => handleToggleStatus(item.id)}
-                      style={({ pressed }) => ({
-                        opacity: pressed ? 0.7 : 1,
-                      })}>
-                      <View
-                        className={`h-6 w-6 items-center justify-center rounded-full border ${
-                          isDone
-                            ? 'border-primary bg-primary'
-                            : 'border-border dark:border-border-dark'
-                        }`}>
-                        {isDone && <Ionicons name="checkmark" size={16} color="#FFFFFF" />}
-                      </View>
-                    </Pressable>
-                    <View className="flex-1">
-                      <View className="mb-1 flex-row flex-wrap items-center gap-2">
-                        <Badge label={formatType(item.type)} />
-                        {item.provider ? <Badge label={item.provider} tone="muted" /> : null}
-                        {item.reviewState === 'pending' ? (
-                          <Badge label="Needs review" tone="warn" />
-                        ) : null}
-                      </View>
-                      <Text className="text-base font-semibold text-text dark:text-text-dark">
-                        {item.title}
-                      </Text>
-                      <Text className="text-xs text-text-muted dark:text-text-muted-dark">
-                        Status: {item.status.replace('_', ' ')} • Confidence{' '}
-                        {formatConfidence(item.confidence)}
-                      </Text>
-                      {item.sender ? (
-                        <Text className="text-xs text-text-muted dark:text-text-muted-dark">
-                          From {item.sender}
-                        </Text>
-                      ) : null}
+                <View className="rounded-lg border border-border bg-surface-strong px-4 py-3 dark:border-border-dark dark:bg-surface-card-dark">
+                  <View className="flex-row items-center justify-between">
+                    <View className="flex-1 flex-row items-center gap-3 pr-3">
+                      <Pressable
+                        accessibilityLabel={isDone ? 'Mark task as todo' : 'Mark task as done'}
+                        onPress={() => handleToggleStatus(item.id)}
+                        style={({ pressed }) => ({
+                          opacity: pressed ? 0.7 : 1,
+                        })}>
+                        <View
+                          className={`h-6 w-6 items-center justify-center rounded-full border ${
+                            isDone
+                              ? 'border-primary bg-primary'
+                              : 'border-border dark:border-border-dark'
+                          }`}>
+                          {isDone && <Ionicons name="checkmark" size={16} color="#FFFFFF" />}
+                        </View>
+                      </Pressable>
+                      <Pressable
+                        className="flex-1"
+                        accessibilityLabel="Open task details"
+                        onPress={() => openDetails(item.id)}
+                        style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
+                        <View className="flex-1">
+                          <View className="mb-1 flex-row flex-wrap items-center gap-2">
+                            <Badge label={formatType(item.type)} />
+                            {item.provider ? <Badge label={item.provider} tone="muted" /> : null}
+                            {item.reviewState === 'pending' ? (
+                              <Badge label="Needs review" tone="warn" />
+                            ) : null}
+                          </View>
+                          <Text className="text-base font-semibold text-text dark:text-text-dark">
+                            {item.title}
+                          </Text>
+                          <Text className="text-xs text-text-muted dark:text-text-muted-dark">
+                            Status: {item.status.replace('_', ' ')} • Confidence{' '}
+                            {formatConfidence(item.confidence)}
+                          </Text>
+                          {item.sender ? (
+                            <Text className="text-xs text-text-muted dark:text-text-muted-dark">
+                              From {item.sender}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </Pressable>
                     </View>
-                  </View>
-                  <View className="flex-row items-center gap-3">
-                    <Pressable
-                      accessibilityLabel="Edit task title"
-                      onPress={() => startEdit(item.id, item.title)}
-                      style={({ pressed }) => ({
-                        opacity: pressed ? 0.7 : 1,
-                      })}>
-                      <Ionicons name="create-outline" size={22} color="#4A8F6A" />
-                    </Pressable>
-                    <Pressable
-                      accessibilityLabel="Delete task"
-                      onPress={() => confirmDelete(item.id)}
-                      disabled={deleteTask.isLoading && deletingId === item.id}
-                      style={({ pressed }) => ({
-                        opacity:
-                          deleteTask.isLoading && deletingId === item.id ? 0.5 : pressed ? 0.7 : 1,
-                      })}>
-                      {deleteTask.isLoading && deletingId === item.id ? (
-                        <ActivityIndicator color="#E06262" />
-                      ) : (
-                        <Ionicons name="trash-outline" size={22} color="#E06262" />
-                      )}
-                    </Pressable>
+                    <View className="flex-row items-center gap-3">
+                      <Pressable
+                        accessibilityLabel="Edit task"
+                        onPress={() => startEdit(item)}
+                        style={({ pressed }) => ({
+                          opacity: pressed ? 0.7 : 1,
+                        })}>
+                        <Ionicons name="create-outline" size={22} color="#4A8F6A" />
+                      </Pressable>
+                      <Pressable
+                        accessibilityLabel="Delete task"
+                        onPress={() => confirmDelete(item.id)}
+                        disabled={deleteTask.isLoading && deletingId === item.id}
+                        style={({ pressed }) => ({
+                          opacity:
+                            deleteTask.isLoading && deletingId === item.id
+                              ? 0.5
+                              : pressed
+                                ? 0.7
+                                : 1,
+                        })}>
+                        {deleteTask.isLoading && deletingId === item.id ? (
+                          <ActivityIndicator color="#E06262" />
+                        ) : (
+                          <Ionicons name="trash-outline" size={22} color="#E06262" />
+                        )}
+                      </Pressable>
+                    </View>
                   </View>
                 </View>
               );
@@ -630,53 +627,24 @@ export default function TasksScreen() {
         </View>
       </Modal>
 
-      <Modal
-        visible={!!editingId}
-        transparent
-        animationType="fade"
-        onRequestClose={closeEdit}
-        statusBarTranslucent>
-        <View className="flex-1 items-center justify-center bg-black/40 px-6">
-          <View className="w-full max-w-md rounded-2xl border border-border bg-white p-5 dark:border-border-dark dark:bg-surface-card-dark">
-            <Text className="mb-3 text-lg font-semibold text-text dark:text-text-dark">
-              Edit task
-            </Text>
-            <TextInput
-              className="mb-4 rounded-lg border border-border bg-white px-3 text-base dark:border-border-dark dark:bg-surface-dark dark:text-text-dark"
-              value={editingTitle}
-              onChangeText={setEditingTitle}
-              autoFocus
-              placeholder="Task title"
-              editable={!updateTitle.isLoading}
-              style={{ fontSize: 15, lineHeight: 18, paddingVertical: 8 }}
-            />
-            <View className="flex-row items-center justify-end gap-3">
-              <Pressable
-                onPress={handleSaveEdit}
-                disabled={updateTitle.isLoading || !editingTitle.trim()}
-                className="h-10 min-w-[72px] flex-row items-center justify-center rounded-full bg-primary px-4 dark:bg-primary-deep"
-                style={({ pressed }) => ({
-                  opacity: updateTitle.isLoading || !editingTitle.trim() ? 0.5 : pressed ? 0.85 : 1,
-                })}>
-                {updateTitle.isLoading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text className="text-base font-semibold text-white">Save</Text>
-                )}
-              </Pressable>
-              <Pressable
-                onPress={closeEdit}
-                disabled={updateTitle.isLoading}
-                className="h-10 flex-row items-center justify-center rounded-full px-3"
-                style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
-                <Text className="text-base font-semibold text-text-muted dark:text-text-muted-dark">
-                  Cancel
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <TaskDetailsSheet
+        visible={!!detailsId}
+        task={detailsId ? (getCurrentTask(detailsId) ?? null) : null}
+        onClose={closeDetails}
+      />
+
+      <EditTaskSheet
+        task={editTask}
+        visible={!!editTask}
+        onClose={closeEditSheet}
+        onUpdated={(updated) => {
+          applyTaskPatch((item) => (item.id === updated.id ? { ...item, ...updated } : item));
+          setEditTask(null);
+          setTimeout(() => {
+            Alert.alert('Saved', 'Task updated successfully');
+          }, 0);
+        }}
+      />
     </View>
   );
 }

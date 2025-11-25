@@ -25,12 +25,29 @@
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": [
+          "googlegmail",
+          "comgooglecalendar",
+          "googlecalendar",
+          "com.google.calendar",
+          "vnd.google.calendar"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.adamblumoff.carebase"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
+      }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "07080656-be8c-45e5-9a5f-db41afb6f535"
       }
     }
   }

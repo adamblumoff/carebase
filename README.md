@@ -7,6 +7,8 @@ Carebase is a caregiver-first mobile app that pulls every stream of care informa
 - Single source of truth for a care team’s daily tasks, notes, and documents.
 - Clear, timely updates that reduce phone/email back-and-forth.
 - Built for multi-platform access (iOS, Android, web) via Expo Router.
+- Gmail-driven task ingestion that classifies appointments, bills, and medications; drops very low-confidence (<60%) emails, flags medium (60–<80%) for review, auto-approves ≥80%.
+- Task detail actions: open source email (Gmail app/web) and calendar for appointments; quick edit sheet for title/type/description.
 
 ## Tech stack
 
@@ -40,6 +42,8 @@ Carebase is a caregiver-first mobile app that pulls every stream of care informa
 ## Project layout
 
 - `app/` — routes/screens (Expo Router file-based).
+  - `app/(tabs)/tasks/` — task list, detail sheet, and edit sheet trigger.
+  - `app/(tabs)/connections.tsx` — Gmail connect/sync status.
 - `components/` — shared UI building blocks.
 - `assets/` — images, fonts, icons.
 - `global.css` — global style tokens.
