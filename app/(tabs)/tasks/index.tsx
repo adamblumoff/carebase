@@ -29,6 +29,13 @@ const formatConfidence = (value?: number | string | null) => {
   return `${Math.round(parsed * 100)}%`;
 };
 
+const toConfidenceNumber = (value?: number | string | null) => {
+  if (value === null || value === undefined) return null;
+  const parsed = typeof value === 'string' ? parseFloat(value) : value;
+  if (Number.isNaN(parsed)) return null;
+  return parsed;
+};
+
 const formatType = (type?: string | null) => {
   if (!type) return 'General';
   return type.charAt(0).toUpperCase() + type.slice(1);
@@ -54,6 +61,7 @@ export default function TasksScreen() {
   useColorScheme();
   const [title, setTitle] = useState('');
   const [newTaskType, setNewTaskType] = useState<CreateTaskType>('general');
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedType, setSelectedType] = useState<TaskTypeFilter>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -72,18 +80,26 @@ export default function TasksScreen() {
     }
   }, [tasksQuery.isError, tasksQuery.error]);
 
-  const pendingReview = useMemo(
-    () => tasksQuery.data?.find((item) => item.reviewState === 'pending'),
-    [tasksQuery.data]
-  );
+  const pendingReview = useMemo(() => {
+    const threshold = 0.75;
+    return tasksQuery.data?.find((item) => {
+      if (item.reviewState !== 'pending') return false;
+      const conf = toConfidenceNumber(item.confidence);
+      return conf !== null && conf >= threshold;
+    });
+  }, [tasksQuery.data]);
 
   const createTask = trpc.tasks.create.useMutation({
     onMutate: async (input) => {
       const optimisticId = `temp-${Date.now()}`;
-      await Promise.all([utils.tasks.list.cancel(listInput), utils.tasks.list.cancel()]);
+      const hasFilter = !!listInput;
+      await Promise.all([
+        utils.tasks.list.cancel(),
+        hasFilter ? utils.tasks.list.cancel(listInput) : Promise.resolve(),
+      ]);
 
       const previousAll = utils.tasks.list.getData();
-      const previousFiltered = utils.tasks.list.getData(listInput);
+      const previousFiltered = hasFilter ? utils.tasks.list.getData(listInput) : undefined;
 
       const optimisticTask = {
         id: optimisticId,
@@ -127,11 +143,13 @@ export default function TasksScreen() {
         current ? [optimisticTask, ...current] : [optimisticTask]
       );
 
-      utils.tasks.list.setData(listInput, (current) => {
-        if (!current) return listInput ? current : [optimisticTask];
-        if (listInput?.type && listInput.type !== optimisticTask.type) return current;
-        return [optimisticTask, ...current];
-      });
+      if (hasFilter) {
+        utils.tasks.list.setData(listInput, (current) => {
+          if (!current) return [optimisticTask];
+          if (listInput?.type && listInput.type !== optimisticTask.type) return current;
+          return [optimisticTask, ...current];
+        });
+      }
 
       return { previousAll, previousFiltered, optimisticId };
     },
@@ -140,7 +158,7 @@ export default function TasksScreen() {
       if (context?.previousAll) {
         utils.tasks.list.setData(undefined, context.previousAll);
       }
-      if (context?.previousFiltered) {
+      if (listInput && context?.previousFiltered) {
         utils.tasks.list.setData(listInput, context.previousFiltered);
       }
     },
@@ -151,16 +169,27 @@ export default function TasksScreen() {
         return current.map((item) => (item.id === context.optimisticId ? task : item));
       });
 
-      utils.tasks.list.setData(listInput, (current) => {
-        if (!current) return listInput ? current : [task];
-        return current.map((item) => (item.id === context?.optimisticId ? task : item));
-      });
+      if (listInput) {
+        utils.tasks.list.setData(listInput, (current) => {
+          if (!current) return [task];
+          return current.map((item) => (item.id === context?.optimisticId ? task : item));
+        });
+      }
     },
     onSettled: () => {
       utils.tasks.list.invalidate();
       setTitle('');
+      setNewTaskType('general');
+      setIsCreateModalOpen(false);
     },
   });
+
+  const closeCreateModal = () => {
+    if (createTask.isLoading) return;
+    setIsCreateModalOpen(false);
+    setTitle('');
+    setNewTaskType('general');
+  };
 
   const deleteTask = trpc.tasks.delete.useMutation({
     onMutate: async (input) => {
@@ -405,44 +434,15 @@ export default function TasksScreen() {
           })}
         </View>
 
-        <View className="mb-6 mt-2 gap-3">
-          <TextInput
-            className="rounded-lg border border-border bg-white px-3 text-base dark:border-border-dark dark:bg-surface-card-dark dark:text-text-dark"
-            placeholder="New task title"
-            value={title}
-            onChangeText={setTitle}
-            editable={!createTask.isLoading}
-            style={{ fontSize: 15, lineHeight: 18, paddingVertical: 8 }}
-          />
-
-          <View className="flex-row flex-wrap gap-2">
-            {createTypeOptions.map((option) => {
-              const isActive = newTaskType === option;
-              return (
-                <Pressable
-                  key={option}
-                  onPress={() => setNewTaskType(option)}
-                  className={`rounded-full border px-3 py-2 ${
-                    isActive
-                      ? 'border-primary bg-primary/10'
-                      : 'border-border dark:border-border-dark'
-                  }`}
-                  style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}>
-                  <Text
-                    className={`text-sm font-semibold ${
-                      isActive ? 'text-primary' : 'text-text dark:text-text-dark'
-                    }`}>
-                    {formatType(option)}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
+        <View className="mb-6 mt-2">
           <Button
-            title={createTask.isLoading ? 'Adding...' : 'Add task'}
-            onPress={handleAddTask}
-            disabled={createTask.isLoading || !title.trim()}
+            title="Add task"
+            onPress={() => {
+              setTitle('');
+              setNewTaskType('general');
+              setIsCreateModalOpen(true);
+            }}
+            disabled={createTask.isLoading}
           />
         </View>
 
@@ -534,6 +534,77 @@ export default function TasksScreen() {
           />
         )}
       </Container>
+
+      <Modal
+        visible={isCreateModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={closeCreateModal}
+        statusBarTranslucent>
+        <View className="flex-1 items-center justify-center bg-black/40 px-6">
+          <View className="w-full max-w-md rounded-2xl border border-border bg-white p-5 dark:border-border-dark dark:bg-surface-card-dark">
+            <Text className="mb-3 text-lg font-semibold text-text dark:text-text-dark">
+              Add task
+            </Text>
+            <TextInput
+              className="mb-4 rounded-lg border border-border bg-white px-3 text-base dark:border-border-dark dark:bg-surface-dark dark:text-text-dark"
+              placeholder="Task title"
+              value={title}
+              onChangeText={setTitle}
+              autoFocus
+              editable={!createTask.isLoading}
+              style={{ fontSize: 15, lineHeight: 18, paddingVertical: 8 }}
+            />
+            <View className="mb-4 flex-row flex-wrap gap-2">
+              {createTypeOptions.map((option) => {
+                const isActive = newTaskType === option;
+                return (
+                  <Pressable
+                    key={option}
+                    onPress={() => setNewTaskType(option)}
+                    className={`rounded-full border px-3 py-2 ${
+                      isActive
+                        ? 'border-primary bg-primary/10'
+                        : 'border-border dark:border-border-dark'
+                    }`}
+                    style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}>
+                    <Text
+                      className={`text-sm font-semibold ${
+                        isActive ? 'text-primary' : 'text-text dark:text-text-dark'
+                      }`}>
+                      {formatType(option)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <View className="flex-row items-center justify-end gap-3">
+              <Pressable
+                onPress={handleAddTask}
+                disabled={createTask.isLoading || !title.trim()}
+                className="h-10 min-w-[92px] flex-row items-center justify-center rounded-full bg-primary px-4 dark:bg-primary-deep"
+                style={({ pressed }) => ({
+                  opacity: createTask.isLoading || !title.trim() ? 0.5 : pressed ? 0.85 : 1,
+                })}>
+                {createTask.isLoading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text className="text-base font-semibold text-white">Add</Text>
+                )}
+              </Pressable>
+              <Pressable
+                onPress={closeCreateModal}
+                disabled={createTask.isLoading}
+                className="h-10 flex-row items-center justify-center rounded-full px-3"
+                style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
+                <Text className="text-base font-semibold text-text-muted dark:text-text-muted-dark">
+                  Cancel
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={!!editingId}
