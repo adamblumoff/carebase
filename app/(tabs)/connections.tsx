@@ -41,7 +41,8 @@ export default function ConnectionsScreen() {
 
   const sourcesQuery = trpc.sources.list.useQuery();
   const authUrlQuery = trpc.sources.authorizeUrl.useQuery({ redirectUri }, { enabled: false });
-  const eventsQuery = trpc.ingestionEvents.recent.useQuery({ limit: 5 }, { refetchInterval: 5000 });
+  // Track last push for live status
+  const eventsQuery = trpc.ingestionEvents.recent.useQuery({ limit: 1 }, { refetchInterval: 5000 });
 
   const [connectError, setConnectError] = useState<string | null>(null);
 
@@ -105,15 +106,16 @@ export default function ConnectionsScreen() {
     [toastOpacity]
   );
 
-  const lastEventId = useRef<string | null>(null);
+  const lastPushRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!eventsQuery.data || eventsQuery.data.length === 0) return;
     const newest = eventsQuery.data[0];
-    if (lastEventId.current && lastEventId.current !== newest.id) {
+    const ts = newest.startedAt?.toString?.() ?? newest.startedAt;
+    if (ts && lastPushRef.current && lastPushRef.current !== ts) {
       showToast('New email synced');
     }
-    lastEventId.current = newest.id;
+    if (ts) lastPushRef.current = ts;
   }, [eventsQuery.data, showToast]);
 
   const handleConnect = useCallback(async () => {
@@ -314,30 +316,33 @@ export default function ConnectionsScreen() {
           )}
         </View>
 
-        <View className="mt-6 gap-2">
-          <Text className="text-sm font-semibold text-text dark:text-text-dark">Recent syncs</Text>
+        <View className="mt-6 gap-1">
+          <Text className="text-sm font-semibold text-text dark:text-text-dark">Push status</Text>
           {eventsQuery.isLoading ? (
             <ActivityIndicator />
           ) : eventsQuery.isError ? (
-            <Text className="text-xs text-red-600">Could not load sync events.</Text>
+            <Text className="text-xs text-red-600">Could not load push status.</Text>
           ) : eventsQuery.data && eventsQuery.data.length > 0 ? (
-            eventsQuery.data.map((ev) => (
-              <View
-                key={ev.id}
-                className="rounded-lg border border-border bg-white p-3 dark:border-border-dark dark:bg-surface-card-dark">
-                <Text className="text-sm font-semibold text-text dark:text-text-dark">
-                  {new Date(ev.startedAt).toLocaleString()} • {ev.type ?? ev.provider}
-                </Text>
-                <Text className="text-xs text-text-muted dark:text-text-muted-dark">
-                  {ev.created} created • {ev.updated} updated • {ev.errors} errors
-                </Text>
-                {ev.errorMessage ? (
-                  <Text className="text-xs text-amber-700">{ev.errorMessage}</Text>
-                ) : null}
-              </View>
-            ))
+            (() => {
+              const ev = eventsQuery.data[0];
+              const ts = ev.startedAt ? new Date(ev.startedAt) : null;
+              const freshnessMs = ts ? Date.now() - ts.getTime() : Number.POSITIVE_INFINITY;
+              const isLive = freshnessMs < 3 * 60 * 1000;
+              return (
+                <View className="flex-row items-center justify-between rounded-lg border border-border bg-white px-3 py-2 dark:border-border-dark dark:bg-surface-card-dark">
+                  <Text className="text-sm font-semibold text-text dark:text-text-dark">
+                    {isLive ? 'Live (push)' : 'Polling fallback'}
+                  </Text>
+                  <Text className="text-xs text-text-muted dark:text-text-muted-dark">
+                    Last push: {ts ? ts.toLocaleTimeString() : 'none yet'}
+                  </Text>
+                </View>
+              );
+            })()
           ) : (
-            <Text className="text-xs text-text-muted dark:text-text-muted-dark">No syncs yet.</Text>
+            <Text className="text-xs text-text-muted dark:text-text-muted-dark">
+              No push seen yet.
+            </Text>
           )}
         </View>
 

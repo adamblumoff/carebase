@@ -127,6 +127,7 @@ export const sources = pgTable(
     calendarChannelId: text('calendar_channel_id'),
     calendarResourceId: text('calendar_resource_id'),
     calendarSyncToken: text('calendar_sync_token'),
+    lastPushAt: timestamp('last_push_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .default(sql`now()`)
       .notNull(),

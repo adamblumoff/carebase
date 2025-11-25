@@ -189,6 +189,12 @@ const registerPlugins = async () => {
       });
     });
 
+    // record last push time
+    db.update(sources)
+      .set({ lastPushAt: new Date(), updatedAt: new Date() })
+      .where(eq(sources.id, source.id))
+      .catch((err) => request.log.error({ err }, 'update lastPushAt failed'));
+
     return reply.status(202).send({ ok: true });
   });
 
@@ -238,8 +244,8 @@ const registerPlugins = async () => {
     }
   });
 
-  const fallbackTicker = new Ticker(30 * 1000, async () => {
-    const stale = new Date(Date.now() - 90 * 1000);
+  const fallbackTicker = new Ticker(5 * 60 * 1000, async () => {
+    const stale = new Date(Date.now() - 6 * 60 * 1000);
     const list = await db
       .select()
       .from(sources)
