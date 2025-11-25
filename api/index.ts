@@ -231,14 +231,15 @@ const registerPlugins = async () => {
     for (const src of candidates) {
       try {
         await renewSource(src);
+        server.log.info({ sourceId: src.id }, 'renew watch succeeded');
       } catch (err) {
         server.log.error({ err, sourceId: src.id }, 'renew watch failed');
       }
     }
   });
 
-  const fallbackTicker = new Ticker(3 * 60 * 1000, async () => {
-    const stale = new Date(Date.now() - 10 * 60 * 1000);
+  const fallbackTicker = new Ticker(60 * 1000, async () => {
+    const stale = new Date(Date.now() - 2 * 60 * 1000);
     const list = await db
       .select()
       .from(sources)
