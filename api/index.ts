@@ -256,6 +256,24 @@ const registerPlugins = async () => {
 
   renewalTicker.start(true);
   fallbackTicker.start(true);
+
+  // one-time bootstrap to ensure watches exist for all active sources
+  try {
+    const activeSources = await db
+      .select()
+      .from(sources)
+      .where(sql`${sources.status} = 'active'`);
+    for (const src of activeSources) {
+      try {
+        await renewSource(src);
+        server.log.info({ sourceId: src.id }, 'bootstrap renew succeeded');
+      } catch (err) {
+        server.log.error({ err, sourceId: src.id }, 'bootstrap renew failed');
+      }
+    }
+  } catch (err) {
+    server.log.error({ err }, 'bootstrap renew sweep failed');
+  }
 };
 
 const port = Number(process.env.PORT ?? process.env.API_PORT ?? 8080);
