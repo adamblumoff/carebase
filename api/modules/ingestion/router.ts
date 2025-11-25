@@ -1,5 +1,5 @@
 import { TRPCError } from '@trpc/server';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { google } from 'googleapis';
 import { z } from 'zod';
 
@@ -122,22 +122,23 @@ async function upsertTaskFromMessage({
     updatedAt: new Date(),
   } satisfies Partial<typeof tasks.$inferInsert>;
 
+  const now = new Date();
   const [result] = await ctx.db
     .insert(tasks)
     .values({
       ...payload,
-      createdAt: new Date(),
+      createdAt: now,
     })
     .onConflictDoUpdate({
       target: [tasks.createdById, tasks.sourceId],
       set: {
         ...payload,
-        updatedAt: new Date(),
+        updatedAt: now,
       },
     })
-    .returning({ id: tasks.id });
+    .returning({ id: tasks.id, isNew: sql<boolean>`(xmax = 0)` });
 
-  return { action: 'upserted', id: result.id };
+  return { action: result.isNew ? 'created' : 'updated', id: result.id };
 }
 
 export async function syncSource({
@@ -175,22 +176,28 @@ export async function syncSource({
 
   const results = { created: 0, updated: 0, skipped: 0, errors: 0 };
 
-  for (const id of messageIds) {
-    try {
-      const { data } = await gmail.users.messages.get({
-        userId: 'me',
-        id,
-        format: 'metadata',
-        metadataHeaders: ['Subject', 'From', 'Date'],
-      });
+  const concurrency = 3;
+  for (let i = 0; i < messageIds.length; i += concurrency) {
+    const batch = messageIds.slice(i, i + concurrency);
+    await Promise.all(
+      batch.map(async (id) => {
+        try {
+          const { data } = await gmail.users.messages.get({
+            userId: 'me',
+            id,
+            format: 'metadata',
+            metadataHeaders: ['Subject', 'From', 'Date'],
+          });
 
-      const outcome = await upsertTaskFromMessage({ ctx, source, caregiverId, message: data });
-      if (outcome.action === 'created') results.created += 1;
-      if (outcome.action === 'updated') results.updated += 1;
-    } catch (error) {
-      ctx.req?.log?.error({ err: error }, 'sync message failed');
-      results.errors += 1;
-    }
+          const outcome = await upsertTaskFromMessage({ ctx, source, caregiverId, message: data });
+          if (outcome.action === 'created') results.created += 1;
+          if (outcome.action === 'updated') results.updated += 1;
+        } catch (error) {
+          ctx.req?.log?.error({ err: error }, 'sync message failed');
+          results.errors += 1;
+        }
+      })
+    );
   }
 
   await ctx.db
@@ -198,21 +205,24 @@ export async function syncSource({
     .set({ historyId: nextHistoryId ?? source.historyId, lastSyncAt: new Date() })
     .where(eq(sources.id, source.id));
 
-  await ctx.db.insert(ingestionEvents).values({
-    sourceId: source.id,
-    caregiverId,
-    provider: source.provider,
-    type: 'gmail',
-    ingestionId: `${reason}-${Date.now()}`,
-    historyId: nextHistoryId ?? source.historyId ?? undefined,
-    startedAt,
-    finishedAt: new Date(),
-    createdCount: results.created,
-    updatedCount: results.updated,
-    skippedCount: results.skipped,
-    errorCount: results.errors,
-    durationMs: new Date().getTime() - startedAt.getTime(),
-  });
+  const changed = results.created + results.updated + results.errors;
+  if (changed > 0) {
+    await ctx.db.insert(ingestionEvents).values({
+      sourceId: source.id,
+      caregiverId,
+      provider: source.provider,
+      type: 'gmail',
+      ingestionId: `${reason}-${Date.now()}`,
+      historyId: nextHistoryId ?? source.historyId ?? undefined,
+      startedAt,
+      finishedAt: new Date(),
+      createdCount: results.created,
+      updatedCount: results.updated,
+      skippedCount: results.skipped,
+      errorCount: results.errors,
+      durationMs: new Date().getTime() - startedAt.getTime(),
+    });
+  }
 
   return {
     ...results,

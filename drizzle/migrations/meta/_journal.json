@@ -43,6 +43,13 @@
       "when": 1764031200000,
       "tag": "0005_unique_tasks_created_by_source",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1764033600000,
+      "tag": "0006_add_last_push_at",
+      "breakpoints": true
     }
   ]
 }

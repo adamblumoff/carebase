@@ -3,7 +3,7 @@ import fastify from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import { fastifyTRPCPlugin } from '@trpc/server/adapters/fastify';
-import { sql } from 'drizzle-orm';
+import { sql, eq } from 'drizzle-orm';
 import { appRouter } from './trpc/root';
 import { createContext } from './trpc/context';
 import { posthog } from './lib/posthog';
@@ -176,7 +176,7 @@ const registerPlugins = async () => {
       return reply.status(202).send({ ok: true });
     }
 
-    debounceRun(source.id, 2000, () => {
+    debounceRun(source.id, 100, () => {
       const runner = source.calendarChannelId === channelId ? syncCalendarSource : syncSource;
       runner({
         ctx: { db, req: request },
@@ -188,6 +188,12 @@ const registerPlugins = async () => {
         request.log.error({ err }, 'sync push failed');
       });
     });
+
+    // record last push time
+    db.update(sources)
+      .set({ lastPushAt: new Date(), updatedAt: new Date() })
+      .where(eq(sources.id, source.id))
+      .catch((err) => request.log.error({ err }, 'update lastPushAt failed'));
 
     return reply.status(202).send({ ok: true });
   });
@@ -238,8 +244,8 @@ const registerPlugins = async () => {
     }
   });
 
-  const fallbackTicker = new Ticker(60 * 1000, async () => {
-    const stale = new Date(Date.now() - 2 * 60 * 1000);
+  const fallbackTicker = new Ticker(5 * 60 * 1000, async () => {
+    const stale = new Date(Date.now() - 6 * 60 * 1000);
     const list = await db
       .select()
       .from(sources)
