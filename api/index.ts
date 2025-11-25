@@ -3,7 +3,7 @@ import fastify from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import { fastifyTRPCPlugin } from '@trpc/server/adapters/fastify';
-import { sql } from 'drizzle-orm';
+import { sql, eq } from 'drizzle-orm';
 import { appRouter } from './trpc/root';
 import { createContext } from './trpc/context';
 import { posthog } from './lib/posthog';
