@@ -47,3 +47,10 @@
 ## Getting Unstuck
 - Prefer official docs first (Expo, React Native, React Navigation, NativeWind); link them in issues/PRs when they inform choices.  
 - Write a short note in PRs for any tricky fixes and cite the doc page that clarified the solution.
+
+## Interaction Patterns (optimistic-first)
+- For tap-y UI (toggles, edits) default to optimistic cache writes via TanStack Query/TRPC: patch list caches immediately, fire mutation in background.
+- Do not `await` cache cancellation before optimistic writes; cancel in the background to keep the UI instant.
+- Capture previous cache for rollback, but only roll back if the cache still matches the optimistic state (skip if the user already tapped again).
+- On success, merge the server row back into the cache only if it matches the optimistic state; otherwise leave the user’s newer change intact and rely on a later invalidate to reconcile.
+- Invalidate after settle, preferably low-priority (background) so active lists keep their optimistic feel.

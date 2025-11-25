@@ -210,7 +210,6 @@ const registerPlugins = async () => {
       app.register(fastifyTRPCPlugin as any, {
         trpcOptions: { router: appRouter, createContext },
       });
-
     },
     { prefix: '/trpc' }
   );

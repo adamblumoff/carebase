@@ -284,38 +284,62 @@ export default function TasksScreen() {
     setEditingTitle('');
   };
 
+  type Task = NonNullable<typeof tasksQuery.data>[number];
+
+  const applyTaskPatch = (updater: (task: Task) => Task) => {
+    utils.tasks.list.setData(undefined, (current) => (current ? current.map(updater) : current));
+    utils.tasks.list.setData(listInput, (current) => (current ? current.map(updater) : current));
+  };
+
+  const getCurrentTask = (id: string) => {
+    const fromFiltered = listInput
+      ? utils.tasks.list.getData(listInput)?.find((t) => t.id === id)
+      : null;
+    if (fromFiltered) return fromFiltered;
+    return utils.tasks.list.getData()?.find((t) => t.id === id) ?? null;
+  };
+
   const toggleStatus = trpc.tasks.toggleStatus.useMutation({
-    onMutate: async (input) => {
-      await utils.tasks.list.cancel();
-      const previous = utils.tasks.list.getData();
-      utils.tasks.list.setData(undefined, (current) =>
-        current
-          ? current.map((item) =>
-              item.id === input.id
-                ? { ...item, status: item.status === 'done' ? 'todo' : 'done' }
-                : item
-            )
-          : current
+    onMutate: (input) => {
+      // Fire-and-forget cancel so optimistic UI is instant.
+      void utils.tasks.list.cancel();
+
+      const previousAll = utils.tasks.list.getData();
+      const previousFiltered = listInput ? utils.tasks.list.getData(listInput) : undefined;
+
+      const currentTask = getCurrentTask(input.id);
+      const targetStatus = currentTask?.status === 'done' ? 'todo' : 'done';
+
+      applyTaskPatch((item) =>
+        item.id === input.id
+          ? { ...item, status: targetStatus, updatedAt: new Date().toISOString() }
+          : item
       );
-      utils.tasks.list.setData(listInput, (current) =>
-        current
-          ? current.map((item) =>
-              item.id === input.id
-                ? { ...item, status: item.status === 'done' ? 'todo' : 'done' }
-                : item
-            )
-          : current
-      );
-      return { previous };
+
+      return { previousAll, previousFiltered, targetStatus };
     },
-    onError: (_error, _input, context) => {
-      if (context?.previous) {
-        utils.tasks.list.setData(undefined, context.previous);
-        utils.tasks.list.setData(listInput, context.previous);
+    onError: (_error, input, context) => {
+      if (!context) return;
+      // Only roll back if the cache still reflects this optimistic toggle (user may have toggled again).
+      const stillOptimistic = getCurrentTask(input.id)?.status === context.targetStatus;
+      if (!stillOptimistic) return;
+
+      utils.tasks.list.setData(undefined, context.previousAll);
+      if (listInput) {
+        utils.tasks.list.setData(listInput, context.previousFiltered ?? context.previousAll);
       }
     },
+    onSuccess: (task, input, context) => {
+      if (!context) return;
+      // Skip stale success if user already toggled again.
+      const stillOptimistic = getCurrentTask(input.id)?.status === context.targetStatus;
+      if (!stillOptimistic) return;
+
+      applyTaskPatch((item) => (item.id === task.id ? task : item));
+    },
     onSettled: () => {
-      utils.tasks.list.invalidate();
+      // Low-priority resync; keeps UI snappy while reconciling with server state.
+      void utils.tasks.list.invalidate();
     },
   });
 
