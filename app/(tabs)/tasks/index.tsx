@@ -17,7 +17,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { trpc } from '@/lib/trpc/client';
 import { Button } from '@/components/Button';
 import { Container } from '@/components/Container';
-import { TaskDetailsSheet } from '@/components/TaskDetailsSheet';
+import { TaskDetailsSheet, TaskLike } from '@/components/TaskDetailsSheet';
+import { EditTaskSheet } from '@/components/EditTaskSheet';
 
 const filterOptions = ['all', 'appointment', 'bill', 'medication', 'general'] as const;
 type TaskTypeFilter = (typeof filterOptions)[number];
@@ -66,9 +67,8 @@ export default function TasksScreen() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedType, setSelectedType] = useState<TaskTypeFilter>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingTitle, setEditingTitle] = useState('');
   const [detailsId, setDetailsId] = useState<string | null>(null);
+  const [editTask, setEditTask] = useState<Task | null>(null);
   const listInput = useMemo(
     () => (selectedType === 'all' ? undefined : { type: selectedType }),
     [selectedType]
@@ -237,49 +237,8 @@ export default function TasksScreen() {
     );
   };
 
-  const startEdit = (id: string, currentTitle: string) => {
-    setEditingId(id);
-    setEditingTitle(currentTitle);
-  };
-
-  const updateTitle = trpc.tasks.updateTitle.useMutation({
-    onMutate: async (input) => {
-      await utils.tasks.list.cancel();
-      const previous = utils.tasks.list.getData();
-      utils.tasks.list.setData(undefined, (current) =>
-        current
-          ? current.map((item) => (item.id === input.id ? { ...item, title: input.title } : item))
-          : current
-      );
-      utils.tasks.list.setData(listInput, (current) =>
-        current
-          ? current.map((item) => (item.id === input.id ? { ...item, title: input.title } : item))
-          : current
-      );
-      return { previous };
-    },
-    onError: (_error, _input, context) => {
-      if (context?.previous) {
-        utils.tasks.list.setData(undefined, context.previous);
-        utils.tasks.list.setData(listInput, context.previous);
-      }
-    },
-    onSettled: () => {
-      utils.tasks.list.invalidate();
-      setEditingId(null);
-      setEditingTitle('');
-    },
-  });
-
-  const handleSaveEdit = () => {
-    const trimmed = editingTitle.trim();
-    if (!editingId || !trimmed) return;
-    updateTitle.mutate({ id: editingId, title: trimmed });
-  };
-
-  const closeEdit = () => {
-    setEditingId(null);
-    setEditingTitle('');
+  const startEdit = (task: Task) => {
+    openEditSheet(task);
   };
 
   type Task = NonNullable<typeof tasksQuery.data>[number];
@@ -302,6 +261,17 @@ export default function TasksScreen() {
   };
 
   const closeDetails = () => setDetailsId(null);
+  const handleDetailsUpdated = (updated: TaskLike) => {
+    applyTaskPatch((item) => (item.id === updated.id ? { ...item, ...updated } : item));
+  };
+
+  const openEditSheet = (task: Task) => {
+    setEditTask(task);
+  };
+
+  const closeEditSheet = () => {
+    setEditTask(null);
+  };
 
   const toggleStatus = trpc.tasks.toggleStatus.useMutation({
     onMutate: (input) => {
@@ -547,8 +517,8 @@ export default function TasksScreen() {
                     </View>
                     <View className="flex-row items-center gap-3">
                       <Pressable
-                        accessibilityLabel="Edit task title"
-                        onPress={() => startEdit(item.id, item.title)}
+                        accessibilityLabel="Edit task"
+                        onPress={() => startEdit(item)}
                         style={({ pressed }) => ({
                           opacity: pressed ? 0.7 : 1,
                         })}>
@@ -648,58 +618,23 @@ export default function TasksScreen() {
         </View>
       </Modal>
 
-      <Modal
-        visible={!!editingId}
-        transparent
-        animationType="fade"
-        onRequestClose={closeEdit}
-        statusBarTranslucent>
-        <View className="flex-1 items-center justify-center bg-black/40 px-6">
-          <View className="w-full max-w-md rounded-2xl border border-border bg-white p-5 dark:border-border-dark dark:bg-surface-card-dark">
-            <Text className="mb-3 text-lg font-semibold text-text dark:text-text-dark">
-              Edit task
-            </Text>
-            <TextInput
-              className="mb-4 rounded-lg border border-border bg-white px-3 text-base dark:border-border-dark dark:bg-surface-dark dark:text-text-dark"
-              value={editingTitle}
-              onChangeText={setEditingTitle}
-              autoFocus
-              placeholder="Task title"
-              editable={!updateTitle.isLoading}
-              style={{ fontSize: 15, lineHeight: 18, paddingVertical: 8 }}
-            />
-            <View className="flex-row items-center justify-end gap-3">
-              <Pressable
-                onPress={handleSaveEdit}
-                disabled={updateTitle.isLoading || !editingTitle.trim()}
-                className="h-10 min-w-[72px] flex-row items-center justify-center rounded-full bg-primary px-4 dark:bg-primary-deep"
-                style={({ pressed }) => ({
-                  opacity: updateTitle.isLoading || !editingTitle.trim() ? 0.5 : pressed ? 0.85 : 1,
-                })}>
-                {updateTitle.isLoading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text className="text-base font-semibold text-white">Save</Text>
-                )}
-              </Pressable>
-              <Pressable
-                onPress={closeEdit}
-                disabled={updateTitle.isLoading}
-                className="h-10 flex-row items-center justify-center rounded-full px-3"
-                style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
-                <Text className="text-base font-semibold text-text-muted dark:text-text-muted-dark">
-                  Cancel
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
       <TaskDetailsSheet
         visible={!!detailsId}
         task={detailsId ? getCurrentTask(detailsId) ?? null : null}
         onClose={closeDetails}
+      />
+
+      <EditTaskSheet
+        task={editTask}
+        visible={!!editTask}
+        onClose={closeEditSheet}
+        onUpdated={(updated) => {
+          applyTaskPatch((item) => (item.id === updated.id ? { ...item, ...updated } : item));
+          setEditTask(null);
+          setTimeout(() => {
+            Alert.alert('Saved', 'Task updated successfully');
+          }, 0);
+        }}
       />
     </View>
   );

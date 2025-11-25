@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Linking, Modal, Pressable, Text, View, Platform } from 'react-native';
-
 export type TaskLike = {
     id: string;
     title: string;

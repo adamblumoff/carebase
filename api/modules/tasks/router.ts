@@ -158,6 +158,43 @@ export const taskRouter = router({
       return updated;
     }),
 
+  updateDetails: authedProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        title: z.string().min(1).max(160).optional(),
+        description: z.string().max(2000).optional(),
+        type: typeEnum.optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const caregiverId = await ensureCaregiver(ctx);
+
+      if (!input.title && !input.description && !input.type) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Nothing to update' });
+      }
+
+      const payload: Partial<typeof tasks.$inferInsert> = {
+        updatedAt: new Date(),
+      };
+
+      if (input.title !== undefined) payload.title = input.title.trim();
+      if (input.description !== undefined) payload.description = input.description.trim();
+      if (input.type !== undefined) payload.type = input.type;
+
+      const [updated] = await ctx.db
+        .update(tasks)
+        .set(payload)
+        .where(and(eq(tasks.id, input.id), eq(tasks.createdById, caregiverId)))
+        .returning();
+
+      if (!updated) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
+      }
+
+      return updated;
+    }),
+
   review: authedProcedure
     .input(
       z.object({
