@@ -6,45 +6,8 @@ import { z } from 'zod';
 import { ingestionEvents, sources, tasks } from '../../db/schema';
 import { ensureCaregiver } from '../../lib/caregiver';
 import { createGmailClient, gmailQuery } from '../../lib/google';
+import { parseMessage } from '../../lib/emailParser';
 import { authedProcedure, router } from '../../trpc/trpc';
-
-type Classification = {
-  type: 'appointment' | 'bill' | 'medication' | 'general';
-  confidence: number;
-  title: string;
-  amount?: number;
-  vendor?: string;
-  medicationName?: string;
-};
-
-const classify = (subject: string, snippet: string): Classification => {
-  const text = `${subject} ${snippet}`.toLowerCase();
-
-  if (text.includes('appointment') || text.includes('appt') || text.includes('calendar')) {
-    return { type: 'appointment', confidence: 0.9, title: subject.trim() || 'Appointment' };
-  }
-
-  if (text.includes('bill') || text.includes('invoice') || text.includes('statement')) {
-    const amountMatch = text.match(/\$([0-9]+(?:\.[0-9]{2})?)/);
-    return {
-      type: 'bill',
-      confidence: 0.82,
-      title: subject.trim() || 'Bill',
-      amount: amountMatch ? Number(amountMatch[1]) : undefined,
-    };
-  }
-
-  if (text.includes('medication') || text.includes('prescription') || text.includes('rx')) {
-    return {
-      type: 'medication',
-      confidence: 0.78,
-      title: subject.trim() || 'Medication',
-      medicationName: subject,
-    };
-  }
-
-  return { type: 'general', confidence: 0.5, title: subject.trim() || 'Task' };
-};
 
 const gmailMessageLink = (accountEmail: string, messageId: string) =>
   `https://mail.google.com/mail/u/${encodeURIComponent(accountEmail)}/#all/${messageId}`;
@@ -92,32 +55,50 @@ async function upsertTaskFromMessage({
   caregiverId: string;
   message: google.gmail_v1.Schema$Message;
 }) {
+  if (message.sizeEstimate && message.sizeEstimate > 200_000) {
+    ctx.req?.log?.warn?.({ sizeEstimate: message.sizeEstimate, id: message.id }, 'skip large email');
+    return { action: 'skipped' as const, id: message.id };
+  }
   const subject =
     message.payload?.headers?.find((h) => h.name?.toLowerCase() === 'subject')?.value ?? 'Task';
   const fromHeader = message.payload?.headers?.find((h) => h.name?.toLowerCase() === 'from')?.value;
   const snippet = message.snippet ?? '';
 
-  const classification = classify(subject, snippet);
+  const parsed = parseMessage({ message, subject, sender: fromHeader, snippet });
 
-  const confidence = classification.confidence;
+  const confidence = parsed.confidence;
   const reviewState = confidence >= 0.75 ? 'approved' : 'pending';
 
   const payload = {
-    title: classification.title,
-    type: classification.type,
-    status: 'todo' as const,
+    title: parsed.title,
+    type: parsed.type,
+    status: parsed.type === 'appointment' ? 'scheduled' : 'todo',
     reviewState,
     provider: 'gmail' as const,
     sourceId: message.id ?? undefined,
     sourceLink: message.id ? gmailMessageLink(source.accountEmail, message.id) : undefined,
     sender: fromHeader ?? undefined,
     rawSnippet: snippet,
+    description: parsed.description,
     confidence,
     syncedAt: new Date(),
     ingestionId: undefined,
-    amount: classification.amount,
-    vendor: classification.vendor,
-    medicationName: classification.medicationName,
+    amount: parsed.amount,
+    currency: parsed.amount ? parsed.currency ?? 'USD' : undefined,
+    vendor: parsed.vendor,
+    referenceNumber: parsed.referenceNumber,
+    statementPeriod: parsed.statementPeriod,
+    medicationName: parsed.medicationName,
+    dosage: parsed.dosage,
+    frequency: parsed.frequency,
+    route: parsed.route,
+    nextDoseAt: parsed.nextDoseAt,
+    prescribingProvider: parsed.prescribingProvider,
+    startAt: parsed.startAt,
+    endAt: parsed.endAt,
+    location: parsed.location,
+    organizer: parsed.organizer,
+    dueAt: parsed.dueAt,
     createdById: caregiverId,
     updatedAt: new Date(),
   } satisfies Partial<typeof tasks.$inferInsert>;
@@ -138,7 +119,7 @@ async function upsertTaskFromMessage({
     })
     .returning({ id: tasks.id, isNew: sql<boolean>`(xmax = 0)` });
 
-  return { action: result.isNew ? 'created' : 'updated', id: result.id };
+  return { action: (result.isNew ? 'created' : 'updated') as const, id: result.id };
 }
 
 export async function syncSource({
@@ -185,13 +166,13 @@ export async function syncSource({
           const { data } = await gmail.users.messages.get({
             userId: 'me',
             id,
-            format: 'metadata',
-            metadataHeaders: ['Subject', 'From', 'Date'],
+            format: 'full',
           });
 
           const outcome = await upsertTaskFromMessage({ ctx, source, caregiverId, message: data });
           if (outcome.action === 'created') results.created += 1;
           if (outcome.action === 'updated') results.updated += 1;
+          if (outcome.action === 'skipped') results.skipped += 1;
         } catch (error) {
           ctx.req?.log?.error({ err: error }, 'sync message failed');
           results.errors += 1;

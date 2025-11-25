@@ -353,18 +353,19 @@ export default function TasksScreen() {
       const previousSpecific = utils.tasks.list.getData(listInput);
       const previousAll = utils.tasks.list.getData();
 
-      const updateReview = (current: typeof previousSpecific) =>
-        current
-          ? current.map((item) =>
-              item.id === input.id
-                ? {
-                    ...item,
-                    reviewState: input.action === 'approve' ? 'approved' : 'ignored',
-                    status: input.action === 'ignore' ? 'snoozed' : item.status,
-                  }
-                : item
-            )
-          : current;
+      const updateReview = (current: typeof previousSpecific) => {
+        if (!current) return current;
+        if (input.action === 'ignore') return current.filter((item) => item.id !== input.id);
+        return current.map((item) =>
+          item.id === input.id
+            ? {
+                ...item,
+                reviewState: 'approved',
+                status: item.status,
+              }
+            : item
+        );
+      };
 
       utils.tasks.list.setData(listInput, updateReview);
       utils.tasks.list.setData(undefined, updateReview);

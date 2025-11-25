@@ -168,20 +168,22 @@ export const taskRouter = router({
     .mutation(async ({ ctx, input }) => {
       const caregiverId = await ensureCaregiver(ctx);
 
-      const nextState = input.action === 'approve' ? 'approved' : 'ignored';
-
-      const updatePayload: Partial<typeof tasks.$inferInsert> = {
-        reviewState: nextState as z.infer<typeof reviewStateEnum>,
-        updatedAt: new Date(),
-      };
-
       if (input.action === 'ignore') {
-        updatePayload.status = 'snoozed';
+        const [deleted] = await ctx.db
+          .delete(tasks)
+          .where(and(eq(tasks.id, input.id), eq(tasks.createdById, caregiverId)))
+          .returning({ id: tasks.id });
+
+        if (!deleted) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
+        }
+
+        return { id: deleted.id, action: 'deleted' as const };
       }
 
       const [updated] = await ctx.db
         .update(tasks)
-        .set(updatePayload)
+        .set({ reviewState: 'approved', updatedAt: new Date() })
         .where(and(eq(tasks.id, input.id), eq(tasks.createdById, caregiverId)))
         .returning();
 
@@ -189,7 +191,7 @@ export const taskRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
       }
 
-      return updated;
+      return { ...updated, action: 'approved' as const };
     }),
 
   upsertCaregiver: authedProcedure
