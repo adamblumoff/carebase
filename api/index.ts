@@ -2,7 +2,7 @@ import { config } from 'dotenv';
 import fastify from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
-import { fastifyTRPCPlugin } from '@trpc/server/adapters/fastify';
+import { fastifyTRPCPlugin, fastifyRequestHandler } from '@trpc/server/adapters/fastify';
 import { sql, eq } from 'drizzle-orm';
 import { appRouter } from './trpc/root';
 import { createContext } from './trpc/context';
@@ -203,9 +203,34 @@ const registerPlugins = async () => {
     return reply.status(200).send({ ok: true });
   });
 
-  server.register(fastifyTRPCPlugin, {
-    prefix: '/trpc',
-    trpcOptions: { router: appRouter, createContext },
+  // Mount tRPC under /trpc without double-prefixing.
+  (fastifyTRPCPlugin as any).default = (fastifyTRPCPlugin as any).default ?? fastifyTRPCPlugin;
+  server.register(
+    async (app) => {
+      app.register(fastifyTRPCPlugin as any, {
+        trpcOptions: { router: appRouter, createContext },
+      });
+
+    },
+    { prefix: '/trpc' }
+  );
+
+  // Safety net: if no route matched but path starts with /trpc/, forward to tRPC handler.
+  server.setNotFoundHandler(async (req, res) => {
+    const url = req.raw.url ?? '';
+    const prefix = '/trpc/';
+    if (url.startsWith(prefix)) {
+      const path = url.slice(prefix.length).split('?')[0];
+      await fastifyRequestHandler({
+        path,
+        req,
+        res,
+        router: appRouter,
+        createContext,
+      });
+      return;
+    }
+    res.status(404).send({ ok: false });
   });
 
   // telemetry hook

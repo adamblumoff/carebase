@@ -40,6 +40,10 @@ export const createTrpcClient = (getToken: () => Promise<string | null>) => {
     links: [
       httpBatchLink({
         url: `${apiBaseUrl}/trpc`,
+        method: 'POST',
+        // Disable batching for now; batched GET URLs were 404ing with the fastify CJS adapter/prefix combo.
+        // Single-procedure POSTs are stable and low overhead at our current scale.
+        maxBatchSize: 1,
         async headers() {
           const token = await getToken();
           if (!token) {

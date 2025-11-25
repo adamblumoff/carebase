@@ -138,10 +138,14 @@ export default function ConnectionsScreen() {
     const ts = newest.startedAt?.toString?.() ?? newest.startedAt;
     if (ts && lastPushRef.current && lastPushRef.current !== ts) {
       showToast('New email synced');
-      void prefetchTasks();
+      void (async () => {
+        // Invalidate every tasks.list cache (all filters) so All and filtered tabs refresh immediately.
+        await utils.tasks.list.invalidate();
+        await prefetchTasks();
+      })();
     }
     if (ts) lastPushRef.current = ts;
-  }, [eventsQuery.data, showToast, prefetchTasks]);
+  }, [eventsQuery.data, showToast, prefetchTasks, utils.tasks.list]);
 
   useFocusEffect(
     useCallback(() => {
