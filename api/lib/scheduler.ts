@@ -8,7 +8,7 @@ export class Ticker {
     private readonly fn: () => Promise<void>
   ) {}
 
-  start() {
+  start(runImmediately = false) {
     if (this.timer) return;
     const tick = async () => {
       try {
@@ -17,7 +17,12 @@ export class Ticker {
         this.timer = setTimeout(tick, this.intervalMs);
       }
     };
-    this.timer = setTimeout(tick, this.intervalMs);
+
+    if (runImmediately) {
+      void tick();
+    } else {
+      this.timer = setTimeout(tick, this.intervalMs);
+    }
   }
 
   stop() {

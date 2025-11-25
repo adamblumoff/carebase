@@ -254,8 +254,8 @@ const registerPlugins = async () => {
     }
   });
 
-  renewalTicker.start();
-  fallbackTicker.start();
+  renewalTicker.start(true);
+  fallbackTicker.start(true);
 };
 
 const port = Number(process.env.PORT ?? process.env.API_PORT ?? 8080);
