@@ -1,0 +1,25 @@
+{
+  "id": "tasks-created-by-source-uidx",
+  "prevId": "e627d4cc-06a7-4c06-bcf7-fb798c9060c8",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.tasks": {
+      "name": "tasks",
+      "schema": "",
+      "columns": {},
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "tasks_created_by_source_uidx": {
+          "name": "tasks_created_by_source_uidx",
+          "columns": ["created_by_id", "source_id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  }
+}
