@@ -56,7 +56,10 @@ async function upsertTaskFromMessage({
   message: google.gmail_v1.Schema$Message;
 }) {
   if (message.sizeEstimate && message.sizeEstimate > 200_000) {
-    ctx.req?.log?.warn?.({ sizeEstimate: message.sizeEstimate, id: message.id }, 'skip large email');
+    ctx.req?.log?.warn?.(
+      { sizeEstimate: message.sizeEstimate, id: message.id },
+      'skip large email'
+    );
     return { action: 'skipped' as const, id: message.id };
   }
   const subject =
@@ -90,7 +93,7 @@ async function upsertTaskFromMessage({
     syncedAt: new Date(),
     ingestionId: undefined,
     amount: parsed.amount,
-    currency: parsed.amount ? parsed.currency ?? 'USD' : undefined,
+    currency: parsed.amount ? (parsed.currency ?? 'USD') : undefined,
     vendor: parsed.vendor,
     referenceNumber: parsed.referenceNumber,
     statementPeriod: parsed.statementPeriod,

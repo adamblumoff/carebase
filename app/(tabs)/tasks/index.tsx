@@ -412,7 +412,12 @@ export default function TasksScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 8, paddingRight: 8, alignItems: 'center', paddingVertical: 2 }}
+          contentContainerStyle={{
+            gap: 8,
+            paddingRight: 8,
+            alignItems: 'center',
+            paddingVertical: 2,
+          }}
           style={{ minHeight: 44 }}
           className="mb-2">
           {filterOptions.map((option) => {
@@ -530,7 +535,11 @@ export default function TasksScreen() {
                         disabled={deleteTask.isLoading && deletingId === item.id}
                         style={({ pressed }) => ({
                           opacity:
-                            deleteTask.isLoading && deletingId === item.id ? 0.5 : pressed ? 0.7 : 1,
+                            deleteTask.isLoading && deletingId === item.id
+                              ? 0.5
+                              : pressed
+                                ? 0.7
+                                : 1,
                         })}>
                         {deleteTask.isLoading && deletingId === item.id ? (
                           <ActivityIndicator color="#E06262" />
@@ -620,7 +629,7 @@ export default function TasksScreen() {
 
       <TaskDetailsSheet
         visible={!!detailsId}
-        task={detailsId ? getCurrentTask(detailsId) ?? null : null}
+        task={detailsId ? (getCurrentTask(detailsId) ?? null) : null}
         onClose={closeDetails}
       />
 

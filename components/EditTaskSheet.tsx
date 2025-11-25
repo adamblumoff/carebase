@@ -1,13 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Modal,
-  Pressable,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, Modal, Pressable, Text, TextInput, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 
 import { trpc } from '@/lib/trpc/client';
@@ -51,7 +43,12 @@ export const EditTaskSheet = ({
 
   const updateDetails = trpc.tasks.updateDetails.useMutation({
     onSuccess: (updated) => {
-      onUpdated({ id: updated.id, title: updated.title, description: updated.description, type: updated.type });
+      onUpdated({
+        id: updated.id,
+        title: updated.title,
+        description: updated.description,
+        type: updated.type,
+      });
       onClose();
     },
     onError: (error) => {
@@ -66,7 +63,12 @@ export const EditTaskSheet = ({
     if (!task) return;
     const trimmed = title.trim();
     if (!trimmed) return;
-    updateDetails.mutate({ id: task.id, title: trimmed, description: description?.trim(), type: taskType });
+    updateDetails.mutate({
+      id: task.id,
+      title: trimmed,
+      description: description?.trim(),
+      type: taskType,
+    });
   };
 
   const reset = () => {
@@ -82,7 +84,12 @@ export const EditTaskSheet = ({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={close} statusBarTranslucent>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={close}
+      statusBarTranslucent>
       <KeyboardAwareScrollView
         contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
         enableOnAndroid
@@ -96,9 +103,13 @@ export const EditTaskSheet = ({
           <Pressable className="flex-1" onPress={close} />
           <View className="rounded-t-3xl border border-border bg-white px-5 pb-8 pt-5 dark:border-border-dark dark:bg-surface-card-dark">
             <View className="mb-4 flex-row items-center justify-between gap-3">
-              <Text className="text-base font-semibold text-text dark:text-text-dark">Edit task</Text>
+              <Text className="text-base font-semibold text-text dark:text-text-dark">
+                Edit task
+              </Text>
               <View className="flex-row items-center gap-2">
-                <Pressable onPress={close} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
+                <Pressable
+                  onPress={close}
+                  style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
                   <Text className="text-sm text-text-muted">Cancel</Text>
                 </Pressable>
                 <Pressable
@@ -145,7 +156,9 @@ export const EditTaskSheet = ({
                         onPress={() => setTaskType(option)}
                         disabled={updateDetails.isLoading}
                         className={`rounded-full border px-3 py-2 ${
-                          isActive ? 'border-primary bg-primary/10' : 'border-border dark:border-border-dark'
+                          isActive
+                            ? 'border-primary bg-primary/10'
+                            : 'border-border dark:border-border-dark'
                         }`}
                         style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}>
                         <Text
