@@ -175,22 +175,28 @@ export async function syncSource({
 
   const results = { created: 0, updated: 0, skipped: 0, errors: 0 };
 
-  for (const id of messageIds) {
-    try {
-      const { data } = await gmail.users.messages.get({
-        userId: 'me',
-        id,
-        format: 'metadata',
-        metadataHeaders: ['Subject', 'From', 'Date'],
-      });
+  const concurrency = 3;
+  for (let i = 0; i < messageIds.length; i += concurrency) {
+    const batch = messageIds.slice(i, i + concurrency);
+    await Promise.all(
+      batch.map(async (id) => {
+        try {
+          const { data } = await gmail.users.messages.get({
+            userId: 'me',
+            id,
+            format: 'metadata',
+            metadataHeaders: ['Subject', 'From', 'Date'],
+          });
 
-      const outcome = await upsertTaskFromMessage({ ctx, source, caregiverId, message: data });
-      if (outcome.action === 'created') results.created += 1;
-      if (outcome.action === 'updated') results.updated += 1;
-    } catch (error) {
-      ctx.req?.log?.error({ err: error }, 'sync message failed');
-      results.errors += 1;
-    }
+          const outcome = await upsertTaskFromMessage({ ctx, source, caregiverId, message: data });
+          if (outcome.action === 'created') results.created += 1;
+          if (outcome.action === 'updated') results.updated += 1;
+        } catch (error) {
+          ctx.req?.log?.error({ err: error }, 'sync message failed');
+          results.errors += 1;
+        }
+      })
+    );
   }
 
   await ctx.db

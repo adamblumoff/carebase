@@ -41,7 +41,7 @@ export default function ConnectionsScreen() {
 
   const sourcesQuery = trpc.sources.list.useQuery();
   const authUrlQuery = trpc.sources.authorizeUrl.useQuery({ redirectUri }, { enabled: false });
-  const eventsQuery = trpc.ingestionEvents.recent.useQuery({ limit: 5 });
+  const eventsQuery = trpc.ingestionEvents.recent.useQuery({ limit: 5 }, { refetchInterval: 5000 });
 
   const [connectError, setConnectError] = useState<string | null>(null);
 
@@ -104,6 +104,17 @@ export default function ConnectionsScreen() {
     },
     [toastOpacity]
   );
+
+  const lastEventId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!eventsQuery.data || eventsQuery.data.length === 0) return;
+    const newest = eventsQuery.data[0];
+    if (lastEventId.current && lastEventId.current !== newest.id) {
+      showToast('New email synced');
+    }
+    lastEventId.current = newest.id;
+  }, [eventsQuery.data, showToast]);
 
   const handleConnect = useCallback(async () => {
     try {

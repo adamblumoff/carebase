@@ -176,7 +176,7 @@ const registerPlugins = async () => {
       return reply.status(202).send({ ok: true });
     }
 
-    debounceRun(source.id, 2000, () => {
+    debounceRun(source.id, 100, () => {
       const runner = source.calendarChannelId === channelId ? syncCalendarSource : syncSource;
       runner({
         ctx: { db, req: request },
@@ -238,8 +238,8 @@ const registerPlugins = async () => {
     }
   });
 
-  const fallbackTicker = new Ticker(60 * 1000, async () => {
-    const stale = new Date(Date.now() - 2 * 60 * 1000);
+  const fallbackTicker = new Ticker(30 * 1000, async () => {
+    const stale = new Date(Date.now() - 90 * 1000);
     const list = await db
       .select()
       .from(sources)
