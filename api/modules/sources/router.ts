@@ -101,4 +101,22 @@ export const sourcesRouter = router({
 
       return row;
     }),
+
+  disconnect: authedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const caregiverId = await ensureCaregiver(ctx);
+
+      const [updated] = await ctx.db
+        .update(sources)
+        .set({ status: 'disconnected', updatedAt: new Date() })
+        .where(eq(sources.id, input.id))
+        .returning();
+
+      if (!updated || updated.caregiverId !== caregiverId) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Source not found' });
+      }
+
+      return updated;
+    }),
 });
