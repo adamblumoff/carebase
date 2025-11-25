@@ -4,6 +4,7 @@ import { ActivityIndicator, Alert, Animated, Pressable, Text, View } from 'react
 import { Stack } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import * as Haptics from 'expo-haptics';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { trpc } from '@/lib/trpc/client';
 import { Container } from '@/components/Container';
@@ -93,6 +94,7 @@ export default function ConnectionsScreen() {
 
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const toastOpacity = useRef(new Animated.Value(0)).current;
+  const prefetchingRef = useRef(false);
 
   const showToast = useCallback(
     (message: string) => {
@@ -108,15 +110,45 @@ export default function ConnectionsScreen() {
 
   const lastPushRef = useRef<string | null>(null);
 
+  const utils = trpc.useUtils();
+
+  const prefetchTasks = useCallback(async () => {
+    if (prefetchingRef.current) return;
+    prefetchingRef.current = true;
+    try {
+      const filters: ({ type?: any; reviewState?: any } | undefined)[] = [
+        undefined,
+        { type: 'appointment' },
+        { type: 'bill' },
+        { type: 'medication' },
+        { type: 'general' },
+        { reviewState: 'pending' },
+      ];
+      await Promise.all(
+        filters.map((f) => utils.tasks.list.prefetch(f as any).catch(() => undefined))
+      );
+    } finally {
+      prefetchingRef.current = false;
+    }
+  }, [utils.tasks.list]);
+
   useEffect(() => {
     if (!eventsQuery.data || eventsQuery.data.length === 0) return;
     const newest = eventsQuery.data[0];
     const ts = newest.startedAt?.toString?.() ?? newest.startedAt;
     if (ts && lastPushRef.current && lastPushRef.current !== ts) {
       showToast('New email synced');
+      void prefetchTasks();
     }
     if (ts) lastPushRef.current = ts;
-  }, [eventsQuery.data, showToast]);
+  }, [eventsQuery.data, showToast, prefetchTasks]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void prefetchTasks();
+      return undefined;
+    }, [prefetchTasks])
+  );
 
   const handleConnect = useCallback(async () => {
     try {
