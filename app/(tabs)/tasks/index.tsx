@@ -6,6 +6,7 @@ import {
   FlatList,
   Modal,
   Pressable,
+  ScrollView,
   Text,
   TextInput,
   View,
@@ -16,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { trpc } from '@/lib/trpc/client';
 import { Button } from '@/components/Button';
 import { Container } from '@/components/Container';
+import { TaskDetailsSheet } from '@/components/TaskDetailsSheet';
 
 const filterOptions = ['all', 'appointment', 'bill', 'medication', 'general'] as const;
 type TaskTypeFilter = (typeof filterOptions)[number];
@@ -66,6 +68,7 @@ export default function TasksScreen() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
+  const [detailsId, setDetailsId] = useState<string | null>(null);
   const listInput = useMemo(
     () => (selectedType === 'all' ? undefined : { type: selectedType }),
     [selectedType]
@@ -81,12 +84,7 @@ export default function TasksScreen() {
   }, [tasksQuery.isError, tasksQuery.error]);
 
   const pendingReview = useMemo(() => {
-    const threshold = 0.75;
-    return tasksQuery.data?.find((item) => {
-      if (item.reviewState !== 'pending') return false;
-      const conf = toConfidenceNumber(item.confidence);
-      return conf !== null && conf >= threshold;
-    });
+    return tasksQuery.data?.find((item) => item.reviewState === 'pending');
   }, [tasksQuery.data]);
 
   const createTask = trpc.tasks.create.useMutation({
@@ -299,6 +297,12 @@ export default function TasksScreen() {
     return utils.tasks.list.getData()?.find((t) => t.id === id) ?? null;
   };
 
+  const openDetails = (id: string) => {
+    setDetailsId(id);
+  };
+
+  const closeDetails = () => setDetailsId(null);
+
   const toggleStatus = trpc.tasks.toggleStatus.useMutation({
     onMutate: (input) => {
       // Fire-and-forget cancel so optimistic UI is instant.
@@ -419,7 +423,7 @@ export default function TasksScreen() {
                 {reviewTask.isLoading ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text className="text-base font-semibold text-white">Looks good</Text>
+                  <Text className="text-base font-semibold text-white">Accept</Text>
                 )}
               </Pressable>
               <Pressable
@@ -435,7 +439,12 @@ export default function TasksScreen() {
           </View>
         ) : null}
 
-        <View className="mb-3 flex-row flex-wrap gap-2">
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 8, paddingRight: 8, alignItems: 'center', paddingVertical: 2 }}
+          style={{ minHeight: 44 }}
+          className="mb-2">
           {filterOptions.map((option) => {
             const isActive = selectedType === option;
             return (
@@ -457,7 +466,7 @@ export default function TasksScreen() {
               </Pressable>
             );
           })}
-        </View>
+        </ScrollView>
 
         <View className="mb-6 mt-2">
           <Button
@@ -490,68 +499,76 @@ export default function TasksScreen() {
             renderItem={({ item }) => {
               const isDone = item.status === 'done';
               return (
-                <View className="flex-row items-center justify-between rounded-lg border border-border bg-surface-strong px-4 py-3 dark:border-border-dark dark:bg-surface-card-dark">
-                  <View className="flex-1 flex-row items-center gap-3 pr-3">
-                    <Pressable
-                      accessibilityLabel={isDone ? 'Mark task as todo' : 'Mark task as done'}
-                      onPress={() => handleToggleStatus(item.id)}
-                      style={({ pressed }) => ({
-                        opacity: pressed ? 0.7 : 1,
-                      })}>
-                      <View
-                        className={`h-6 w-6 items-center justify-center rounded-full border ${
-                          isDone
-                            ? 'border-primary bg-primary'
-                            : 'border-border dark:border-border-dark'
-                        }`}>
-                        {isDone && <Ionicons name="checkmark" size={16} color="#FFFFFF" />}
-                      </View>
-                    </Pressable>
-                    <View className="flex-1">
-                      <View className="mb-1 flex-row flex-wrap items-center gap-2">
-                        <Badge label={formatType(item.type)} />
-                        {item.provider ? <Badge label={item.provider} tone="muted" /> : null}
-                        {item.reviewState === 'pending' ? (
-                          <Badge label="Needs review" tone="warn" />
-                        ) : null}
-                      </View>
-                      <Text className="text-base font-semibold text-text dark:text-text-dark">
-                        {item.title}
-                      </Text>
-                      <Text className="text-xs text-text-muted dark:text-text-muted-dark">
-                        Status: {item.status.replace('_', ' ')} • Confidence{' '}
-                        {formatConfidence(item.confidence)}
-                      </Text>
-                      {item.sender ? (
-                        <Text className="text-xs text-text-muted dark:text-text-muted-dark">
-                          From {item.sender}
-                        </Text>
-                      ) : null}
+                <View className="rounded-lg border border-border bg-surface-strong px-4 py-3 dark:border-border-dark dark:bg-surface-card-dark">
+                  <View className="flex-row items-center justify-between">
+                    <View className="flex-1 flex-row items-center gap-3 pr-3">
+                      <Pressable
+                        accessibilityLabel={isDone ? 'Mark task as todo' : 'Mark task as done'}
+                        onPress={() => handleToggleStatus(item.id)}
+                        style={({ pressed }) => ({
+                          opacity: pressed ? 0.7 : 1,
+                        })}>
+                        <View
+                          className={`h-6 w-6 items-center justify-center rounded-full border ${
+                            isDone
+                              ? 'border-primary bg-primary'
+                              : 'border-border dark:border-border-dark'
+                          }`}>
+                          {isDone && <Ionicons name="checkmark" size={16} color="#FFFFFF" />}
+                        </View>
+                      </Pressable>
+                      <Pressable
+                        className="flex-1"
+                        accessibilityLabel="Open task details"
+                        onPress={() => openDetails(item.id)}
+                        style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
+                        <View className="flex-1">
+                          <View className="mb-1 flex-row flex-wrap items-center gap-2">
+                            <Badge label={formatType(item.type)} />
+                            {item.provider ? <Badge label={item.provider} tone="muted" /> : null}
+                            {item.reviewState === 'pending' ? (
+                              <Badge label="Needs review" tone="warn" />
+                            ) : null}
+                          </View>
+                          <Text className="text-base font-semibold text-text dark:text-text-dark">
+                            {item.title}
+                          </Text>
+                          <Text className="text-xs text-text-muted dark:text-text-muted-dark">
+                            Status: {item.status.replace('_', ' ')} • Confidence{' '}
+                            {formatConfidence(item.confidence)}
+                          </Text>
+                          {item.sender ? (
+                            <Text className="text-xs text-text-muted dark:text-text-muted-dark">
+                              From {item.sender}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </Pressable>
                     </View>
-                  </View>
-                  <View className="flex-row items-center gap-3">
-                    <Pressable
-                      accessibilityLabel="Edit task title"
-                      onPress={() => startEdit(item.id, item.title)}
-                      style={({ pressed }) => ({
-                        opacity: pressed ? 0.7 : 1,
-                      })}>
-                      <Ionicons name="create-outline" size={22} color="#4A8F6A" />
-                    </Pressable>
-                    <Pressable
-                      accessibilityLabel="Delete task"
-                      onPress={() => confirmDelete(item.id)}
-                      disabled={deleteTask.isLoading && deletingId === item.id}
-                      style={({ pressed }) => ({
-                        opacity:
-                          deleteTask.isLoading && deletingId === item.id ? 0.5 : pressed ? 0.7 : 1,
-                      })}>
-                      {deleteTask.isLoading && deletingId === item.id ? (
-                        <ActivityIndicator color="#E06262" />
-                      ) : (
-                        <Ionicons name="trash-outline" size={22} color="#E06262" />
-                      )}
-                    </Pressable>
+                    <View className="flex-row items-center gap-3">
+                      <Pressable
+                        accessibilityLabel="Edit task title"
+                        onPress={() => startEdit(item.id, item.title)}
+                        style={({ pressed }) => ({
+                          opacity: pressed ? 0.7 : 1,
+                        })}>
+                        <Ionicons name="create-outline" size={22} color="#4A8F6A" />
+                      </Pressable>
+                      <Pressable
+                        accessibilityLabel="Delete task"
+                        onPress={() => confirmDelete(item.id)}
+                        disabled={deleteTask.isLoading && deletingId === item.id}
+                        style={({ pressed }) => ({
+                          opacity:
+                            deleteTask.isLoading && deletingId === item.id ? 0.5 : pressed ? 0.7 : 1,
+                        })}>
+                        {deleteTask.isLoading && deletingId === item.id ? (
+                          <ActivityIndicator color="#E06262" />
+                        ) : (
+                          <Ionicons name="trash-outline" size={22} color="#E06262" />
+                        )}
+                      </Pressable>
+                    </View>
                   </View>
                 </View>
               );
@@ -678,6 +695,12 @@ export default function TasksScreen() {
           </View>
         </View>
       </Modal>
+
+      <TaskDetailsSheet
+        visible={!!detailsId}
+        task={detailsId ? getCurrentTask(detailsId) ?? null : null}
+        onClose={closeDetails}
+      />
     </View>
   );
 }

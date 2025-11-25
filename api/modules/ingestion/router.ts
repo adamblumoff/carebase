@@ -67,7 +67,13 @@ async function upsertTaskFromMessage({
   const parsed = parseMessage({ message, subject, sender: fromHeader, snippet });
 
   const confidence = parsed.confidence;
-  const reviewState = confidence >= 0.75 ? 'approved' : 'pending';
+
+  // Drop very low-confidence items (<60%) entirely.
+  if (confidence < 0.6) {
+    return { action: 'skipped_low_confidence' as const, id: message.id };
+  }
+
+  const reviewState = confidence < 0.8 ? 'pending' : 'approved';
 
   const payload = {
     title: parsed.title,
@@ -172,7 +178,8 @@ export async function syncSource({
           const outcome = await upsertTaskFromMessage({ ctx, source, caregiverId, message: data });
           if (outcome.action === 'created') results.created += 1;
           if (outcome.action === 'updated') results.updated += 1;
-          if (outcome.action === 'skipped') results.skipped += 1;
+          if (outcome.action === 'skipped' || outcome.action === 'skipped_low_confidence')
+            results.skipped += 1;
         } catch (error) {
           ctx.req?.log?.error({ err: error }, 'sync message failed');
           results.errors += 1;
