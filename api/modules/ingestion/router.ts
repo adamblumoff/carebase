@@ -1,5 +1,5 @@
 import { TRPCError } from '@trpc/server';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { google } from 'googleapis';
 import { z } from 'zod';
 
@@ -122,22 +122,23 @@ async function upsertTaskFromMessage({
     updatedAt: new Date(),
   } satisfies Partial<typeof tasks.$inferInsert>;
 
+  const now = new Date();
   const [result] = await ctx.db
     .insert(tasks)
     .values({
       ...payload,
-      createdAt: new Date(),
+      createdAt: now,
     })
     .onConflictDoUpdate({
       target: [tasks.createdById, tasks.sourceId],
       set: {
         ...payload,
-        updatedAt: new Date(),
+        updatedAt: now,
       },
     })
-    .returning({ id: tasks.id });
+    .returning({ id: tasks.id, isNew: sql<boolean>`(xmax = 0)` });
 
-  return { action: 'upserted', id: result.id };
+  return { action: result.isNew ? 'created' : 'updated', id: result.id };
 }
 
 export async function syncSource({
