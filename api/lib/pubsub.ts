@@ -19,7 +19,16 @@ export const debounceRun = (key: string, delayMs: number, fn: () => void) => {
   }
   const t = setTimeout(() => {
     debounceMap.delete(key);
-    fn();
+    try {
+      const maybePromise = fn();
+      if (maybePromise instanceof Promise) {
+        void maybePromise.catch((err) => {
+          console.error('debounced fn rejected', err);
+        });
+      }
+    } catch (err) {
+      console.error('debounced fn threw', err);
+    }
   }, delayMs);
   debounceMap.set(key, t);
 };

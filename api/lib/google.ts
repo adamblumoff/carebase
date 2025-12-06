@@ -34,6 +34,18 @@ export const googleScope = [
   'https://www.googleapis.com/auth/calendar.readonly',
 ];
 
+export const isInvalidGrantError = (err: unknown) => {
+  const error = err as any;
+  const code = error?.response?.data?.error ?? error?.code;
+  const desc = error?.response?.data?.error_description;
+  const message: string | undefined = error?.message;
+  return (
+    code === 'invalid_grant' ||
+    desc === 'Token has been expired or revoked.' ||
+    (typeof message === 'string' && message.includes('invalid_grant'))
+  );
+};
+
 const stateSecret = process.env.GOOGLE_STATE_SECRET;
 if (!stateSecret) {
   throw new Error('GOOGLE_STATE_SECRET environment variable is required');

@@ -146,7 +146,7 @@ export const TaskDetailsSheet = ({
           await Linking.openURL(intentUrl);
           return;
         }
-      } catch (err) {
+      } catch {
         // fall through to web URL
       }
     }
@@ -159,7 +159,7 @@ export const TaskDetailsSheet = ({
           await Linking.openURL(gmailScheme);
           return;
         }
-      } catch (err) {
+      } catch {
         // fall through to web URL
       }
     }
@@ -181,7 +181,7 @@ export const TaskDetailsSheet = ({
           await Linking.openURL(intentUrl);
           return;
         }
-      } catch (err) {
+      } catch {
         // fall back
       }
     }
@@ -201,7 +201,7 @@ export const TaskDetailsSheet = ({
             await Linking.openURL(scheme);
             return;
           }
-        } catch (err) {
+        } catch {
           // continue to next scheme
         }
       }
@@ -216,7 +216,7 @@ export const TaskDetailsSheet = ({
             await Linking.openURL(calUrl);
             return;
           }
-        } catch (err) {
+        } catch {
           // fall through
         }
       }
@@ -227,7 +227,7 @@ export const TaskDetailsSheet = ({
           await Linking.openURL(defaultCal);
           return;
         }
-      } catch (err) {
+      } catch {
         // fall through
       }
     }

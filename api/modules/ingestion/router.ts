@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 import { ingestionEvents, sources, tasks } from '../../db/schema';
 import { ensureCaregiver } from '../../lib/caregiver';
-import { createGmailClient, gmailQuery } from '../../lib/google';
+import { createGmailClient, gmailQuery, isInvalidGrantError } from '../../lib/google';
 import { parseMessage } from '../../lib/emailParser';
 import { authedProcedure, router } from '../../trpc/trpc';
 
@@ -158,11 +158,27 @@ export async function syncSource({
 
   const startedAt = new Date();
 
-  const { messageIds, nextHistoryId } = await fetchMessages(
-    gmail,
-    source.accountEmail,
-    source.historyId
-  );
+  const markErrored = async (message: string) => {
+    await ctx.db
+      .update(sources)
+      .set({ status: 'errored', errorMessage: message, updatedAt: new Date() })
+      .where(eq(sources.id, source.id));
+  };
+
+  const { messageIds, nextHistoryId } = await (async () => {
+    try {
+      return await fetchMessages(gmail, source.accountEmail, source.historyId);
+    } catch (err) {
+      if (isInvalidGrantError(err)) {
+        await markErrored('Google access revoked or expired; reconnect this account');
+        throw new TRPCError({
+          code: 'FAILED_PRECONDITION',
+          message: 'Google connection expired; reconnect to resume syncing',
+        });
+      }
+      throw err;
+    }
+  })();
 
   const results = { created: 0, updated: 0, skipped: 0, errors: 0 };
 

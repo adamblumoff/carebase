@@ -3,6 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { and, desc, eq } from 'drizzle-orm';
 
 import { sources, tasks } from '../../db/schema';
+import { isInvalidGrantError } from '../../lib/google';
 
 const ensureCalendarClient = (refreshToken: string) => {
   const oauth = new google.auth.OAuth2(
@@ -54,14 +55,34 @@ export async function syncCalendarSource({
 
   const calendar = ensureCalendarClient(source.refreshToken);
 
-  const eventsRes = await calendar.events.list({
-    calendarId: 'primary',
-    syncToken: source.calendarSyncToken ?? undefined,
-    maxResults: 20,
-    singleEvents: true,
-    showDeleted: false,
-    orderBy: 'updated',
-  });
+  const markErrored = async (message: string) => {
+    await ctx.db
+      .update(sources)
+      .set({ status: 'errored', errorMessage: message, updatedAt: new Date() })
+      .where(eq(sources.id, source.id));
+  };
+
+  const eventsRes = await (async () => {
+    try {
+      return await calendar.events.list({
+        calendarId: 'primary',
+        syncToken: source.calendarSyncToken ?? undefined,
+        maxResults: 20,
+        singleEvents: true,
+        showDeleted: false,
+        orderBy: 'updated',
+      });
+    } catch (err) {
+      if (isInvalidGrantError(err)) {
+        await markErrored('Google calendar access expired; please reconnect');
+        throw new TRPCError({
+          code: 'FAILED_PRECONDITION',
+          message: 'Google connection expired; reconnect to continue syncing calendar',
+        });
+      }
+      throw err;
+    }
+  })();
 
   const nextSyncToken = eventsRes.data.nextSyncToken ?? source.calendarSyncToken ?? null;
   const items = eventsRes.data.items ?? [];

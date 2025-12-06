@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "scripts": {
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "start": "expo start --tunnel --clear --reset-cache",
     "start:dev": "expo start --tunnel --clear --reset-cache",
     "start:prod": "APP_ENV=prod EXPO_PUBLIC_APP_ENV=prod NODE_ENV=production expo start --tunnel --clear --reset-cache",

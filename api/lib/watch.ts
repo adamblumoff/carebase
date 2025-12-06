@@ -6,7 +6,7 @@ import { sources } from '../db/schema';
 import { syncSource } from '../modules/ingestion/router';
 import { syncCalendarSource } from '../modules/ingestion/calendar';
 import { debounceRun } from './pubsub';
-import { createGmailClient } from './google';
+import { createGmailClient, isInvalidGrantError } from './google';
 import { eq } from 'drizzle-orm';
 
 const useProd =
@@ -109,39 +109,71 @@ export const needsRenewal = (source: typeof sources.$inferSelect) => {
 };
 
 export const renewSource = async (source: typeof sources.$inferSelect) => {
-  const { gmail, auth } = createGmailClient(source.refreshToken);
-  const gmailWatch = await registerGmailWatch(gmail);
-  const calendarWatch = await registerCalendarWatch(google.calendar({ version: 'v3', auth }));
+  try {
+    const { gmail, auth } = createGmailClient(source.refreshToken);
+    const gmailWatch = await registerGmailWatch(gmail);
+    const calendarWatch = await registerCalendarWatch(google.calendar({ version: 'v3', auth }));
 
-  await db
-    .update(sources)
-    .set({
-      watchId: gmailWatch.watchId ?? source.watchId,
-      watchExpiration: gmailWatch.expiration ?? source.watchExpiration,
-      historyId: gmailWatch.historyId ?? source.historyId,
-      calendarChannelId: calendarWatch.channelId ?? source.calendarChannelId,
-      calendarResourceId: calendarWatch.resourceId ?? source.calendarResourceId,
-      calendarSyncToken: calendarWatch.syncToken ?? source.calendarSyncToken,
-      updatedAt: new Date(),
-    })
-    .where(eq(sources.id, source.id));
+    await db
+      .update(sources)
+      .set({
+        watchId: gmailWatch.watchId ?? source.watchId,
+        watchExpiration: gmailWatch.expiration ?? source.watchExpiration,
+        historyId: gmailWatch.historyId ?? source.historyId,
+        calendarChannelId: calendarWatch.channelId ?? source.calendarChannelId,
+        calendarResourceId: calendarWatch.resourceId ?? source.calendarResourceId,
+        calendarSyncToken: calendarWatch.syncToken ?? source.calendarSyncToken,
+        updatedAt: new Date(),
+        status: 'active',
+        errorMessage: null,
+      })
+      .where(eq(sources.id, source.id));
+  } catch (err) {
+    if (isInvalidGrantError(err)) {
+      await db
+        .update(sources)
+        .set({
+          status: 'errored',
+          errorMessage: 'Google access revoked or expired; reconnect this account',
+          updatedAt: new Date(),
+        })
+        .where(eq(sources.id, source.id));
+      return;
+    }
+    throw err;
+  }
 };
 
 export const fallbackPoll = async (source: typeof sources.$inferSelect) => {
   // simple debounce to avoid overlap
   debounceRun(`poll-${source.id}`, 0, async () => {
-    if (source.calendarChannelId) {
-      await syncCalendarSource({
+    try {
+      if (source.calendarChannelId) {
+        await syncCalendarSource({
+          ctx: { db },
+          sourceId: source.id,
+          caregiverId: source.caregiverId,
+        });
+      }
+      await syncSource({
         ctx: { db },
         sourceId: source.id,
-        caregiverId: source.caregiverId,
+        caregiverIdOverride: source.caregiverId,
+        reason: 'poll',
       });
+    } catch (err) {
+      if (isInvalidGrantError(err)) {
+        await db
+          .update(sources)
+          .set({
+            status: 'errored',
+            errorMessage: 'Google access revoked or expired; reconnect this account',
+            updatedAt: new Date(),
+          })
+          .where(eq(sources.id, source.id));
+        return;
+      }
+      console.error('fallback poll failed', err);
     }
-    await syncSource({
-      ctx: { db },
-      sourceId: source.id,
-      caregiverIdOverride: source.caregiverId,
-      reason: 'poll',
-    });
   });
 };

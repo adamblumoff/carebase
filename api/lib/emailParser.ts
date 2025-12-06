@@ -111,7 +111,7 @@ const parseDateTokens = (value: string): Date | null => {
 
   const slashMatch = value.match(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})/);
   if (slashMatch) {
-    const [_, m, d, y] = slashMatch;
+    const [, m, d, y] = slashMatch;
     const year = y.length === 2 ? Number(`20${y}`) : Number(y);
     const parsed = new Date(year, Number(m) - 1, Number(d));
     if (!Number.isNaN(parsed.getTime())) return parsed;

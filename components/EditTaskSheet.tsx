@@ -39,7 +39,7 @@ export const EditTaskSheet = ({
     setTitle(task?.title ?? '');
     setDescription(task?.description ?? '');
     setTaskType((task?.type as (typeof typeOptions)[number]) ?? 'general');
-  }, [task?.id]);
+  }, [task?.id, task?.title, task?.description, task?.type]);
 
   const updateDetails = trpc.tasks.updateDetails.useMutation({
     onSuccess: (updated) => {

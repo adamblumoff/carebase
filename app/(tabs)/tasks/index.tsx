@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { trpc } from '@/lib/trpc/client';
 import { Button } from '@/components/Button';
 import { Container } from '@/components/Container';
-import { TaskDetailsSheet, TaskLike } from '@/components/TaskDetailsSheet';
+import { TaskDetailsSheet } from '@/components/TaskDetailsSheet';
 import { EditTaskSheet } from '@/components/EditTaskSheet';
 
 const filterOptions = ['all', 'appointment', 'bill', 'medication', 'general'] as const;
@@ -30,13 +30,6 @@ const formatConfidence = (value?: number | string | null) => {
   const parsed = typeof value === 'string' ? parseFloat(value) : value;
   if (Number.isNaN(parsed)) return '—';
   return `${Math.round(parsed * 100)}%`;
-};
-
-const toConfidenceNumber = (value?: number | string | null) => {
-  if (value === null || value === undefined) return null;
-  const parsed = typeof value === 'string' ? parseFloat(value) : value;
-  if (Number.isNaN(parsed)) return null;
-  return parsed;
 };
 
 const formatType = (type?: string | null) => {
@@ -261,9 +254,6 @@ export default function TasksScreen() {
   };
 
   const closeDetails = () => setDetailsId(null);
-  const handleDetailsUpdated = (updated: TaskLike) => {
-    applyTaskPatch((item) => (item.id === updated.id ? { ...item, ...updated } : item));
-  };
 
   const openEditSheet = (task: Task) => {
     setEditTask(task);

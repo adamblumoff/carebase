@@ -20,6 +20,24 @@ export const createQueryClient = () =>
     },
   });
 
+const jsonGuardFetch: typeof fetch = async (input, init) => {
+  const res = await fetch(input, init);
+  const contentType = res.headers.get('content-type') ?? '';
+  if (!contentType.includes('application/json')) {
+    const preview = await res.text().catch(() => '');
+    const err = new Error(
+      `Unexpected API response (status ${res.status}); check EXPO_PUBLIC_API_BASE_URL. Preview: ${preview.slice(
+        0,
+        200
+      )}`
+    );
+    // Surface status so tRPC error logging has more context.
+    (err as any).status = res.status;
+    throw err;
+  }
+  return res;
+};
+
 export const createTrpcClient = (getToken: () => Promise<string | null>) => {
   const useProd =
     process.env.EXPO_PUBLIC_APP_ENV === 'prod' ||
@@ -41,6 +59,7 @@ export const createTrpcClient = (getToken: () => Promise<string | null>) => {
       httpBatchLink({
         url: `${apiBaseUrl}/trpc`,
         method: 'POST',
+        fetch: jsonGuardFetch,
         // Disable batching for now; batched GET URLs were 404ing with the fastify CJS adapter/prefix combo.
         // Single-procedure POSTs are stable and low overhead at our current scale.
         maxBatchSize: 1,
