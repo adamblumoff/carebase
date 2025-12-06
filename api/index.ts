@@ -18,8 +18,25 @@ import { Ticker } from './lib/scheduler';
 
 config({ path: '.env' });
 
+const isProd = process.env.NODE_ENV === 'production';
+const enablePrettyLogs =
+  process.env.LOG_PRETTY === 'true' ||
+  (!isProd && process.stdout.isTTY && process.env.NO_PRETTY_LOGS !== 'true');
+
 const server = fastify({
-  logger: true,
+  logger: enablePrettyLogs
+    ? {
+        transport: {
+          target: 'pino-pretty',
+          options: {
+            colorize: true,
+            translateTime: 'HH:MM:ss.l',
+            singleLine: false,
+            ignore: 'pid,hostname',
+          },
+        },
+      }
+    : true,
 });
 
 const registerPlugins = async () => {

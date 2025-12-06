@@ -13,6 +13,9 @@ export class Ticker {
     const tick = async () => {
       try {
         await this.fn();
+      } catch (err) {
+        // Prevent unhandled rejections from crashing the process (Node 15+ default).
+        console.error('Ticker task failed', err);
       } finally {
         this.timer = setTimeout(tick, this.intervalMs);
       }
