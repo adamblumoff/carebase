@@ -7,28 +7,65 @@ import { ingestionEvents, sources, tasks } from '../../db/schema';
 import { ensureCaregiver } from '../../lib/caregiver';
 import { createGmailClient, gmailQuery, isInvalidGrantError } from '../../lib/google';
 import { parseMessage } from '../../lib/emailParser';
+import { classifyEmailWithVertex } from '../../lib/vertexClassifier';
 import { authedProcedure, router } from '../../trpc/trpc';
 
 const gmailMessageLink = (accountEmail: string, messageId: string) =>
   `https://mail.google.com/mail/u/${encodeURIComponent(accountEmail)}/#all/${messageId}`;
 
+type FetchedMessages = {
+  messageIds: string[];
+  nextHistoryId: string | null;
+  stats?: {
+    historyCount?: number;
+    historyAddedCount?: number;
+    fallbackListCount?: number;
+  };
+};
+
 const fetchMessages = async (
   gmail: ReturnType<typeof google.gmail>,
   accountEmail: string,
   historyId?: string | null
-) => {
+): Promise<FetchedMessages> => {
   if (historyId) {
     const history = await gmail.users.history.list({
       userId: 'me',
       startHistoryId: historyId,
-      historyTypes: ['messageAdded'],
+      // Include label changes because some messages only surface via label events.
+      historyTypes: ['messageAdded', 'labelAdded'],
       maxResults: 50,
     });
 
     const added = history.data.history?.flatMap((h) => h.messagesAdded ?? []) ?? [];
+
+    // Fallback: occasionally Gmail history returns no messageAdded for new mail; do a direct query pass.
+    let fallbackListIds: string[] = [];
+    if (added.length === 0) {
+      const list = await gmail.users.messages.list({
+        userId: 'me',
+        q: gmailQuery,
+        maxResults: 20,
+      });
+      fallbackListIds = list.data.messages?.map((m) => m.id!).filter(Boolean) ?? [];
+    }
+
+    const uniqueIds = Array.from(
+      new Set(
+        [...added.map((m) => m.message?.id).filter(Boolean), ...fallbackListIds].filter(
+          Boolean
+        ) as string[]
+      )
+    );
+
     return {
-      messageIds: added.map((m) => m.message?.id).filter(Boolean) as string[],
+      messageIds: uniqueIds,
       nextHistoryId: history.data.historyId ?? historyId,
+      stats: {
+        historyCount: history.data.history?.length ?? 0,
+        historyAddedCount: added.length,
+        fallbackListCount: fallbackListIds.length,
+      },
     };
   }
 
@@ -41,6 +78,11 @@ const fetchMessages = async (
   return {
     messageIds: list.data.messages?.map((m) => m.id!).filter(Boolean) ?? [],
     nextHistoryId: list.data.historyId ?? null,
+    stats: {
+      historyCount: 0,
+      historyAddedCount: 0,
+      fallbackListCount: list.data.messages?.length ?? 0,
+    },
   };
 };
 
@@ -55,11 +97,10 @@ async function upsertTaskFromMessage({
   caregiverId: string;
   message: google.gmail_v1.Schema$Message;
 }) {
+  const log = ctx.req?.log ?? console;
+
   if (message.sizeEstimate && message.sizeEstimate > 200_000) {
-    ctx.req?.log?.warn?.(
-      { sizeEstimate: message.sizeEstimate, id: message.id },
-      'skip large email'
-    );
+    log.warn?.({ sizeEstimate: message.sizeEstimate, id: message.id }, 'skip large email');
     return { action: 'skipped' as const, id: message.id };
   }
   const subject =
@@ -69,27 +110,74 @@ async function upsertTaskFromMessage({
 
   const parsed = parseMessage({ message, subject, sender: fromHeader, snippet });
 
-  const confidence = parsed.confidence;
+  const classification = await classifyEmailWithVertex({
+    subject,
+    snippet,
+    body: parsed.description ?? snippet,
+  });
+
+  if ('error' in classification) {
+    log.error?.({ err: classification.error, messageId: message.id }, 'vertex classification failed');
+    log.info?.(
+      { messageId: message.id, projectId: classification.projectId ?? 'unknown' },
+      'vertex classification fallback'
+    );
+  } else {
+    log.info?.(
+      {
+        messageId: message.id,
+        projectId: classification.projectId ?? 'unknown',
+        label: classification.label,
+        confidence: classification.confidence,
+      },
+      'vertex classification success'
+    );
+  }
+
+  const classificationFailed = 'error' in classification;
+  const bucket = classificationFailed ? null : classification.label;
+  const modelConfidence = classificationFailed ? null : classification.confidence;
+
+  const confidence = modelConfidence ?? parsed.confidence;
 
   // Drop very low-confidence items (<60%) entirely.
-  if (confidence < 0.6) {
+  if (!classificationFailed && confidence < 0.6 && bucket !== 'needs_review' && bucket !== 'ignore') {
     return { action: 'skipped_low_confidence' as const, id: message.id };
   }
 
-  const reviewState = confidence < 0.8 ? 'pending' : 'approved';
+  let reviewState: 'pending' | 'approved' | 'ignored' = 'approved';
+  if (bucket === 'ignore') {
+    reviewState = 'ignored';
+  } else if (bucket === 'needs_review' || classificationFailed || confidence < 0.8) {
+    reviewState = 'pending';
+  }
+
+  const taskType =
+    bucket === 'appointments'
+      ? 'appointment'
+      : bucket === 'bills'
+        ? 'bill'
+        : bucket === 'medications'
+          ? 'medication'
+          : parsed.type;
+
+  const description =
+    classificationFailed && (parsed.description || snippet)
+      ? `[model failed] ${parsed.description ?? snippet}`
+      : parsed.description;
 
   const payload = {
     title: parsed.title,
-    type: parsed.type,
-    status: parsed.type === 'appointment' ? 'scheduled' : 'todo',
+    type: taskType,
+    status: taskType === 'appointment' ? 'scheduled' : 'todo',
     reviewState,
     provider: 'gmail' as const,
     sourceId: message.id ?? undefined,
     sourceLink: message.id ? gmailMessageLink(source.accountEmail, message.id) : undefined,
     sender: fromHeader ?? undefined,
     rawSnippet: snippet,
-    description: parsed.description,
-    confidence,
+    description,
+    confidence: Number(confidence.toFixed(2)),
     syncedAt: new Date(),
     ingestionId: undefined,
     amount: parsed.amount,
@@ -165,7 +253,7 @@ export async function syncSource({
       .where(eq(sources.id, source.id));
   };
 
-  const { messageIds, nextHistoryId } = await (async () => {
+  const { messageIds, nextHistoryId, stats } = await (async () => {
     try {
       return await fetchMessages(gmail, source.accountEmail, source.historyId);
     } catch (err) {
@@ -179,6 +267,19 @@ export async function syncSource({
       throw err;
     }
   })();
+
+  const log = ctx.req?.log ?? console;
+  log.info?.(
+    {
+      sourceId: source.id,
+      accountEmail: source.accountEmail,
+      messageCount: messageIds.length,
+      nextHistoryId,
+      reason,
+      fetchStats: stats,
+    },
+    'gmail sync fetched messages'
+  );
 
   const results = { created: 0, updated: 0, skipped: 0, errors: 0 };
 

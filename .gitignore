@@ -28,3 +28,10 @@ android
 .env.*
 !.env.example
 .pnpm-store/
+
+# Local Google/Vertex service account keys
+*.sa-key.json
+*service-account*.json
+google-application-credentials.json
+credentials/
+keys/
