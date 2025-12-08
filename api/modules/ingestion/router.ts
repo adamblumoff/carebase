@@ -1,5 +1,5 @@
 import { TRPCError } from '@trpc/server';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { google } from 'googleapis';
 import { z } from 'zod';
 
@@ -91,22 +91,18 @@ async function upsertTaskFromMessage({
   source,
   caregiverId,
   message,
+  ignoredSourceIds,
 }: {
   ctx: any;
   source: typeof sources.$inferSelect;
   caregiverId: string;
   message: google.gmail_v1.Schema$Message;
+  ignoredSourceIds: Set<string>;
 }) {
   const log = ctx.req?.log ?? console;
 
   // Do not resurrect tasks the caregiver explicitly ignored/deleted.
-  const [existing] = await ctx.db
-    .select({ reviewState: tasks.reviewState })
-    .from(tasks)
-    .where(and(eq(tasks.createdById, caregiverId), eq(tasks.sourceId, message.id ?? '')))
-    .limit(1);
-
-  if (existing?.reviewState === 'ignored') {
+  if (message.id && ignoredSourceIds.has(message.id)) {
     log.info?.({ messageId: message.id }, 'skip ignored message');
     return { action: 'skipped_ignored' as const, id: message.id };
   }
@@ -301,6 +297,24 @@ export async function syncSource({
     'gmail sync fetched messages'
   );
 
+  // Preload ignored tasks for this caregiver/source set to avoid per-message lookups.
+  const ignoredSourceIds = new Set<string>();
+  if (messageIds.length > 0) {
+    const ignoredRows = await ctx.db
+      .select({ sourceId: tasks.sourceId })
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.createdById, caregiverId),
+          eq(tasks.reviewState, 'ignored'),
+          inArray(tasks.sourceId, messageIds)
+        )
+      );
+    ignoredRows.forEach((row) => {
+      if (row.sourceId) ignoredSourceIds.add(row.sourceId);
+    });
+  }
+
   const results = { created: 0, updated: 0, skipped: 0, errors: 0 };
 
   const concurrency = 3;
@@ -309,13 +323,24 @@ export async function syncSource({
     await Promise.all(
       batch.map(async (id) => {
         try {
+          if (ignoredSourceIds.has(id)) {
+            results.skipped += 1;
+            return;
+          }
+
           const { data } = await gmail.users.messages.get({
             userId: 'me',
             id,
             format: 'full',
           });
 
-          const outcome = await upsertTaskFromMessage({ ctx, source, caregiverId, message: data });
+          const outcome = await upsertTaskFromMessage({
+            ctx,
+            source,
+            caregiverId,
+            message: data,
+            ignoredSourceIds,
+          });
           if (outcome.action === 'created') results.created += 1;
           if (outcome.action === 'updated') results.updated += 1;
           if (
