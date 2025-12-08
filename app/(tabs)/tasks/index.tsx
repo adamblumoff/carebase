@@ -6,6 +6,7 @@ import {
   FlatList,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   TextInput,
@@ -62,6 +63,7 @@ export default function TasksScreen() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const [editTask, setEditTask] = useState<Task | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const listInput = useMemo(
     () => (selectedType === 'all' ? undefined : { type: selectedType }),
     [selectedType]
@@ -79,6 +81,15 @@ export default function TasksScreen() {
   const pendingReview = useMemo(() => {
     return tasksQuery.data?.find((item) => item.reviewState === 'pending');
   }, [tasksQuery.data]);
+
+  const onRefresh = async () => {
+    try {
+      setIsRefreshing(true);
+      await tasksQuery.refetch();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const createTask = trpc.tasks.create.useMutation({
     onMutate: async (input) => {
@@ -355,195 +366,218 @@ export default function TasksScreen() {
     reviewTask.mutate({ id: pendingReview.id, action });
   };
 
+  const renderHeader = () => (
+    <View className="gap-4 pb-4">
+      {pendingReview ? (
+        <View className="gap-2 rounded-2xl border border-amber-300 bg-amber-50 p-4 shadow-sm">
+          <View className="flex-row items-center justify-between">
+            <Text className="text-base font-semibold text-amber-900">Needs review</Text>
+            <Text className="text-xs text-amber-800">
+              {formatConfidence(pendingReview.confidence)} confident
+            </Text>
+          </View>
+          <Text className="text-sm font-semibold text-text">{pendingReview.title}</Text>
+          <Text className="text-xs text-text-muted dark:text-text-muted-dark">
+            From {pendingReview.sender ?? 'unknown sender'}{' '}
+            {pendingReview.provider ? `• ${pendingReview.provider}` : ''}
+          </Text>
+          <View className="mt-3 flex-row items-center gap-3">
+            <Pressable
+              onPress={() => handleReview('approve')}
+              disabled={reviewTask.isLoading}
+              className="flex-1 items-center justify-center rounded-full bg-primary px-4 py-2"
+              style={({ pressed }) => ({
+                opacity: reviewTask.isLoading ? 0.6 : pressed ? 0.85 : 1,
+              })}>
+              {reviewTask.isLoading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text className="text-base font-semibold text-white">Accept</Text>
+              )}
+            </Pressable>
+            <Pressable
+              onPress={() => handleReview('ignore')}
+              disabled={reviewTask.isLoading}
+              className="flex-1 items-center justify-center rounded-full border border-border px-4 py-2 dark:border-border-dark"
+              style={({ pressed }) => ({
+                opacity: reviewTask.isLoading ? 0.6 : pressed ? 0.75 : 1,
+              })}>
+              <Text className="text-base font-semibold text-text">Ignore</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{
+          gap: 8,
+          paddingRight: 8,
+          alignItems: 'center',
+          paddingVertical: 2,
+        }}
+        style={{ minHeight: 44 }}
+        className="mb-2">
+        {filterOptions.map((option) => {
+          const isActive = selectedType === option;
+          return (
+            <Pressable
+              key={option}
+              onPress={() => setSelectedType(option)}
+              className={`rounded-full border px-3 py-2 ${
+                isActive ? 'border-primary bg-primary/10' : 'border-border dark:border-border-dark'
+              }`}
+              style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}>
+              <Text
+                className={`text-sm font-semibold ${
+                  isActive ? 'text-primary' : 'text-text dark:text-text-dark'
+                }`}>
+                {option === 'all' ? 'All' : formatType(option)}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      <Button
+        title="Add task"
+        onPress={() => {
+          setTitle('');
+          setNewTaskType('general');
+          setIsCreateModalOpen(true);
+        }}
+        disabled={createTask.isLoading}
+      />
+    </View>
+  );
+
+  const renderEmpty = () => {
+    if (tasksQuery.isLoading) {
+      return (
+        <View className="items-center justify-center py-10">
+          <ActivityIndicator />
+        </View>
+      );
+    }
+
+    if (tasksQuery.isError) {
+      return (
+        <View className="gap-2 py-8">
+          <Text className="text-base text-red-600">Could not load tasks.</Text>
+          <Text className="text-xs text-text-muted dark:text-text-muted-dark">
+            {tasksQuery.error.message}
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <View className="items-center gap-2 py-12">
+        <Ionicons name="checkmark-done-outline" size={28} color="#9CA3AF" />
+        <Text className="text-base font-semibold text-text dark:text-text-dark">No tasks yet</Text>
+        <Text className="text-xs text-text-muted dark:text-text-muted-dark">
+          Add a task or wait for new emails to sync.
+        </Text>
+      </View>
+    );
+  };
+
   return (
     <View className="flex flex-1 bg-surface px-4 dark:bg-surface-dark">
       <Stack.Screen options={{ title: 'Tasks' }} />
       <Container>
-        {pendingReview ? (
-          <View className="mb-4 gap-2 rounded-2xl border border-amber-300 bg-amber-50 p-4 shadow-sm">
-            <View className="flex-row items-center justify-between">
-              <Text className="text-base font-semibold text-amber-900">Needs review</Text>
-              <Text className="text-xs text-amber-800">
-                {formatConfidence(pendingReview.confidence)} confident
-              </Text>
-            </View>
-            <Text className="text-sm font-semibold text-text">{pendingReview.title}</Text>
-            <Text className="text-xs text-text-muted dark:text-text-muted-dark">
-              From {pendingReview.sender ?? 'unknown sender'}{' '}
-              {pendingReview.provider ? `• ${pendingReview.provider}` : ''}
-            </Text>
-            <View className="mt-3 flex-row items-center gap-3">
-              <Pressable
-                onPress={() => handleReview('approve')}
-                disabled={reviewTask.isLoading}
-                className="flex-1 items-center justify-center rounded-full bg-primary px-4 py-2"
-                style={({ pressed }) => ({
-                  opacity: reviewTask.isLoading ? 0.6 : pressed ? 0.85 : 1,
-                })}>
-                {reviewTask.isLoading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text className="text-base font-semibold text-white">Accept</Text>
-                )}
-              </Pressable>
-              <Pressable
-                onPress={() => handleReview('ignore')}
-                disabled={reviewTask.isLoading}
-                className="flex-1 items-center justify-center rounded-full border border-border px-4 py-2 dark:border-border-dark"
-                style={({ pressed }) => ({
-                  opacity: reviewTask.isLoading ? 0.6 : pressed ? 0.75 : 1,
-                })}>
-                <Text className="text-base font-semibold text-text">Ignore</Text>
-              </Pressable>
-            </View>
-          </View>
-        ) : null}
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{
-            gap: 8,
-            paddingRight: 8,
-            alignItems: 'center',
-            paddingVertical: 2,
-          }}
-          style={{ minHeight: 44 }}
-          className="mb-2">
-          {filterOptions.map((option) => {
-            const isActive = selectedType === option;
+        <FlatList
+          data={tasksQuery.data ?? []}
+          keyExtractor={(item) => item.id}
+          ListHeaderComponent={renderHeader}
+          ListEmptyComponent={renderEmpty}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing || tasksQuery.isRefetching}
+              onRefresh={onRefresh}
+              tintColor="#4A8F6A"
+            />
+          }
+          contentContainerStyle={{ paddingBottom: 24, gap: 12 }}
+          renderItem={({ item }) => {
+            const isDone = item.status === 'done';
             return (
-              <Pressable
-                key={option}
-                onPress={() => setSelectedType(option)}
-                className={`rounded-full border px-3 py-2 ${
-                  isActive
-                    ? 'border-primary bg-primary/10'
-                    : 'border-border dark:border-border-dark'
-                }`}
-                style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}>
-                <Text
-                  className={`text-sm font-semibold ${
-                    isActive ? 'text-primary' : 'text-text dark:text-text-dark'
-                  }`}>
-                  {option === 'all' ? 'All' : formatType(option)}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-
-        <View className="mb-6 mt-2">
-          <Button
-            title="Add task"
-            onPress={() => {
-              setTitle('');
-              setNewTaskType('general');
-              setIsCreateModalOpen(true);
-            }}
-            disabled={createTask.isLoading}
-          />
-        </View>
-
-        {tasksQuery.isLoading ? (
-          <View className="py-6">
-            <ActivityIndicator />
-          </View>
-        ) : tasksQuery.isError ? (
-          <View className="gap-2">
-            <Text className="text-base text-red-600">Could not load tasks.</Text>
-            <Text className="text-xs text-text-muted dark:text-text-muted-dark">
-              {tasksQuery.error.message}
-            </Text>
-          </View>
-        ) : (
-          <FlatList
-            data={tasksQuery.data ?? []}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={{ gap: 12, paddingBottom: 24 }}
-            renderItem={({ item }) => {
-              const isDone = item.status === 'done';
-              return (
-                <View className="rounded-lg border border-border bg-surface-strong px-4 py-3 dark:border-border-dark dark:bg-surface-card-dark">
-                  <View className="flex-row items-center justify-between">
-                    <View className="flex-1 flex-row items-center gap-3 pr-3">
-                      <Pressable
-                        accessibilityLabel={isDone ? 'Mark task as todo' : 'Mark task as done'}
-                        onPress={() => handleToggleStatus(item.id)}
-                        style={({ pressed }) => ({
-                          opacity: pressed ? 0.7 : 1,
-                        })}>
-                        <View
-                          className={`h-6 w-6 items-center justify-center rounded-full border ${
-                            isDone
-                              ? 'border-primary bg-primary'
-                              : 'border-border dark:border-border-dark'
-                          }`}>
-                          {isDone && <Ionicons name="checkmark" size={16} color="#FFFFFF" />}
-                        </View>
-                      </Pressable>
-                      <Pressable
-                        className="flex-1"
-                        accessibilityLabel="Open task details"
-                        onPress={() => openDetails(item.id)}
-                        style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
-                        <View className="flex-1">
-                          <View className="mb-1 flex-row flex-wrap items-center gap-2">
-                            <Badge label={formatType(item.type)} />
-                            {item.provider ? <Badge label={item.provider} tone="muted" /> : null}
-                            {item.reviewState === 'pending' ? (
-                              <Badge label="Needs review" tone="warn" />
-                            ) : null}
-                          </View>
-                          <Text className="text-base font-semibold text-text dark:text-text-dark">
-                            {item.title}
-                          </Text>
-                          <Text className="text-xs text-text-muted dark:text-text-muted-dark">
-                            Status: {item.status.replace('_', ' ')} • Confidence{' '}
-                            {formatConfidence(item.confidence)}
-                          </Text>
-                          {item.sender ? (
-                            <Text className="text-xs text-text-muted dark:text-text-muted-dark">
-                              From {item.sender}
-                            </Text>
+              <View className="rounded-lg border border-border bg-surface-strong px-4 py-3 dark:border-border-dark dark:bg-surface-card-dark">
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-1 flex-row items-center gap-3 pr-3">
+                    <Pressable
+                      accessibilityLabel={isDone ? 'Mark task as todo' : 'Mark task as done'}
+                      onPress={() => handleToggleStatus(item.id)}
+                      style={({ pressed }) => ({
+                        opacity: pressed ? 0.7 : 1,
+                      })}>
+                      <View
+                        className={`h-6 w-6 items-center justify-center rounded-full border ${
+                          isDone
+                            ? 'border-primary bg-primary'
+                            : 'border-border dark:border-border-dark'
+                        }`}>
+                        {isDone && <Ionicons name="checkmark" size={16} color="#FFFFFF" />}
+                      </View>
+                    </Pressable>
+                    <Pressable
+                      className="flex-1"
+                      accessibilityLabel="Open task details"
+                      onPress={() => openDetails(item.id)}
+                      style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
+                      <View className="flex-1">
+                        <View className="mb-1 flex-row flex-wrap items-center gap-2">
+                          <Badge label={formatType(item.type)} />
+                          {item.provider ? <Badge label={item.provider} tone="muted" /> : null}
+                          {item.reviewState === 'pending' ? (
+                            <Badge label="Needs review" tone="warn" />
                           ) : null}
                         </View>
-                      </Pressable>
-                    </View>
-                    <View className="flex-row items-center gap-3">
-                      <Pressable
-                        accessibilityLabel="Edit task"
-                        onPress={() => startEdit(item)}
-                        style={({ pressed }) => ({
-                          opacity: pressed ? 0.7 : 1,
-                        })}>
-                        <Ionicons name="create-outline" size={22} color="#4A8F6A" />
-                      </Pressable>
-                      <Pressable
-                        accessibilityLabel="Delete task"
-                        onPress={() => confirmDelete(item.id)}
-                        disabled={deleteTask.isLoading && deletingId === item.id}
-                        style={({ pressed }) => ({
-                          opacity:
-                            deleteTask.isLoading && deletingId === item.id
-                              ? 0.5
-                              : pressed
-                                ? 0.7
-                                : 1,
-                        })}>
-                        {deleteTask.isLoading && deletingId === item.id ? (
-                          <ActivityIndicator color="#E06262" />
-                        ) : (
-                          <Ionicons name="trash-outline" size={22} color="#E06262" />
-                        )}
-                      </Pressable>
-                    </View>
+                        <Text className="text-base font-semibold text-text dark:text-text-dark">
+                          {item.title}
+                        </Text>
+                        <Text className="text-xs text-text-muted dark:text-text-muted-dark">
+                          Status: {item.status.replace('_', ' ')} • Confidence{' '}
+                          {formatConfidence(item.confidence)}
+                        </Text>
+                        {item.sender ? (
+                          <Text className="text-xs text-text-muted dark:text-text-muted-dark">
+                            From {item.sender}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </Pressable>
+                  </View>
+                  <View className="flex-row items-center gap-3">
+                    <Pressable
+                      accessibilityLabel="Edit task"
+                      onPress={() => startEdit(item)}
+                      style={({ pressed }) => ({
+                        opacity: pressed ? 0.7 : 1,
+                      })}>
+                      <Ionicons name="create-outline" size={22} color="#4A8F6A" />
+                    </Pressable>
+                    <Pressable
+                      accessibilityLabel="Delete task"
+                      onPress={() => confirmDelete(item.id)}
+                      disabled={deleteTask.isLoading && deletingId === item.id}
+                      style={({ pressed }) => ({
+                        opacity:
+                          deleteTask.isLoading && deletingId === item.id ? 0.5 : pressed ? 0.7 : 1,
+                      })}>
+                      {deleteTask.isLoading && deletingId === item.id ? (
+                        <ActivityIndicator color="#E06262" />
+                      ) : (
+                        <Ionicons name="trash-outline" size={22} color="#E06262" />
+                      )}
+                    </Pressable>
                   </View>
                 </View>
-              );
-            }}
-          />
-        )}
+              </View>
+            );
+          }}
+        />
       </Container>
 
       <Modal
