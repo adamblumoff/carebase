@@ -1,5 +1,5 @@
 import { TRPCError } from '@trpc/server';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { google } from 'googleapis';
 import { z } from 'zod';
 
@@ -98,6 +98,18 @@ async function upsertTaskFromMessage({
   message: google.gmail_v1.Schema$Message;
 }) {
   const log = ctx.req?.log ?? console;
+
+  // Do not resurrect tasks the caregiver explicitly ignored/deleted.
+  const [existing] = await ctx.db
+    .select({ reviewState: tasks.reviewState })
+    .from(tasks)
+    .where(and(eq(tasks.createdById, caregiverId), eq(tasks.sourceId, message.id ?? '')))
+    .limit(1);
+
+  if (existing?.reviewState === 'ignored') {
+    log.info?.({ messageId: message.id }, 'skip ignored message');
+    return { action: 'skipped_ignored' as const, id: message.id };
+  }
 
   if (message.sizeEstimate && message.sizeEstimate > 200_000) {
     log.warn?.({ sizeEstimate: message.sizeEstimate, id: message.id }, 'skip large email');
@@ -298,7 +310,11 @@ export async function syncSource({
           const outcome = await upsertTaskFromMessage({ ctx, source, caregiverId, message: data });
           if (outcome.action === 'created') results.created += 1;
           if (outcome.action === 'updated') results.updated += 1;
-          if (outcome.action === 'skipped' || outcome.action === 'skipped_low_confidence')
+          if (
+            outcome.action === 'skipped' ||
+            outcome.action === 'skipped_low_confidence' ||
+            outcome.action === 'skipped_ignored'
+          )
             results.skipped += 1;
         } catch (error) {
           ctx.req?.log?.error({ err: error }, 'sync message failed');

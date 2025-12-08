@@ -30,6 +30,9 @@ export const taskRouter = router({
 
       if (input?.reviewState) {
         conditions.push(eq(tasks.reviewState, input.reviewState));
+      } else {
+        // Hide ignored tasks by default unless explicitly requested.
+        conditions.push(sql`${tasks.reviewState} != 'ignored'`);
       }
 
       const predicate = conditions.length === 1 ? conditions[0] : and(...conditions);
@@ -93,16 +96,17 @@ export const taskRouter = router({
     .mutation(async ({ ctx, input }) => {
       const caregiverId = await ensureCaregiver(ctx);
 
-      const [deleted] = await ctx.db
-        .delete(tasks)
+      const [updated] = await ctx.db
+        .update(tasks)
+        .set({ reviewState: 'ignored', status: 'done', updatedAt: new Date() })
         .where(and(eq(tasks.id, input.id), eq(tasks.createdById, caregiverId)))
-        .returning();
+        .returning({ id: tasks.id });
 
-      if (!deleted) {
+      if (!updated) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
       }
 
-      return { id: deleted.id };
+      return { id: updated.id };
     }),
 
   toggleStatus: authedProcedure
@@ -206,16 +210,17 @@ export const taskRouter = router({
       const caregiverId = await ensureCaregiver(ctx);
 
       if (input.action === 'ignore') {
-        const [deleted] = await ctx.db
-          .delete(tasks)
+        const [ignored] = await ctx.db
+          .update(tasks)
+          .set({ reviewState: 'ignored', status: 'done', updatedAt: new Date() })
           .where(and(eq(tasks.id, input.id), eq(tasks.createdById, caregiverId)))
           .returning({ id: tasks.id });
 
-        if (!deleted) {
+        if (!ignored) {
           throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
         }
 
-        return { id: deleted.id, action: 'deleted' as const };
+        return { id: ignored.id, action: 'ignored' as const };
       }
 
       const [updated] = await ctx.db
