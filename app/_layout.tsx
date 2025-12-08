@@ -5,7 +5,7 @@ import { Slot, useRouter, useSegments } from 'expo-router';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Text } from 'react-native';
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { PostHogProvider } from 'posthog-react-native';
 import { useFonts } from 'expo-font';
 import { Roboto_500Medium } from '@expo-google-fonts/roboto';
@@ -13,7 +13,6 @@ import { useColorScheme } from 'nativewind';
 
 import { createQueryClientAndPersister, createTrpcClient, trpc } from '@/lib/trpc/client';
 import { useUserTheme } from '@/app/(hooks)/useUserTheme';
-import { useRef } from 'react';
 
 export default function Layout() {
   useColorScheme();
