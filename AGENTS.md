@@ -28,7 +28,7 @@
 - Tooling: TS ~5.9, ESLint 9 (flat) + `eslint-config-expo`, Prettier 3, PNPM 9.
 - Keep Expo/RN deps aligned: prefer `pnpm exec expo install <pkg>` so versions match the SDK; if mismatch warnings appear, sync versions before debugging.
 - Keyboard handling: prefer `react-native-keyboard-aware-scroll-view` for forms/modals so inputs stay visible; keep dims transparent unless UX requires otherwise.
-- Tasks ingestion: Gmail parsing runs on `format=full`; drop <60% confidence, mark 60–<80% for review, auto-approve ≥80%; ignore = delete.
+- Tasks ingestion: Gmail parsing runs on `format=full`; drop <60% confidence, mark 60–<80% for review, auto-approve ≥80%; ignore = delete. Classification uses Vertex Gemini; ignored tasks are soft-deleted/tombstoned so they never resurrect on re-sync.
 
 ## Coding Style & Naming Conventions
 - 4-space indentation, Unix line endings, trailing newline; prefer explicit imports.  

@@ -7,7 +7,7 @@ Carebase is a caregiver-first mobile app that pulls every stream of care informa
 - Single source of truth for a care team’s daily tasks, notes, and documents.
 - Clear, timely updates that reduce phone/email back-and-forth.
 - Built for multi-platform access (iOS, Android, web) via Expo Router.
-- Gmail-driven task ingestion that classifies appointments, bills, and medications; drops very low-confidence (<60%) emails, flags medium (60–<80%) for review, auto-approves ≥80%.
+- Gmail-driven task ingestion that classifies appointments, bills, and medications via Vertex Gemini; drops very low-confidence (<60%) emails, flags medium (60–<80%) for review, auto-approves ≥80%; ignored tasks are soft-deleted so they never resurrect on re-sync.
 - Task detail actions: open source email (Gmail app/web) and calendar for appointments; quick edit sheet for title/type/description.
 
 ## Tech stack
@@ -24,6 +24,7 @@ Carebase is a caregiver-first mobile app that pulls every stream of care informa
 3. Run the API: `pnpm api:dev` (expects `DATABASE_URL`); default host/port come from `.env`.
 4. Run the app: `pnpm start` then choose iOS, Android, or Web (or use `pnpm ios` / `pnpm android` / `pnpm web`). Ensure `EXPO_PUBLIC_API_BASE_URL` points to the reachable API URL for your simulator/device (e.g., `http://localhost:3000` for web/simulator or your tunnel URL for Expo Go).
 5. Lint/format: `pnpm lint` to check, `pnpm format` to fix.
+6. Performance defaults: query cache persists to AsyncStorage and hydrates on startup; Home and root layouts prefetch tasks (and filters) plus recent ingestion events so the Tasks tab should render instantly from cache and refresh in the background.
 
 ## Environment variables
 
@@ -38,6 +39,8 @@ Carebase is a caregiver-first mobile app that pulls every stream of care informa
 - `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW`: Rate limiting settings.
 - `POSTHOG_API_KEY` / `POSTHOG_HOST`: Backend PostHog ingestion (optional; required if you want server events).
 - Google ingestion: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` (needed for Gmail sync). Use `prompt=consent&access_type=offline` in the OAuth flow to ensure a refresh token.
+- Vertex AI classification: `GOOGLE_VERTEX_PROJECT_ID`, `GOOGLE_VERTEX_LOCATION` (default `us-central1`). Use ADC/service account (no secrets in git).
+- Pub/Sub push: `GOOGLE_PUBSUB_PROJECT`, `GOOGLE_PUBSUB_TOPIC_DEV/PROD`, `GOOGLE_WEBHOOK_URL(_PROD)`, `GOOGLE_PUBSUB_VERIFICATION_TOKEN`.
 
 ## Project layout
 

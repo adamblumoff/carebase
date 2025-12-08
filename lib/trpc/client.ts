@@ -1,13 +1,18 @@
 import { httpBatchLink } from '@trpc/client';
 import { createTRPCReact } from '@trpc/react-query';
 import { QueryClient } from '@tanstack/react-query';
+import {
+  createAsyncStoragePersister,
+  type AsyncStoragePersister,
+} from '@tanstack/query-async-storage-persister';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { AppRouter } from '@/api/trpc/root';
 
 export const trpc = createTRPCReact<AppRouter>();
 
-export const createQueryClient = () =>
-  new QueryClient({
+export const createQueryClientAndPersister = () => {
+  const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
         staleTime: 30 * 1000,
@@ -19,6 +24,15 @@ export const createQueryClient = () =>
       },
     },
   });
+
+  const persister: AsyncStoragePersister = createAsyncStoragePersister({
+    storage: AsyncStorage,
+    key: 'carebase-query-cache',
+    throttleTime: 1000,
+  });
+
+  return { queryClient, persister };
+};
 
 const jsonGuardFetch: typeof fetch = async (input, init) => {
   const res = await fetch(input, init);

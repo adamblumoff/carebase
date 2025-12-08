@@ -70,7 +70,13 @@ export default function TasksScreen() {
   );
   const utils = trpc.useUtils();
 
-  const tasksQuery = trpc.tasks.list.useQuery(listInput);
+  const tasksQuery = trpc.tasks.list.useQuery(listInput, {
+    keepPreviousData: true,
+    placeholderData: (prev) => prev,
+    staleTime: 5 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
 
   useEffect(() => {
     if (tasksQuery.isError) {

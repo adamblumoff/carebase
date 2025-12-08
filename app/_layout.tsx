@@ -2,7 +2,7 @@ import '../global.css';
 import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
 import { tokenCache } from '@clerk/clerk-expo/token-cache';
 import { Slot, useRouter, useSegments } from 'expo-router';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Text } from 'react-native';
 import React, { useEffect, useMemo } from 'react';
@@ -11,8 +11,9 @@ import { useFonts } from 'expo-font';
 import { Roboto_500Medium } from '@expo-google-fonts/roboto';
 import { useColorScheme } from 'nativewind';
 
-import { createQueryClient, createTrpcClient, trpc } from '@/lib/trpc/client';
+import { createQueryClientAndPersister, createTrpcClient, trpc } from '@/lib/trpc/client';
 import { useUserTheme } from '@/app/(hooks)/useUserTheme';
+import { useRef } from 'react';
 
 export default function Layout() {
   useColorScheme();
@@ -67,22 +68,27 @@ export default function Layout() {
 }
 
 function TrpcProvider({ children }: { children: React.ReactNode }) {
-  const { getToken, isLoaded, isSignedIn } = useAuth();
+  const { getToken, isLoaded, isSignedIn, userId } = useAuth();
   const apiBaseUrl =
     process.env.NODE_ENV === 'production'
       ? (process.env.EXPO_PUBLIC_API_BASE_URL_PROD ?? process.env.EXPO_PUBLIC_API_BASE_URL)
       : process.env.EXPO_PUBLIC_API_BASE_URL;
-  const queryClient = useMemo(() => createQueryClient(), []);
+  const { queryClient, persister } = useMemo(() => createQueryClientAndPersister(), []);
   const trpcClient = useMemo(() => {
     if (!apiBaseUrl) return null;
     return createTrpcClient(() => getToken({ template: 'trpc' }));
   }, [apiBaseUrl, getToken]);
 
   // Clear all cached data when the signed-in user changes to avoid cross-account leakage.
+  const prevUserIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (!isLoaded) return;
-    queryClient.clear();
-  }, [isLoaded, isSignedIn, queryClient]);
+    const prev = prevUserIdRef.current;
+    if (prev !== userId) {
+      queryClient.clear();
+      prevUserIdRef.current = userId ?? null;
+    }
+  }, [isLoaded, isSignedIn, userId, queryClient]);
 
   if (!apiBaseUrl) {
     return (
@@ -95,11 +101,14 @@ function TrpcProvider({ children }: { children: React.ReactNode }) {
   if (!isLoaded || !trpcClient) return null;
 
   return (
-    <QueryClientProvider client={queryClient}>
+    <PersistQueryClientProvider client={queryClient} persistOptions={{ persister }}>
       <trpc.Provider client={trpcClient} queryClient={queryClient}>
-        <ThemeGate>{children}</ThemeGate>
+        <ThemeGate>
+          <PreloadTasks />
+          {children}
+        </ThemeGate>
       </trpc.Provider>
-    </QueryClientProvider>
+    </PersistQueryClientProvider>
   );
 }
 
@@ -127,4 +136,21 @@ function ThemeGate({ children }: { children: React.ReactNode }) {
 
   if (!themeReady) return null;
   return <>{children}</>;
+}
+
+function PreloadTasks() {
+  const utils = trpc.useUtils();
+  const { isSignedIn } = useAuth();
+
+  useEffect(() => {
+    if (!isSignedIn) return;
+    utils.tasks.list.prefetch().catch(() => {});
+    const filters = ['appointment', 'bill', 'medication', 'general'] as const;
+    filters.forEach((type) => {
+      utils.tasks.list.prefetch({ type }).catch(() => {});
+    });
+    utils.ingestionEvents.recent.prefetch({ limit: 1 }).catch(() => {});
+  }, [isSignedIn, utils.tasks.list]);
+
+  return null;
 }

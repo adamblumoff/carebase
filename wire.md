@@ -7,14 +7,14 @@
 
 ## Approach
 1) Client plumbing
-   - Create `app/(lib)/trpc/client.ts` exporting `trpc` helper, `queryClient`, and `trpcClient` factory.
+   - `lib/trpc/client.ts` exports `trpc` helper, and `createQueryClientAndPersister` (AsyncStorage-backed cache persistence) plus `trpcClient` factory.
    - Use `httpBatchLink` pointing at `${process.env.EXPO_PUBLIC_API_BASE_URL}/trpc`.
    - Inject `Authorization: Bearer <token>` via Clerk `getToken({ template: 'trpc' })`; handle null tokens gracefully.
    - Keep JSON transformer; add basic `onError` logging.
-   - Set Query defaults: `staleTime ~30s`, `retry: 1` for queries, disable suspense.
+   - Set Query defaults: `staleTime ~30s`, `retry: 1` for queries, disable suspense; cache persists to disk for instant reloads.
 
 2) Provider placement
-   - Wrap `QueryClientProvider` + `trpc.Provider` inside `app/_layout.tsx`, nested under `ClerkProvider` but above `Slot` so all routes share context.
+   - Wrap `PersistQueryClientProvider` + `trpc.Provider` inside `app/_layout.tsx`, nested under `ClerkProvider` but above `Slot` so all routes share context and hydrate cache before queries run.
    - Provide a fallback while auth is loading (already handled in `AuthGate`).
 
 3) Routes to exercise data

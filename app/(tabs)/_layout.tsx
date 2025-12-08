@@ -1,7 +1,10 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useColorScheme } from 'nativewind';
+import { useAuth } from '@clerk/clerk-expo';
+
+import { trpc } from '@/lib/trpc/client';
 
 const headerLight = '#F5F7F6';
 const headerDark = '#1C2521';
@@ -14,6 +17,13 @@ const mutedDark = '#B6C7BC';
 export default function TabsLayout() {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { isSignedIn } = useAuth();
+  const utils = trpc.useUtils();
+
+  useEffect(() => {
+    if (!isSignedIn) return;
+    utils.tasks.list.prefetch().catch(() => {});
+  }, [isSignedIn, utils.tasks.list]);
 
   return (
     <Tabs

@@ -13,6 +13,14 @@ export default function Home() {
     utils.tasks.list.prefetch().catch((err) => {
       console.warn('tasks.list prefetch failed', err);
     });
+
+    const filters = ['appointment', 'bill', 'medication', 'general'] as const;
+    filters.forEach((type) => {
+      utils.tasks.list.prefetch({ type }).catch(() => {});
+    });
+
+    // Warm recent ingestion events for Sync banner/indicators.
+    utils.ingestionEvents.recent.prefetch({ limit: 1 }).catch(() => {});
   }, [utils.tasks.list]);
 
   return (

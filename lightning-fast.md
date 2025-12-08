@@ -13,6 +13,7 @@ Goal: “Mail hits inbox → task shows in app” with near-instant perceived la
 - **Push-triggered refetch**: when backend records a push event, trigger `tasks.list` refetch immediately (can expose a lightweight `ingestionEvents.latest` query polled every few seconds or a subscription later).
 - **Instant feedback**: toast/haptic “Syncing new email…” as soon as push is detected; “New task added” on completion.
 - **Progress visibility**: show last push time / last sync time so users trust recency.
+- **Fast first paint**: tasks cache is persisted to AsyncStorage and prefetch runs on sign-in/Home so the Tasks tab renders instantly from cache even after reload.
 
 ## Safety & limits
 - Concurrency cap to 2–3 fetches to stay within Gmail read quotas and avoid 429s.
