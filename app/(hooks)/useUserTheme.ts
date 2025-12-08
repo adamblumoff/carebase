@@ -1,5 +1,5 @@
 import { useAuth, useUser } from '@clerk/clerk-expo';
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import { useColorScheme } from 'nativewind';
 
 import { trpc } from '@/lib/trpc/client';
@@ -13,6 +13,7 @@ export function useUserTheme() {
   const utils = trpc.useUtils();
   const [tokenReady, setTokenReady] = useState(false);
   const [hasTriedFetch, setHasTriedFetch] = useState(false);
+  const pendingThemeRef = useRef<ThemePreference | null>(null);
 
   // Ensure we have a Clerk token before enabling TRPC queries to avoid initial 401s that block theme sync.
   useEffect(() => {
@@ -40,6 +41,7 @@ export function useUserTheme() {
       await utils.userTheme.get.cancel();
       const previousTheme = utils.userTheme.get.getData();
 
+      pendingThemeRef.current = variables.themePreference;
       setColorScheme(variables.themePreference);
       utils.userTheme.get.setData(undefined, { themePreference: variables.themePreference });
 
@@ -48,6 +50,7 @@ export function useUserTheme() {
     onSuccess: (data) => {
       setColorScheme(data.themePreference);
       utils.userTheme.get.setData(undefined, { themePreference: data.themePreference });
+      pendingThemeRef.current = null;
     },
     onError: (_error, _vars, context) => {
       const fallbackTheme = (context?.previousTheme as any)?.themePreference;
@@ -55,20 +58,20 @@ export function useUserTheme() {
       if (context?.previousTheme) {
         utils.userTheme.get.setData(undefined, context.previousTheme as any);
       }
-    },
-    onSettled: () => {
-      utils.userTheme.get.invalidate();
+      pendingThemeRef.current = null;
     },
   });
 
   const themeQuery = trpc.userTheme.get.useQuery(undefined, {
     enabled: isSignedIn && !!user?.id && tokenReady,
-    staleTime: 0,
+    staleTime: 5 * 60 * 1000, // avoid immediate refetch after optimistic update
     retry: 1,
-    refetchOnMount: true,
+    refetchOnMount: false,
     refetchOnReconnect: true,
     refetchOnWindowFocus: false,
     onSuccess: (data) => {
+      // Avoid overwriting optimistic state while a mutation is pending.
+      if (pendingThemeRef.current && pendingThemeRef.current !== data.themePreference) return;
       setColorScheme(data.themePreference);
       setHasTriedFetch(true);
     },
@@ -80,6 +83,7 @@ export function useUserTheme() {
 
   useEffect(() => {
     if (updateTheme.isPending) return;
+    if (pendingThemeRef.current) return;
     if (themeQuery.isSuccess && themeQuery.data?.themePreference) {
       if (themeQuery.data.themePreference !== colorScheme) {
         setColorScheme(themeQuery.data.themePreference);
@@ -91,6 +95,7 @@ export function useUserTheme() {
     themeQuery.data?.themePreference,
     themeQuery.isSuccess,
     updateTheme.isPending,
+    pendingThemeRef.current,
   ]);
 
   useEffect(() => {
