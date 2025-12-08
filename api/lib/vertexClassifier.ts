@@ -26,7 +26,9 @@ const auth = new GoogleAuth({
 
 const getProjectId = async () => {
   const envProject =
-    process.env.GOOGLE_VERTEX_PROJECT_ID || process.env.GOOGLE_PUBSUB_PROJECT || process.env.GCLOUD_PROJECT;
+    process.env.GOOGLE_VERTEX_PROJECT_ID ||
+    process.env.GOOGLE_PUBSUB_PROJECT ||
+    process.env.GCLOUD_PROJECT;
   if (envProject) return envProject;
   try {
     return await auth.getProjectId();

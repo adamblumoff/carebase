@@ -129,7 +129,10 @@ async function upsertTaskFromMessage({
   });
 
   if ('error' in classification) {
-    log.error?.({ err: classification.error, messageId: message.id }, 'vertex classification failed');
+    log.error?.(
+      { err: classification.error, messageId: message.id },
+      'vertex classification failed'
+    );
     log.info?.(
       { messageId: message.id, projectId: classification.projectId ?? 'unknown' },
       'vertex classification fallback'
@@ -153,7 +156,12 @@ async function upsertTaskFromMessage({
   const confidence = modelConfidence ?? parsed.confidence;
 
   // Drop very low-confidence items (<60%) entirely.
-  if (!classificationFailed && confidence < 0.6 && bucket !== 'needs_review' && bucket !== 'ignore') {
+  if (
+    !classificationFailed &&
+    confidence < 0.6 &&
+    bucket !== 'needs_review' &&
+    bucket !== 'ignore'
+  ) {
     return { action: 'skipped_low_confidence' as const, id: message.id };
   }
 
