@@ -1,12 +1,12 @@
-import { GoogleAuth } from 'google-auth-library';
+import { OAuth2Client } from 'google-auth-library';
 
-const auth = new GoogleAuth();
+const oauthClient = new OAuth2Client();
 
 export const verifyPubsubJwt = async (authorization?: string, audience?: string) => {
   if (!authorization?.startsWith('Bearer ')) return null;
   const token = authorization.slice('Bearer '.length);
-  const client = await auth.getIdTokenClient(audience ?? '');
-  const ticket = await client.verifyIdToken({ idToken: token, audience });
+  // Pub/Sub push tokens are Google-signed; public certs are fetched without ADC.
+  const ticket = await oauthClient.verifyIdToken({ idToken: token, audience });
   return ticket.getPayload();
 };
 
