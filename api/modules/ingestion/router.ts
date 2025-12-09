@@ -110,6 +110,15 @@ async function upsertTaskFromMessage({
     return { action: 'skipped_ignored' as const, id: message.id };
   }
 
+  // Skip drafts and non-inbox messages; still allow self-sent mail that has both SENT and INBOX.
+  const labels = message.labelIds ?? [];
+  const isInbox = labels.includes('INBOX');
+  const isDraft = labels.includes('DRAFT');
+  if (!isInbox || isDraft) {
+    log.info?.({ messageId: message.id, labels }, 'skip non-inbox/draft message');
+    return { action: 'skipped_non_inbox' as const, id: message.id ?? 'unknown' };
+  }
+
   if (message.sizeEstimate && message.sizeEstimate > 200_000) {
     log.warn?.({ sizeEstimate: message.sizeEstimate, id: message.id }, 'skip large email');
     return { action: 'skipped' as const, id: message.id };

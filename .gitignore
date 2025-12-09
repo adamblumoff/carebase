@@ -35,3 +35,4 @@ android
 google-application-credentials.json
 credentials/
 keys/
+*.txt

@@ -184,7 +184,7 @@ function PushToastLayer({ children }: { children: React.ReactNode }) {
 
   trpc.ingestionEvents.onPush.useSubscription(undefined, {
     enabled: isSignedIn,
-    onData: (event) => {
+    onData: () => {
       void utils.tasks.list.invalidate();
       show('New task synced');
     },
