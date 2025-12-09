@@ -95,7 +95,6 @@ export function useUserTheme() {
     themeQuery.data?.themePreference,
     themeQuery.isSuccess,
     updateTheme.isPending,
-    pendingThemeRef.current,
   ]);
 
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { httpBatchLink } from '@trpc/client';
+import { createWSClient, httpBatchLink, splitLink, wsLink } from '@trpc/client';
 import { createTRPCReact } from '@trpc/react-query';
 import { QueryClient } from '@tanstack/react-query';
 import {
@@ -68,23 +68,64 @@ export const createTrpcClient = (getToken: () => Promise<string | null>) => {
 
   console.log(`TRPC client init: using ${apiBaseUrl}`);
 
-  return trpc.createClient({
-    links: [
-      httpBatchLink({
-        url: `${apiBaseUrl}/trpc`,
-        method: 'POST',
-        fetch: jsonGuardFetch,
-        // Disable batching for now; batched GET URLs were 404ing with the fastify CJS adapter/prefix combo.
-        // Single-procedure POSTs are stable and low overhead at our current scale.
-        maxBatchSize: 1,
-        async headers() {
+  const wsUrl = (() => {
+    try {
+      const url = new URL(apiBaseUrl);
+      url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+      url.pathname = '/trpc';
+      return url.toString();
+    } catch {
+      return null;
+    }
+  })();
+
+  const wsClient = wsUrl
+    ? createWSClient({
+        url: wsUrl,
+        lazy: true,
+        connectionParams: async () => {
           const token = await getToken();
-          if (!token) {
-            console.warn('TRPC client: no auth token returned for request');
-          }
           return token ? { Authorization: `Bearer ${token}` } : {};
         },
-      }),
+        onOpen: () => console.log('[trpc-ws] open'),
+        onClose: () => console.log('[trpc-ws] close'),
+        onError: (err) => console.warn('[trpc-ws] error', err),
+      })
+    : null;
+
+  return trpc.createClient({
+    links: [
+      wsClient
+        ? splitLink({
+            condition: (op) => op.type === 'subscription',
+            true: wsLink({ client: wsClient }),
+            false: httpBatchLink({
+              url: `${apiBaseUrl}/trpc`,
+              method: 'POST',
+              fetch: jsonGuardFetch,
+              maxBatchSize: 1,
+              async headers() {
+                const token = await getToken();
+                if (!token) {
+                  console.warn('TRPC client: no auth token returned for request');
+                }
+                return token ? { Authorization: `Bearer ${token}` } : {};
+              },
+            }),
+          })
+        : httpBatchLink({
+            url: `${apiBaseUrl}/trpc`,
+            method: 'POST',
+            fetch: jsonGuardFetch,
+            maxBatchSize: 1,
+            async headers() {
+              const token = await getToken();
+              if (!token) {
+                console.warn('TRPC client: no auth token returned for request');
+              }
+              return token ? { Authorization: `Bearer ${token}` } : {};
+            },
+          }),
     ],
   });
 };

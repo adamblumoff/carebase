@@ -21,7 +21,7 @@ export default function Home() {
 
     // Warm recent ingestion events for Sync banner/indicators.
     utils.ingestionEvents.recent.prefetch({ limit: 1 }).catch(() => {});
-  }, [utils.tasks.list]);
+  }, [utils.ingestionEvents.recent, utils.tasks.list]);
 
   return (
     <View className="flex flex-1 bg-surface px-4 dark:bg-surface-dark">

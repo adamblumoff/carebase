@@ -4,8 +4,8 @@ import { tokenCache } from '@clerk/clerk-expo/token-cache';
 import { Slot, useRouter, useSegments } from 'expo-router';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Text } from 'react-native';
-import React, { useEffect, useMemo, useRef } from 'react';
+import { Animated, Text } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PostHogProvider } from 'posthog-react-native';
 import { useFonts } from 'expo-font';
 import { Roboto_500Medium } from '@expo-google-fonts/roboto';
@@ -134,7 +134,7 @@ function ThemeGate({ children }: { children: React.ReactNode }) {
   const { themeReady } = useUserTheme();
 
   if (!themeReady) return null;
-  return <>{children}</>;
+  return <PushToastLayer>{children}</PushToastLayer>;
 }
 
 function PreloadTasks() {
@@ -149,7 +149,84 @@ function PreloadTasks() {
       utils.tasks.list.prefetch({ type }).catch(() => {});
     });
     utils.ingestionEvents.recent.prefetch({ limit: 1 }).catch(() => {});
-  }, [isSignedIn, utils.tasks.list]);
+  }, [isSignedIn, utils.ingestionEvents.recent, utils.tasks.list]);
 
   return null;
+}
+
+function PushToastLayer({ children }: { children: React.ReactNode }) {
+  const { isSignedIn } = useAuth();
+  const utils = trpc.useUtils();
+  const [message, setMessage] = useState<string | null>(null);
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translate = useRef(new Animated.Value(12)).current;
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const hide = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(opacity, { toValue: 0, duration: 160, useNativeDriver: true }),
+      Animated.timing(translate, { toValue: 12, duration: 160, useNativeDriver: true }),
+    ]).start(() => setMessage(null));
+  }, [opacity, translate]);
+
+  const show = useCallback(
+    (text: string) => {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+      setMessage(text);
+      Animated.parallel([
+        Animated.timing(opacity, { toValue: 1, duration: 150, useNativeDriver: true }),
+        Animated.timing(translate, { toValue: 0, duration: 150, useNativeDriver: true }),
+      ]).start();
+      hideTimer.current = setTimeout(hide, 2200);
+    },
+    [hide, opacity, translate]
+  );
+
+  trpc.ingestionEvents.onPush.useSubscription(undefined, {
+    enabled: isSignedIn,
+    onData: (event) => {
+      void utils.tasks.list.invalidate();
+      show('New task synced');
+    },
+    onError: (err) => {
+      console.warn('push subscription error', err);
+    },
+  });
+
+  useEffect(() => {
+    return () => {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+    };
+  }, []);
+
+  return (
+    <>
+      {children}
+      {message ? (
+        <Animated.View
+          pointerEvents="box-none"
+          style={{
+            position: 'absolute',
+            bottom: 24,
+            left: 16,
+            right: 16,
+            opacity,
+            transform: [{ translateY: translate }],
+          }}>
+          <Text
+            style={{
+              textAlign: 'center',
+              paddingVertical: 12,
+              paddingHorizontal: 16,
+              backgroundColor: '#1F2937',
+              color: '#FFFFFF',
+              borderRadius: 9999,
+              overflow: 'hidden',
+            }}>
+            {message}
+          </Text>
+        </Animated.View>
+      ) : null}
+    </>
+  );
 }

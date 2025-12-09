@@ -21,6 +21,8 @@ import { syncCalendarSource } from './modules/ingestion/calendar';
 import { debounceRun, verifyPubsubJwt } from './lib/pubsub';
 import { renewSource, fallbackPoll } from './lib/watch';
 import { Ticker } from './lib/scheduler';
+import { WebSocketServer } from 'ws';
+import { applyWSSHandler } from '@trpc/server/adapters/ws';
 
 config({ path: '.env' });
 
@@ -136,7 +138,8 @@ const registerPlugins = async () => {
     return reply.header('Content-Type', 'text/html').send(html);
   });
 
-  server.post('/webhooks/google/push', { logLevel: 'warn' }, async (request, reply) => {
+  server.post('/webhooks/google/push', { logLevel: 'info' }, async (request, reply) => {
+    request.log.info({ headers: request.headers }, 'push webhook received');
     const authHeader = request.headers.authorization;
     const audience = `https://${request.headers.host}/webhooks/google/push`;
 
@@ -184,7 +187,6 @@ const registerPlugins = async () => {
     }
 
     const isPubsubPush = Boolean(pubsubMessage);
-    const isCalendarPush = !isPubsubPush;
 
     if (isPubsubPush) {
       if (!authHeader) {
@@ -212,9 +214,13 @@ const registerPlugins = async () => {
         caregiverIdOverride: source.caregiverId,
         caregiverId: source.caregiverId,
         reason: 'push',
-      } as any).catch((err: any) => {
-        request.log.error({ err }, 'sync push failed');
-      });
+      } as any)
+        .then((res: any) => {
+          request.log.info({ sourceId: source.id, result: res }, 'push sync completed');
+        })
+        .catch((err: any) => {
+          request.log.error({ err }, 'sync push failed');
+        });
     });
 
     // record last push time
@@ -342,6 +348,26 @@ const start = async () => {
   try {
     await registerPlugins();
     await server.listen({ port, host });
+
+    const wss = new WebSocketServer({ server: server.server });
+    applyWSSHandler({
+      wss,
+      router: appRouter,
+      path: '/trpc',
+      createContext: (opts) =>
+        createContext({
+          // Attach Fastify logger so downstream ctx.req.log works.
+          req: Object.assign(opts.req, { log: server.log }) as any,
+          info: { connectionParams: opts.info?.connectionParams },
+        } as any),
+      onError: (err) => {
+        server.log.error({ err }, 'ws handler error');
+      },
+      onConnect: (info) => {
+        server.log.info({ url: info.req.url }, 'ws connect');
+      },
+    });
+
     server.log.info(`API running on http://${host}:${port}`);
   } catch (error) {
     server.log.error(error);

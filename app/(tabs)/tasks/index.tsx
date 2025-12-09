@@ -459,7 +459,6 @@ export default function TasksScreen() {
       }
     },
     onSettled: () => {
-      utils.tasks.list.invalidate(listInput);
       utils.tasks.list.invalidate();
     },
   });
@@ -600,7 +599,15 @@ export default function TasksScreen() {
         onOpenDetails={openDetails}
       />
     ),
-    [confirmDelete, deleteTask.isLoading, deletingId, handleToggleStatus, openDetails, startEdit]
+    [
+      TaskListItem,
+      confirmDelete,
+      deleteTask.isLoading,
+      deletingId,
+      handleToggleStatus,
+      openDetails,
+      startEdit,
+    ]
   );
 
   return (
@@ -623,11 +630,7 @@ export default function TasksScreen() {
           ListHeaderComponent={renderHeader}
           ListEmptyComponent={renderEmpty}
           refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing || tasksQuery.isRefetching}
-              onRefresh={onRefresh}
-              tintColor="#4A8F6A"
-            />
+            <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor="#4A8F6A" />
           }
           contentContainerStyle={{ paddingBottom: 24, gap: 12 }}
         />

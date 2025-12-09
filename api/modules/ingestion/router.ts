@@ -11,6 +11,7 @@ import { classifyEmailWithVertex } from '../../lib/vertexClassifier';
 import { authedProcedure, router } from '../../trpc/trpc';
 import { withSourceLock } from '../../lib/sourceLock';
 import { IngestionCtx } from '../../lib/ingestionTypes';
+import { ingestionEventBus } from '../../lib/eventBus';
 
 const gmailMessageLink = (accountEmail: string, messageId: string) =>
   `https://mail.google.com/mail/u/${encodeURIComponent(accountEmail)}/#all/${messageId}`;
@@ -371,6 +372,7 @@ export async function syncSource({
 
     const changed = results.created + results.updated + results.errors;
     if (changed > 0) {
+      const finishedAt = new Date();
       await ctx.db.insert(ingestionEvents).values({
         sourceId: source.id,
         caregiverId,
@@ -379,12 +381,22 @@ export async function syncSource({
         ingestionId: `${reason}-${Date.now()}`,
         historyId: nextHistoryId ?? source.historyId ?? undefined,
         startedAt,
-        finishedAt: new Date(),
+        finishedAt,
         createdCount: results.created,
         updatedCount: results.updated,
         skippedCount: results.skipped,
         errorCount: results.errors,
         durationMs: new Date().getTime() - startedAt.getTime(),
+      });
+      ctx.req?.log?.info?.(
+        { sourceId: source.id, caregiverId, reason },
+        'emitting ingestion push event'
+      );
+      ingestionEventBus.emit('push', {
+        caregiverId,
+        sourceId: source.id,
+        startedAt,
+        finishedAt,
       });
     }
 

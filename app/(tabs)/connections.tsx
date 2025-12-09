@@ -42,8 +42,6 @@ export default function ConnectionsScreen() {
 
   const sourcesQuery = trpc.sources.list.useQuery();
   const authUrlQuery = trpc.sources.authorizeUrl.useQuery({ redirectUri }, { enabled: false });
-  // Track last push for live status
-  const eventsQuery = trpc.ingestionEvents.recent.useQuery({ limit: 1 }, { refetchInterval: 5000 });
 
   const [connectError, setConnectError] = useState<string | null>(null);
 
@@ -108,8 +106,6 @@ export default function ConnectionsScreen() {
     [toastOpacity]
   );
 
-  const lastPushRef = useRef<string | null>(null);
-
   const utils = trpc.useUtils();
 
   const prefetchTasks = useCallback(async () => {
@@ -131,21 +127,6 @@ export default function ConnectionsScreen() {
       prefetchingRef.current = false;
     }
   }, [utils.tasks.list]);
-
-  useEffect(() => {
-    if (!eventsQuery.data || eventsQuery.data.length === 0) return;
-    const newest = eventsQuery.data[0];
-    const ts = newest.startedAt?.toString?.() ?? newest.startedAt;
-    if (ts && lastPushRef.current && lastPushRef.current !== ts) {
-      showToast('New email synced');
-      void (async () => {
-        // Invalidate every tasks.list cache (all filters) so All and filtered tabs refresh immediately.
-        await utils.tasks.list.invalidate();
-        await prefetchTasks();
-      })();
-    }
-    if (ts) lastPushRef.current = ts;
-  }, [eventsQuery.data, showToast, prefetchTasks, utils.tasks.list]);
 
   useFocusEffect(
     useCallback(() => {
@@ -349,36 +330,6 @@ export default function ConnectionsScreen() {
           ) : (
             <Text className="text-sm text-text-muted dark:text-text-muted-dark">
               No connected sources yet.
-            </Text>
-          )}
-        </View>
-
-        <View className="mt-6 gap-1">
-          <Text className="text-sm font-semibold text-text dark:text-text-dark">Push status</Text>
-          {eventsQuery.isLoading ? (
-            <ActivityIndicator />
-          ) : eventsQuery.isError ? (
-            <Text className="text-xs text-red-600">Could not load push status.</Text>
-          ) : eventsQuery.data && eventsQuery.data.length > 0 ? (
-            (() => {
-              const ev = eventsQuery.data[0];
-              const ts = ev.startedAt ? new Date(ev.startedAt) : null;
-              const freshnessMs = ts ? Date.now() - ts.getTime() : Number.POSITIVE_INFINITY;
-              const isLive = freshnessMs < 3 * 60 * 1000;
-              return (
-                <View className="flex-row items-center justify-between rounded-lg border border-border bg-white px-3 py-2 dark:border-border-dark dark:bg-surface-card-dark">
-                  <Text className="text-sm font-semibold text-text dark:text-text-dark">
-                    {isLive ? 'Live (push)' : 'Polling fallback'}
-                  </Text>
-                  <Text className="text-xs text-text-muted dark:text-text-muted-dark">
-                    Last push: {ts ? ts.toLocaleTimeString() : 'none yet'}
-                  </Text>
-                </View>
-              );
-            })()
-          ) : (
-            <Text className="text-xs text-text-muted dark:text-text-muted-dark">
-              No push seen yet.
             </Text>
           )}
         </View>

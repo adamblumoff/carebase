@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { ingestionEvents, sources } from '../../db/schema';
 import { ensureCaregiver } from '../../lib/caregiver';
 import { authedProcedure, router } from '../../trpc/trpc';
+import { ingestionEventBus, IngestionPushEvent } from '../../lib/eventBus';
+import { observable } from '@trpc/server/observable';
 
 export const ingestionEventsRouter = router({
   recent: authedProcedure
@@ -33,4 +35,19 @@ export const ingestionEventsRouter = router({
 
       return rows;
     }),
+  onPush: authedProcedure.subscription(async ({ ctx }) => {
+    // Map authenticated user -> caregiver id to match emitted events.
+    const caregiverId = await ensureCaregiver(ctx);
+    return observable<IngestionPushEvent>((emit) => {
+      const handler = (event: IngestionPushEvent) => {
+        if (event.caregiverId !== caregiverId) return;
+        (ctx.req?.log ?? console).info({ event, caregiverId }, 'onPush emit to subscriber');
+        emit.next(event);
+      };
+      ingestionEventBus.on('push', handler);
+      return () => {
+        ingestionEventBus.off('push', handler);
+      };
+    });
+  }),
 });
