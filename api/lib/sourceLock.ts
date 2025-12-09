@@ -12,7 +12,10 @@ export async function withSourceLock<T>(sourceId: string, fn: () => Promise<T>):
     return await fn();
   })();
 
-  const currentSettled = current.then(() => undefined, () => undefined);
+  const currentSettled = current.then(
+    () => undefined,
+    () => undefined
+  );
   locks.set(sourceId, currentSettled);
 
   try {

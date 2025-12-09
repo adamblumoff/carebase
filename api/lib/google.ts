@@ -51,7 +51,10 @@ if (!stateSecret) {
   throw new Error('GOOGLE_STATE_SECRET environment variable is required');
 }
 
-export const setOAuthRedirectUri = (client: InstanceType<typeof google.auth.OAuth2>, uri: string) => {
+export const setOAuthRedirectUri = (
+  client: InstanceType<typeof google.auth.OAuth2>,
+  uri: string
+) => {
   // redirectUri is typed as readonly in google-auth-library, so use defineProperty to avoid casts.
   Object.defineProperty(client, 'redirectUri', { value: uri, writable: false });
 };

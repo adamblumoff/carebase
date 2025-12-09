@@ -292,77 +292,77 @@ export async function syncSource({
     })();
 
     const log = ctx.req?.log ?? console;
-  log.info?.(
-    {
-      sourceId: source.id,
-      accountEmail: source.accountEmail,
-      messageCount: messageIds.length,
-      nextHistoryId,
-      reason,
-      fetchStats: stats,
-    },
-    'gmail sync fetched messages'
-  );
+    log.info?.(
+      {
+        sourceId: source.id,
+        accountEmail: source.accountEmail,
+        messageCount: messageIds.length,
+        nextHistoryId,
+        reason,
+        fetchStats: stats,
+      },
+      'gmail sync fetched messages'
+    );
 
-  // Preload ignored tasks for this caregiver/source set to avoid per-message lookups.
+    // Preload ignored tasks for this caregiver/source set to avoid per-message lookups.
     const ignoredSourceIds = new Set<string>();
-  if (messageIds.length > 0) {
-    const ignoredRows = await ctx.db
-      .select({ sourceId: tasks.sourceId })
-      .from(tasks)
-      .where(
-        and(
-          eq(tasks.createdById, caregiverId),
-          eq(tasks.reviewState, 'ignored'),
-          inArray(tasks.sourceId, messageIds)
-        )
-      );
-    ignoredRows.forEach((row) => {
-      if (row.sourceId) ignoredSourceIds.add(row.sourceId);
-    });
-  }
+    if (messageIds.length > 0) {
+      const ignoredRows = await ctx.db
+        .select({ sourceId: tasks.sourceId })
+        .from(tasks)
+        .where(
+          and(
+            eq(tasks.createdById, caregiverId),
+            eq(tasks.reviewState, 'ignored'),
+            inArray(tasks.sourceId, messageIds)
+          )
+        );
+      ignoredRows.forEach((row) => {
+        if (row.sourceId) ignoredSourceIds.add(row.sourceId);
+      });
+    }
 
     const results = { created: 0, updated: 0, skipped: 0, errors: 0 };
 
     const concurrency = 3;
-  for (let i = 0; i < messageIds.length; i += concurrency) {
-    const batch = messageIds.slice(i, i + concurrency);
-    await Promise.all(
-      batch.map(async (id) => {
-        try {
-          if (ignoredSourceIds.has(id)) {
-            results.skipped += 1;
-            return;
+    for (let i = 0; i < messageIds.length; i += concurrency) {
+      const batch = messageIds.slice(i, i + concurrency);
+      await Promise.all(
+        batch.map(async (id) => {
+          try {
+            if (ignoredSourceIds.has(id)) {
+              results.skipped += 1;
+              return;
+            }
+
+            const { data } = await gmail.users.messages.get({
+              userId: 'me',
+              id,
+              format: 'full',
+            });
+
+            const outcome = await upsertTaskFromMessage({
+              ctx,
+              source,
+              caregiverId,
+              message: data,
+              ignoredSourceIds,
+            });
+            if (outcome.action === 'created') results.created += 1;
+            if (outcome.action === 'updated') results.updated += 1;
+            if (
+              outcome.action === 'skipped' ||
+              outcome.action === 'skipped_low_confidence' ||
+              outcome.action === 'skipped_ignored'
+            )
+              results.skipped += 1;
+          } catch (error) {
+            ctx.req?.log?.error({ err: error }, 'sync message failed');
+            results.errors += 1;
           }
-
-          const { data } = await gmail.users.messages.get({
-            userId: 'me',
-            id,
-            format: 'full',
-          });
-
-          const outcome = await upsertTaskFromMessage({
-            ctx,
-            source,
-            caregiverId,
-            message: data,
-            ignoredSourceIds,
-          });
-          if (outcome.action === 'created') results.created += 1;
-          if (outcome.action === 'updated') results.updated += 1;
-          if (
-            outcome.action === 'skipped' ||
-            outcome.action === 'skipped_low_confidence' ||
-            outcome.action === 'skipped_ignored'
-          )
-            results.skipped += 1;
-        } catch (error) {
-          ctx.req?.log?.error({ err: error }, 'sync message failed');
-          results.errors += 1;
-        }
-      })
-    );
-  }
+        })
+      );
+    }
 
     await ctx.db
       .update(sources)
