@@ -190,12 +190,13 @@ export default function ConnectionsScreen() {
       if (result.url) {
         const parsed = new URL(result.url);
         const code = parsed.searchParams.get('code');
-        if (code) {
-          await connectGoogle.mutateAsync({ code, redirectUri });
+        const state = parsed.searchParams.get('state');
+        if (code && state) {
+          await connectGoogle.mutateAsync({ code, redirectUri, state });
           const refreshedAfterConnect = await sourcesQuery.refetch();
           triggerWatchIfNeeded(refreshedAfterConnect.data);
         } else {
-          setConnectError('No code returned from Google.');
+          setConnectError('No code/state returned from Google.');
         }
       }
     } catch (error: any) {

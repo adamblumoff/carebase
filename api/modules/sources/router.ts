@@ -1,7 +1,14 @@
 import { TRPCError } from '@trpc/server';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { createOAuthClient, googleScope, hasGoogleConfig, signState } from '../../lib/google';
+import {
+  createOAuthClient,
+  googleScope,
+  hasGoogleConfig,
+  signState,
+  verifyState,
+  setOAuthRedirectUri,
+} from '../../lib/google';
 import { ensureCaregiver } from '../../lib/caregiver';
 import { sources } from '../../db/schema';
 import { authedProcedure, router } from '../../trpc/trpc';
@@ -45,6 +52,7 @@ export const sourcesRouter = router({
       z.object({
         code: z.string().min(1),
         redirectUri: z.string().url(),
+        state: z.string(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -56,9 +64,13 @@ export const sourcesRouter = router({
       }
 
       const caregiverId = await ensureCaregiver(ctx);
+      const parsedState = verifyState(input.state);
+      if (parsedState.caregiverId !== caregiverId) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'State does not match caregiver' });
+      }
 
       const client = createOAuthClient();
-      client.redirectUri = input.redirectUri;
+      setOAuthRedirectUri(client, input.redirectUri);
 
       const { tokens } = await client.getToken({ code: input.code, scope: googleScope });
 

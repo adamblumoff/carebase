@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useColorScheme } from 'nativewind';
 import {
   ActivityIndicator,
@@ -53,6 +53,8 @@ const Badge = ({ label, tone = 'neutral' }: { label: string; tone?: BadgeTone })
     <Text className="text-[11px] font-semibold capitalize">{label}</Text>
   </View>
 );
+
+const ROW_HEIGHT = 124;
 
 export default function TasksScreen() {
   useColorScheme();
@@ -231,27 +233,119 @@ export default function TasksScreen() {
     createTask.mutate({ title: trimmed, status: 'todo', type: newTaskType });
   };
 
-  const confirmDelete = (id: string) => {
-    Alert.alert(
-      'Delete task',
-      'Are you sure you want to delete this task?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => deleteTask.mutate({ id }),
-        },
-      ],
-      { cancelable: true }
-    );
-  };
-
-  const startEdit = (task: Task) => {
-    openEditSheet(task);
-  };
+  const confirmDelete = useCallback(
+    (id: string) => {
+      Alert.alert(
+        'Delete task',
+        'Are you sure you want to delete this task?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: () => deleteTask.mutate({ id }),
+          },
+        ],
+        { cancelable: true }
+      );
+    },
+    [deleteTask]
+  );
 
   type Task = NonNullable<typeof tasksQuery.data>[number];
+
+  type TaskListItemProps = {
+    item: Task;
+    isDeleting: boolean;
+    onToggle: (id: string) => void;
+    onEdit: (task: Task) => void;
+    onDelete: (id: string) => void;
+    onOpenDetails: (id: string) => void;
+  };
+
+  const TaskListItem = React.memo(
+    ({ item, isDeleting, onToggle, onEdit, onDelete, onOpenDetails }: TaskListItemProps) => {
+      const isDone = item.status === 'done';
+      return (
+        <View className="rounded-lg border border-border bg-surface-strong px-4 py-3 dark:border-border-dark dark:bg-surface-card-dark">
+          <View className="flex-row items-center justify-between">
+            <View className="flex-1 flex-row items-center gap-3 pr-3">
+              <Pressable
+                accessibilityLabel={isDone ? 'Mark task as todo' : 'Mark task as done'}
+                onPress={() => onToggle(item.id)}
+                style={({ pressed }) => ({
+                  opacity: pressed ? 0.7 : 1,
+                })}>
+                <View
+                  className={`h-6 w-6 items-center justify-center rounded-full border ${
+                    isDone ? 'border-primary bg-primary' : 'border-border dark:border-border-dark'
+                  }`}>
+                  {isDone && <Ionicons name="checkmark" size={16} color="#FFFFFF" />}
+                </View>
+              </Pressable>
+              <Pressable
+                className="flex-1"
+                accessibilityLabel="Open task details"
+                onPress={() => onOpenDetails(item.id)}
+                style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
+                <View className="flex-1">
+                  <View className="mb-1 flex-row flex-wrap items-center gap-2">
+                    <Badge label={formatType(item.type)} />
+                    {item.provider ? <Badge label={item.provider} tone="muted" /> : null}
+                    {item.reviewState === 'pending' ? (
+                      <Badge label="Needs review" tone="warn" />
+                    ) : null}
+                  </View>
+                  <Text className="text-base font-semibold text-text dark:text-text-dark">
+                    {item.title}
+                  </Text>
+                  <Text className="text-xs text-text-muted dark:text-text-muted-dark">
+                    Status: {item.status.replace('_', ' ')} • Confidence{' '}
+                    {formatConfidence(item.confidence)}
+                  </Text>
+                  {item.sender ? (
+                    <Text className="text-xs text-text-muted dark:text-text-muted-dark">
+                      From {item.sender}
+                    </Text>
+                  ) : null}
+                </View>
+              </Pressable>
+            </View>
+            <View className="flex-row items-center gap-3">
+              <Pressable
+                accessibilityLabel="Edit task"
+                onPress={() => onEdit(item)}
+                style={({ pressed }) => ({
+                  opacity: pressed ? 0.7 : 1,
+                })}>
+                <Ionicons name="create-outline" size={22} color="#4A8F6A" />
+              </Pressable>
+              <Pressable
+                accessibilityLabel="Delete task"
+                onPress={() => onDelete(item.id)}
+                disabled={isDeleting}
+                style={({ pressed }) => ({
+                  opacity: isDeleting ? 0.5 : pressed ? 0.7 : 1,
+                })}>
+                {isDeleting ? (
+                  <ActivityIndicator color="#E06262" />
+                ) : (
+                  <Ionicons name="trash-outline" size={22} color="#E06262" />
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      );
+    }
+  );
+
+  const startEdit = useCallback(
+    (task: Task) => {
+      openEditSheet(task);
+    },
+    [openEditSheet]
+  );
 
   const applyTaskPatch = (updater: (task: Task) => Task) => {
     utils.tasks.list.setData(undefined, (current) => (current ? current.map(updater) : current));
@@ -266,19 +360,19 @@ export default function TasksScreen() {
     return utils.tasks.list.getData()?.find((t) => t.id === id) ?? null;
   };
 
-  const openDetails = (id: string) => {
+  const openDetails = useCallback((id: string) => {
     setDetailsId(id);
-  };
+  }, []);
 
-  const closeDetails = () => setDetailsId(null);
+  const closeDetails = useCallback(() => setDetailsId(null), []);
 
-  const openEditSheet = (task: Task) => {
+  const openEditSheet = useCallback((task: Task) => {
     setEditTask(task);
-  };
+  }, []);
 
-  const closeEditSheet = () => {
+  const closeEditSheet = useCallback(() => {
     setEditTask(null);
-  };
+  }, []);
 
   const toggleStatus = trpc.tasks.toggleStatus.useMutation({
     onMutate: (input) => {
@@ -324,9 +418,12 @@ export default function TasksScreen() {
     },
   });
 
-  const handleToggleStatus = (id: string) => {
-    toggleStatus.mutate({ id });
-  };
+  const handleToggleStatus = useCallback(
+    (id: string) => {
+      toggleStatus.mutate({ id });
+    },
+    [toggleStatus]
+  );
 
   const reviewTask = trpc.tasks.review.useMutation({
     onMutate: async (input) => {
@@ -367,10 +464,13 @@ export default function TasksScreen() {
     },
   });
 
-  const handleReview = (action: 'approve' | 'ignore') => {
-    if (!pendingReview) return;
-    reviewTask.mutate({ id: pendingReview.id, action });
-  };
+  const handleReview = useCallback(
+    (action: 'approve' | 'ignore') => {
+      if (!pendingReview) return;
+      reviewTask.mutate({ id: pendingReview.id, action });
+    },
+    [pendingReview, reviewTask]
+  );
 
   const renderHeader = () => (
     <View className="gap-4 pb-4">
@@ -489,6 +589,20 @@ export default function TasksScreen() {
     );
   };
 
+  const renderItem = useCallback(
+    ({ item }: { item: Task }) => (
+      <TaskListItem
+        item={item}
+        isDeleting={deleteTask.isLoading && deletingId === item.id}
+        onToggle={handleToggleStatus}
+        onEdit={startEdit}
+        onDelete={confirmDelete}
+        onOpenDetails={openDetails}
+      />
+    ),
+    [confirmDelete, deleteTask.isLoading, deletingId, handleToggleStatus, openDetails, startEdit]
+  );
+
   return (
     <View className="flex flex-1 bg-surface px-4 dark:bg-surface-dark">
       <Stack.Screen options={{ title: 'Tasks' }} />
@@ -496,6 +610,16 @@ export default function TasksScreen() {
         <FlatList
           data={tasksQuery.data ?? []}
           keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          initialNumToRender={10}
+          maxToRenderPerBatch={8}
+          windowSize={8}
+          removeClippedSubviews
+          getItemLayout={(_, index) => ({
+            length: ROW_HEIGHT,
+            offset: ROW_HEIGHT * index,
+            index,
+          })}
           ListHeaderComponent={renderHeader}
           ListEmptyComponent={renderEmpty}
           refreshControl={
@@ -506,83 +630,6 @@ export default function TasksScreen() {
             />
           }
           contentContainerStyle={{ paddingBottom: 24, gap: 12 }}
-          renderItem={({ item }) => {
-            const isDone = item.status === 'done';
-            return (
-              <View className="rounded-lg border border-border bg-surface-strong px-4 py-3 dark:border-border-dark dark:bg-surface-card-dark">
-                <View className="flex-row items-center justify-between">
-                  <View className="flex-1 flex-row items-center gap-3 pr-3">
-                    <Pressable
-                      accessibilityLabel={isDone ? 'Mark task as todo' : 'Mark task as done'}
-                      onPress={() => handleToggleStatus(item.id)}
-                      style={({ pressed }) => ({
-                        opacity: pressed ? 0.7 : 1,
-                      })}>
-                      <View
-                        className={`h-6 w-6 items-center justify-center rounded-full border ${
-                          isDone
-                            ? 'border-primary bg-primary'
-                            : 'border-border dark:border-border-dark'
-                        }`}>
-                        {isDone && <Ionicons name="checkmark" size={16} color="#FFFFFF" />}
-                      </View>
-                    </Pressable>
-                    <Pressable
-                      className="flex-1"
-                      accessibilityLabel="Open task details"
-                      onPress={() => openDetails(item.id)}
-                      style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
-                      <View className="flex-1">
-                        <View className="mb-1 flex-row flex-wrap items-center gap-2">
-                          <Badge label={formatType(item.type)} />
-                          {item.provider ? <Badge label={item.provider} tone="muted" /> : null}
-                          {item.reviewState === 'pending' ? (
-                            <Badge label="Needs review" tone="warn" />
-                          ) : null}
-                        </View>
-                        <Text className="text-base font-semibold text-text dark:text-text-dark">
-                          {item.title}
-                        </Text>
-                        <Text className="text-xs text-text-muted dark:text-text-muted-dark">
-                          Status: {item.status.replace('_', ' ')} • Confidence{' '}
-                          {formatConfidence(item.confidence)}
-                        </Text>
-                        {item.sender ? (
-                          <Text className="text-xs text-text-muted dark:text-text-muted-dark">
-                            From {item.sender}
-                          </Text>
-                        ) : null}
-                      </View>
-                    </Pressable>
-                  </View>
-                  <View className="flex-row items-center gap-3">
-                    <Pressable
-                      accessibilityLabel="Edit task"
-                      onPress={() => startEdit(item)}
-                      style={({ pressed }) => ({
-                        opacity: pressed ? 0.7 : 1,
-                      })}>
-                      <Ionicons name="create-outline" size={22} color="#4A8F6A" />
-                    </Pressable>
-                    <Pressable
-                      accessibilityLabel="Delete task"
-                      onPress={() => confirmDelete(item.id)}
-                      disabled={deleteTask.isLoading && deletingId === item.id}
-                      style={({ pressed }) => ({
-                        opacity:
-                          deleteTask.isLoading && deletingId === item.id ? 0.5 : pressed ? 0.7 : 1,
-                      })}>
-                      {deleteTask.isLoading && deletingId === item.id ? (
-                        <ActivityIndicator color="#E06262" />
-                      ) : (
-                        <Ionicons name="trash-outline" size={22} color="#E06262" />
-                      )}
-                    </Pressable>
-                  </View>
-                </View>
-              </View>
-            );
-          }}
         />
       </Container>
 

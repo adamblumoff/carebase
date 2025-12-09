@@ -6,7 +6,7 @@ import { sources } from '../db/schema';
 import { syncSource } from '../modules/ingestion/router';
 import { syncCalendarSource } from '../modules/ingestion/calendar';
 import { debounceRun } from './pubsub';
-import { createGmailClient, isInvalidGrantError } from './google';
+import { createGmailClient, isInvalidGrantError, signWebhookToken } from './google';
 import { eq } from 'drizzle-orm';
 
 const useProd =
@@ -76,12 +76,13 @@ export const registerGmailWatch = async (
 
 export const registerCalendarWatch = async (
   calendar: ReturnType<typeof google.calendar>,
-  callbackToken?: string
+  sourceId: string
 ) => {
   const address = getWebhookAddress();
   if (!address) throw new Error('Missing webhook URL env for calendar watch');
 
   const channelId = randomUUID();
+  const callbackToken = signWebhookToken(sourceId);
 
   const res = await calendar.events.watch({
     calendarId: 'primary',
@@ -112,7 +113,10 @@ export const renewSource = async (source: typeof sources.$inferSelect) => {
   try {
     const { gmail, auth } = createGmailClient(source.refreshToken);
     const gmailWatch = await registerGmailWatch(gmail);
-    const calendarWatch = await registerCalendarWatch(google.calendar({ version: 'v3', auth }));
+    const calendarWatch = await registerCalendarWatch(
+      google.calendar({ version: 'v3', auth }),
+      source.id
+    );
 
     await db
       .update(sources)

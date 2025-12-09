@@ -8,7 +8,7 @@ import { appRouter } from './trpc/root';
 import { createContext } from './trpc/context';
 import { posthog } from './lib/posthog';
 import { db } from './db/client';
-import { createOAuthClient, googleScope, verifyState } from './lib/google';
+import { createOAuthClient, googleScope, verifyState, signWebhookToken, setOAuthRedirectUri } from './lib/google';
 import { sources } from './db/schema';
 import { syncSource } from './modules/ingestion/router';
 import { syncCalendarSource } from './modules/ingestion/calendar';
@@ -62,8 +62,7 @@ const registerPlugins = async () => {
       try {
         const { caregiverId } = verifyState(state);
         const client = createOAuthClient();
-        // use bracket notation to avoid TypeScript error for private property
-        (client as any)['redirectUri'] = process.env.GOOGLE_REDIRECT_URI;
+        setOAuthRedirectUri(client, process.env.GOOGLE_REDIRECT_URI ?? '');
 
         const tokenResponse = client.getToken(code);
         const tokens = (await tokenResponse).tokens;
@@ -135,22 +134,7 @@ const registerPlugins = async () => {
     const authHeader = request.headers.authorization;
     const audience = `https://${request.headers.host}/webhooks/google/push`;
 
-    // Gmail Pub/Sub push includes a JWT; Calendar web_hook does not. Only verify when present.
-    if (authHeader) {
-      try {
-        await verifyPubsubJwt(authHeader, audience);
-      } catch (err) {
-        request.log.error({ err }, 'pubsub jwt verification failed');
-        return reply.status(401).send({ ok: false });
-      }
-    }
-
-    const token = process.env.GOOGLE_PUBSUB_VERIFICATION_TOKEN;
-    const headerToken = request.headers['x-goog-channel-token'];
-    if (token && headerToken && token !== headerToken) {
-      request.log.warn('pubsub verification token mismatch');
-      return reply.status(401).send({ ok: false });
-    }
+    const headerToken = request.headers['x-goog-channel-token'] as string | undefined;
 
     const channelId = request.headers['x-goog-channel-id'] as string | undefined;
     const resourceId = request.headers['x-goog-resource-id'] as string | undefined;
@@ -191,6 +175,27 @@ const registerPlugins = async () => {
         request.log.debug({ channelId }, 'no source for channel');
       }
       return reply.status(202).send({ ok: true });
+    }
+
+    const isPubsubPush = Boolean(pubsubMessage);
+    const isCalendarPush = !isPubsubPush;
+
+    if (isPubsubPush) {
+      if (!authHeader) {
+        return reply.status(401).send({ ok: false, message: 'missing jwt' });
+      }
+      try {
+        await verifyPubsubJwt(authHeader, audience);
+      } catch (err) {
+        request.log.error({ err }, 'pubsub jwt verification failed');
+        return reply.status(401).send({ ok: false });
+      }
+    } else {
+      const expectedToken = signWebhookToken(source.id);
+      if (!headerToken || headerToken !== expectedToken) {
+        request.log.warn('calendar webhook token mismatch');
+        return reply.status(401).send({ ok: false });
+      }
     }
 
     debounceRun(source.id, 100, () => {

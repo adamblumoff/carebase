@@ -7,6 +7,10 @@ export const posthog = apiKey ? new PostHog(apiKey, { host }) : null;
 
 process.on('beforeExit', async () => {
   if (posthog) {
-    await posthog.shutdown();
+    try {
+      await posthog.shutdown();
+    } catch (err) {
+      console.warn('posthog shutdown failed', err);
+    }
   }
 });

@@ -9,6 +9,8 @@ import { createGmailClient, gmailQuery, isInvalidGrantError } from '../../lib/go
 import { parseMessage } from '../../lib/emailParser';
 import { classifyEmailWithVertex } from '../../lib/vertexClassifier';
 import { authedProcedure, router } from '../../trpc/trpc';
+import { withSourceLock } from '../../lib/sourceLock';
+import { IngestionCtx } from '../../lib/ingestionTypes';
 
 const gmailMessageLink = (accountEmail: string, messageId: string) =>
   `https://mail.google.com/mail/u/${encodeURIComponent(accountEmail)}/#all/${messageId}`;
@@ -93,7 +95,7 @@ async function upsertTaskFromMessage({
   message,
   ignoredSourceIds,
 }: {
-  ctx: any;
+  ctx: IngestionCtx;
   source: typeof sources.$inferSelect;
   caregiverId: string;
   message: google.gmail_v1.Schema$Message;
@@ -241,50 +243,55 @@ export async function syncSource({
   caregiverIdOverride,
   reason = 'manual',
 }: {
-  ctx: any;
+  ctx: IngestionCtx;
   sourceId: string;
   caregiverIdOverride?: string;
   reason?: string;
 }) {
-  const [source] = await ctx.db.select().from(sources).where(eq(sources.id, sourceId)).limit(1);
+  return withSourceLock(sourceId, async () => {
+    const [source] = await ctx.db.select().from(sources).where(eq(sources.id, sourceId)).limit(1);
 
-  if (!source) {
-    throw new TRPCError({ code: 'NOT_FOUND', message: 'Source not found' });
-  }
-
-  const caregiverId = caregiverIdOverride ?? source.caregiverId;
-
-  if (source.status === 'disconnected') {
-    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Source is disconnected' });
-  }
-
-  const { gmail } = createGmailClient(source.refreshToken);
-
-  const startedAt = new Date();
-
-  const markErrored = async (message: string) => {
-    await ctx.db
-      .update(sources)
-      .set({ status: 'errored', errorMessage: message, updatedAt: new Date() })
-      .where(eq(sources.id, source.id));
-  };
-
-  const { messageIds, nextHistoryId, stats } = await (async () => {
-    try {
-      return await fetchMessages(gmail, source.accountEmail, source.historyId);
-    } catch (err) {
-      if (isInvalidGrantError(err)) {
-        await markErrored('Google access revoked or expired; reconnect this account');
-        throw new TRPCError({
-          code: 'FAILED_PRECONDITION',
-          message: 'Google connection expired; reconnect to resume syncing',
-        });
-      }
-      throw err;
+    if (!source) {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Source not found' });
     }
-  })();
 
-  const log = ctx.req?.log ?? console;
+    const caregiverId = caregiverIdOverride ?? source.caregiverId;
+
+    if (caregiverId !== source.caregiverId) {
+      throw new TRPCError({ code: 'FORBIDDEN', message: 'Source does not belong to caregiver' });
+    }
+
+    if (source.status === 'disconnected') {
+      throw new TRPCError({ code: 'BAD_REQUEST', message: 'Source is disconnected' });
+    }
+
+    const { gmail } = createGmailClient(source.refreshToken);
+
+    const startedAt = new Date();
+
+    const markErrored = async (message: string) => {
+      await ctx.db
+        .update(sources)
+        .set({ status: 'errored', errorMessage: message, updatedAt: new Date() })
+        .where(eq(sources.id, source.id));
+    };
+
+    const { messageIds, nextHistoryId, stats } = await (async () => {
+      try {
+        return await fetchMessages(gmail, source.accountEmail, source.historyId);
+      } catch (err) {
+        if (isInvalidGrantError(err)) {
+          await markErrored('Google access revoked or expired; reconnect this account');
+          throw new TRPCError({
+            code: 'FAILED_PRECONDITION',
+            message: 'Google connection expired; reconnect to resume syncing',
+          });
+        }
+        throw err;
+      }
+    })();
+
+    const log = ctx.req?.log ?? console;
   log.info?.(
     {
       sourceId: source.id,
@@ -298,7 +305,7 @@ export async function syncSource({
   );
 
   // Preload ignored tasks for this caregiver/source set to avoid per-message lookups.
-  const ignoredSourceIds = new Set<string>();
+    const ignoredSourceIds = new Set<string>();
   if (messageIds.length > 0) {
     const ignoredRows = await ctx.db
       .select({ sourceId: tasks.sourceId })
@@ -315,9 +322,9 @@ export async function syncSource({
     });
   }
 
-  const results = { created: 0, updated: 0, skipped: 0, errors: 0 };
+    const results = { created: 0, updated: 0, skipped: 0, errors: 0 };
 
-  const concurrency = 3;
+    const concurrency = 3;
   for (let i = 0; i < messageIds.length; i += concurrency) {
     const batch = messageIds.slice(i, i + concurrency);
     await Promise.all(
@@ -357,35 +364,36 @@ export async function syncSource({
     );
   }
 
-  await ctx.db
-    .update(sources)
-    .set({ historyId: nextHistoryId ?? source.historyId, lastSyncAt: new Date() })
-    .where(eq(sources.id, source.id));
+    await ctx.db
+      .update(sources)
+      .set({ historyId: nextHistoryId ?? source.historyId, lastSyncAt: new Date() })
+      .where(eq(sources.id, source.id));
 
-  const changed = results.created + results.updated + results.errors;
-  if (changed > 0) {
-    await ctx.db.insert(ingestionEvents).values({
-      sourceId: source.id,
-      caregiverId,
-      provider: source.provider,
-      type: 'gmail',
-      ingestionId: `${reason}-${Date.now()}`,
-      historyId: nextHistoryId ?? source.historyId ?? undefined,
-      startedAt,
-      finishedAt: new Date(),
-      createdCount: results.created,
-      updatedCount: results.updated,
-      skippedCount: results.skipped,
-      errorCount: results.errors,
-      durationMs: new Date().getTime() - startedAt.getTime(),
-    });
-  }
+    const changed = results.created + results.updated + results.errors;
+    if (changed > 0) {
+      await ctx.db.insert(ingestionEvents).values({
+        sourceId: source.id,
+        caregiverId,
+        provider: source.provider,
+        type: 'gmail',
+        ingestionId: `${reason}-${Date.now()}`,
+        historyId: nextHistoryId ?? source.historyId ?? undefined,
+        startedAt,
+        finishedAt: new Date(),
+        createdCount: results.created,
+        updatedCount: results.updated,
+        skippedCount: results.skipped,
+        errorCount: results.errors,
+        durationMs: new Date().getTime() - startedAt.getTime(),
+      });
+    }
 
-  return {
-    ...results,
-    historyId: nextHistoryId ?? source.historyId,
-    messageCount: messageIds.length,
-  };
+    return {
+      ...results,
+      historyId: nextHistoryId ?? source.historyId,
+      messageCount: messageIds.length,
+    };
+  });
 }
 
 export const ingestionRouter = router({

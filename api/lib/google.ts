@@ -51,6 +51,11 @@ if (!stateSecret) {
   throw new Error('GOOGLE_STATE_SECRET environment variable is required');
 }
 
+export const setOAuthRedirectUri = (client: InstanceType<typeof google.auth.OAuth2>, uri: string) => {
+  // redirectUri is typed as readonly in google-auth-library, so use defineProperty to avoid casts.
+  Object.defineProperty(client, 'redirectUri', { value: uri, writable: false });
+};
+
 export const signState = (payload: { caregiverId: string }) => {
   const raw = JSON.stringify(payload);
   const signature = createHmac('sha256', stateSecret).update(raw).digest('base64url');
@@ -70,4 +75,8 @@ export const verifyState = (state: string) => {
   const parsed = JSON.parse(raw) as { caregiverId: string };
   if (!parsed?.caregiverId) throw new Error('Invalid state payload');
   return parsed;
+};
+
+export const signWebhookToken = (sourceId: string) => {
+  return createHmac('sha256', stateSecret).update(sourceId).digest('base64url');
 };

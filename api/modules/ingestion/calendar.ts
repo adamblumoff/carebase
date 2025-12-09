@@ -4,6 +4,8 @@ import { and, desc, eq } from 'drizzle-orm';
 
 import { sources, tasks } from '../../db/schema';
 import { isInvalidGrantError } from '../../lib/google';
+import { IngestionCtx } from '../../lib/ingestionTypes';
+import { withSourceLock } from '../../lib/sourceLock';
 
 const ensureCalendarClient = (refreshToken: string) => {
   const oauth = new google.auth.OAuth2(
@@ -43,77 +45,82 @@ export async function syncCalendarSource({
   sourceId,
   caregiverId,
 }: {
-  ctx: any;
+  ctx: IngestionCtx;
   sourceId: string;
   caregiverId: string;
 }) {
-  const [source] = await ctx.db.select().from(sources).where(eq(sources.id, sourceId)).limit(1);
-  if (!source) throw new TRPCError({ code: 'NOT_FOUND', message: 'Source not found' });
-  if (source.status === 'disconnected') {
-    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Source is disconnected' });
-  }
+  return withSourceLock(sourceId, async () => {
+    const [source] = await ctx.db.select().from(sources).where(eq(sources.id, sourceId)).limit(1);
+    if (!source) throw new TRPCError({ code: 'NOT_FOUND', message: 'Source not found' });
+    if (source.caregiverId !== caregiverId) {
+      throw new TRPCError({ code: 'FORBIDDEN', message: 'Source does not belong to caregiver' });
+    }
+    if (source.status === 'disconnected') {
+      throw new TRPCError({ code: 'BAD_REQUEST', message: 'Source is disconnected' });
+    }
 
-  const calendar = ensureCalendarClient(source.refreshToken);
+    const calendar = ensureCalendarClient(source.refreshToken);
 
-  const markErrored = async (message: string) => {
+    const markErrored = async (message: string) => {
+      await ctx.db
+        .update(sources)
+        .set({ status: 'errored', errorMessage: message, updatedAt: new Date() })
+        .where(eq(sources.id, source.id));
+    };
+
+    const eventsRes = await (async () => {
+      try {
+        return await calendar.events.list({
+          calendarId: 'primary',
+          syncToken: source.calendarSyncToken ?? undefined,
+          maxResults: 20,
+          singleEvents: true,
+          showDeleted: false,
+          orderBy: 'updated',
+        });
+      } catch (err) {
+        if (isInvalidGrantError(err)) {
+          await markErrored('Google calendar access expired; please reconnect');
+          throw new TRPCError({
+            code: 'FAILED_PRECONDITION',
+            message: 'Google connection expired; reconnect to continue syncing calendar',
+          });
+        }
+        throw err;
+      }
+    })();
+
+    const nextSyncToken = eventsRes.data.nextSyncToken ?? source.calendarSyncToken ?? null;
+    const items = eventsRes.data.items ?? [];
+
+    let created = 0;
+    let updated = 0;
+
+    for (const ev of items) {
+      if (!ev.id) continue;
+      const payload = toTaskPayload(ev, caregiverId, source);
+
+      const existing = await ctx.db
+        .select()
+        .from(tasks)
+        .where(and(eq(tasks.createdById, caregiverId), eq(tasks.sourceId, ev.id)))
+        .orderBy(desc(tasks.createdAt))
+        .limit(1);
+
+      if (existing.length > 0) {
+        await ctx.db.update(tasks).set(payload).where(eq(tasks.id, existing[0].id));
+        updated += 1;
+      } else {
+        await ctx.db.insert(tasks).values({ ...payload, createdAt: new Date() });
+        created += 1;
+      }
+    }
+
     await ctx.db
       .update(sources)
-      .set({ status: 'errored', errorMessage: message, updatedAt: new Date() })
+      .set({ calendarSyncToken: nextSyncToken ?? source.calendarSyncToken, lastSyncAt: new Date() })
       .where(eq(sources.id, source.id));
-  };
 
-  const eventsRes = await (async () => {
-    try {
-      return await calendar.events.list({
-        calendarId: 'primary',
-        syncToken: source.calendarSyncToken ?? undefined,
-        maxResults: 20,
-        singleEvents: true,
-        showDeleted: false,
-        orderBy: 'updated',
-      });
-    } catch (err) {
-      if (isInvalidGrantError(err)) {
-        await markErrored('Google calendar access expired; please reconnect');
-        throw new TRPCError({
-          code: 'FAILED_PRECONDITION',
-          message: 'Google connection expired; reconnect to continue syncing calendar',
-        });
-      }
-      throw err;
-    }
-  })();
-
-  const nextSyncToken = eventsRes.data.nextSyncToken ?? source.calendarSyncToken ?? null;
-  const items = eventsRes.data.items ?? [];
-
-  let created = 0;
-  let updated = 0;
-
-  for (const ev of items) {
-    if (!ev.id) continue;
-    const payload = toTaskPayload(ev, caregiverId, source);
-
-    const existing = await ctx.db
-      .select()
-      .from(tasks)
-      .where(and(eq(tasks.createdById, caregiverId), eq(tasks.sourceId, ev.id)))
-      .orderBy(desc(tasks.createdAt))
-      .limit(1);
-
-    if (existing.length > 0) {
-      await ctx.db.update(tasks).set(payload).where(eq(tasks.id, existing[0].id));
-      updated += 1;
-    } else {
-      await ctx.db.insert(tasks).values({ ...payload, createdAt: new Date() });
-      created += 1;
-    }
-  }
-
-  await ctx.db
-    .update(sources)
-    .set({ calendarSyncToken: nextSyncToken ?? source.calendarSyncToken, lastSyncAt: new Date() })
-    .where(eq(sources.id, source.id));
-
-  return { created, updated, items: items.length, nextSyncToken };
+    return { created, updated, items: items.length, nextSyncToken };
+  });
 }

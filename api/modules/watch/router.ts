@@ -25,7 +25,7 @@ export const watchRouter = router({
         const calendar = google.calendar({ version: 'v3', auth });
 
         const gmailWatch = await registerGmailWatch(gmail);
-        const calendarWatch = await registerCalendarWatch(calendar);
+        const calendarWatch = await registerCalendarWatch(calendar, source.id);
 
         let nextSyncToken: string | null = null;
         try {
