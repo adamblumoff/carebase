@@ -142,23 +142,21 @@ export const taskRouter = router({
       .orderBy(desc(tasks.createdAt));
   }),
 
-  byId: authedProcedure
-    .input(z.object({ id: z.string().uuid() }))
-    .query(async ({ ctx, input }) => {
-      const caregiverId = await ensureCaregiver(ctx);
+  byId: authedProcedure.input(z.object({ id: z.string().uuid() })).query(async ({ ctx, input }) => {
+    const caregiverId = await ensureCaregiver(ctx);
 
-      const [row] = await ctx.db
-        .select()
-        .from(tasks)
-        .where(and(eq(tasks.id, input.id), eq(tasks.createdById, caregiverId)))
-        .limit(1);
+    const [row] = await ctx.db
+      .select()
+      .from(tasks)
+      .where(and(eq(tasks.id, input.id), eq(tasks.createdById, caregiverId)))
+      .limit(1);
 
-      if (!row) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
-      }
+    if (!row) {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
+    }
 
-      return row;
-    }),
+    return row;
+  }),
 
   upcoming: authedProcedure
     .input(z.object({ days: z.number().int().min(1).max(30).default(7) }).optional())
