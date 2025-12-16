@@ -158,10 +158,6 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
     }
   }, [tasksError, tasksIsError]);
 
-  const pendingReview = useMemo(() => {
-    return tasksData?.find((item) => item.reviewState === 'pending');
-  }, [tasksData]);
-
   const onRefresh = async () => {
     try {
       setIsRefreshing(true);
@@ -744,46 +740,6 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
         pendingReviewCount={statsQuery.data?.pendingReviewCount}
         upcomingCount={statsQuery.data?.upcomingCount}
       />
-
-      {view === 'all' && pendingReview ? (
-        <View className="gap-2 rounded-2xl border border-amber-300 bg-amber-50 p-4 shadow-sm">
-          <View className="flex-row items-center justify-between">
-            <Text className="text-base font-semibold text-amber-900">Needs review</Text>
-            <Text className="text-xs text-amber-800">
-              {formatConfidence(pendingReview.confidence)} confident
-            </Text>
-          </View>
-          <Text className="text-sm font-semibold text-text">{pendingReview.title}</Text>
-          <Text className="text-xs text-text-muted dark:text-text-muted-dark">
-            From {pendingReview.sender ?? 'unknown sender'}{' '}
-            {pendingReview.provider ? `• ${pendingReview.provider}` : ''}
-          </Text>
-          <View className="mt-3 flex-row items-center gap-3">
-            <Pressable
-              onPress={() => handleReview(pendingReview.id, 'approve')}
-              disabled={reviewTask.isLoading}
-              className="flex-1 items-center justify-center rounded-full bg-primary px-4 py-2"
-              style={({ pressed }) => ({
-                opacity: reviewTask.isLoading ? 0.6 : pressed ? 0.85 : 1,
-              })}>
-              {reviewTask.isLoading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text className="text-base font-semibold text-white">Accept</Text>
-              )}
-            </Pressable>
-            <Pressable
-              onPress={() => handleReview(pendingReview.id, 'ignore')}
-              disabled={reviewTask.isLoading}
-              className="flex-1 items-center justify-center rounded-full border border-border px-4 py-2 dark:border-border-dark"
-              style={({ pressed }) => ({
-                opacity: reviewTask.isLoading ? 0.6 : pressed ? 0.75 : 1,
-              })}>
-              <Text className="text-base font-semibold text-text">Ignore</Text>
-            </Pressable>
-          </View>
-        </View>
-      ) : null}
 
       {view === 'all' ? (
         <ScrollView
