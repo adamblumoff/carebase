@@ -856,6 +856,7 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
           maxToRenderPerBatch={8}
           windowSize={8}
           removeClippedSubviews
+          scrollIndicatorInsets={{ top: 92 }}
           getItemLayout={(_, index) => ({
             length: ROW_HEIGHT,
             offset: ROW_HEIGHT * index,
@@ -866,7 +867,7 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
           refreshControl={
             <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor="#4A8F6A" />
           }
-          contentContainerStyle={{ paddingBottom: 24, gap: 12 }}
+          contentContainerStyle={{ paddingBottom: 24, gap: 12, paddingRight: 12 }}
         />
       </Container>
 
@@ -876,7 +877,7 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
         animationType="slide"
         onRequestClose={() => setIsFilterModalOpen(false)}
         statusBarTranslucent>
-        <Pressable className="flex-1 bg-black/40" onPress={() => setIsFilterModalOpen(false)}>
+        <Pressable className="flex-1 bg-transparent" onPress={() => setIsFilterModalOpen(false)}>
           <Pressable
             className="absolute bottom-0 w-full rounded-t-3xl border border-border bg-white px-5 pb-8 pt-4 dark:border-border-dark dark:bg-surface-card-dark"
             onPress={() => {}}>
