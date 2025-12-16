@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useColorScheme } from 'nativewind';
 import {
   ActivityIndicator,
@@ -470,6 +470,45 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
     );
   };
 
+  const removeTaskFromListThinCaches = (
+    id: string,
+    targetListInput: typeof listInput,
+    options?: { includeAll?: boolean }
+  ) => {
+    if (options?.includeAll) {
+      utils.tasks.listThin.setData(undefined, (current) =>
+        current ? current.filter((item) => item.id !== id) : current
+      );
+    }
+
+    utils.tasks.listThin.setData(targetListInput, (current) =>
+      current ? current.filter((item) => item.id !== id) : current
+    );
+  };
+
+  const removeTaskFromUpcomingCache = (id: string) => {
+    utils.tasks.upcoming.setData(undefined, (current) =>
+      current ? current.filter((item) => item.id !== id) : current
+    );
+  };
+
+  const applyTaskPatchNonPendingListInput = (
+    updater: (task: Task) => Task,
+    targetListInput: typeof listInput
+  ) => {
+    utils.tasks.listThin.setData(undefined, (current) =>
+      current ? current.map(updater) : current
+    );
+    if (targetListInput && targetListInput.reviewState !== 'pending') {
+      utils.tasks.listThin.setData(targetListInput, (current) =>
+        current ? current.map(updater) : current
+      );
+    }
+    utils.tasks.upcoming.setData(undefined, (current) =>
+      current ? current.map(updater) : current
+    );
+  };
+
   const getCurrentTask = (id: string) => {
     const fromFiltered = listInput
       ? utils.tasks.listThin.getData(listInput)?.find((t) => t.id === id)
@@ -528,29 +567,115 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
     [toggleStatus]
   );
 
+  const optimisticReviewRef = useRef(new Map<string, number>());
+
   const reviewTask = trpc.tasks.review.useMutation({
-    onMutate: async (input) => {
+    onMutate: (input) => {
       void utils.tasks.listThin.cancel();
       void utils.tasks.upcoming.cancel();
+
+      const stamp = Date.now();
+      optimisticReviewRef.current.set(input.id, stamp);
+
+      const listInputAtMutate = listInput;
       const previousAll = utils.tasks.listThin.getData();
-      const previousFiltered = listInput ? utils.tasks.listThin.getData(listInput) : undefined;
+      const previousFiltered = listInputAtMutate
+        ? utils.tasks.listThin.getData(listInputAtMutate)
+        : undefined;
+      const previousUpcoming = utils.tasks.upcoming.getData();
+      const statsInput = { upcomingDays: 7 };
+      const previousStats = utils.tasks.stats.getData(statsInput);
+
+      const currentTask = getCurrentTask(input.id);
+      const wasPendingReview = currentTask?.reviewState === 'pending';
+      const wasUpcoming = !!previousUpcoming?.some((item) => item.id === input.id);
 
       if (input.action === 'ignore') {
-        applyTaskPatch((item) =>
-          item.id === input.id ? { ...item, reviewState: 'ignored', status: 'done' } : item
-        );
+        removeTaskFromListThinCaches(input.id, listInputAtMutate, { includeAll: true });
+        removeTaskFromUpcomingCache(input.id);
       } else {
-        applyTaskPatch((item) =>
-          item.id === input.id ? { ...item, reviewState: 'approved' } : item
-        );
+        if (listInputAtMutate?.reviewState === 'pending') {
+          removeTaskFromListThinCaches(input.id, listInputAtMutate);
+          applyTaskPatchNonPendingListInput(
+            (item) => (item.id === input.id ? { ...item, reviewState: 'approved' } : item),
+            listInputAtMutate
+          );
+        } else {
+          applyTaskPatch((item) =>
+            item.id === input.id ? { ...item, reviewState: 'approved' } : item
+          );
+        }
       }
 
-      return { previousAll, previousFiltered };
+      if (previousStats) {
+        utils.tasks.stats.setData(statsInput, (current) => {
+          if (!current) return current;
+          const pendingDelta = wasPendingReview && current.pendingReviewCount > 0 ? 1 : 0;
+          return {
+            pendingReviewCount: Math.max(0, current.pendingReviewCount - pendingDelta),
+            upcomingCount: wasUpcoming
+              ? Math.max(0, current.upcomingCount - 1)
+              : current.upcomingCount,
+          };
+        });
+      }
+
+      return {
+        previousAll,
+        previousFiltered,
+        previousUpcoming,
+        previousStats,
+        stamp,
+        listInputAtMutate,
+      };
     },
     onError: (_error, _input, context) => {
+      if (!context) return;
+      if (optimisticReviewRef.current.get(_input.id) !== context.stamp) return;
+
       if (context?.previousAll) utils.tasks.listThin.setData(undefined, context.previousAll);
-      if (listInput && context?.previousFiltered) {
-        utils.tasks.listThin.setData(listInput, context.previousFiltered);
+      if (context?.listInputAtMutate && context?.previousFiltered) {
+        utils.tasks.listThin.setData(context.listInputAtMutate, context.previousFiltered);
+      }
+      if (context?.previousUpcoming) {
+        utils.tasks.upcoming.setData(undefined, context.previousUpcoming);
+      }
+      if (context?.previousStats) {
+        utils.tasks.stats.setData({ upcomingDays: 7 }, context.previousStats);
+      }
+    },
+    onSuccess: (updated, input, context) => {
+      if (!context) return;
+      if (optimisticReviewRef.current.get(input.id) !== context.stamp) return;
+      optimisticReviewRef.current.delete(input.id);
+
+      if (input.action === 'ignore') {
+        removeTaskFromListThinCaches(input.id, context.listInputAtMutate, { includeAll: true });
+        removeTaskFromUpcomingCache(input.id);
+        return;
+      }
+
+      const thin = asTaskThin(updated);
+      utils.tasks.listThin.setData(undefined, (current) =>
+        current
+          ? current.map((item) => {
+              if (item.id !== thin.id) return item;
+              if (item.reviewState !== 'approved') return item;
+              return { ...item, ...thin };
+            })
+          : current
+      );
+
+      if (context.listInputAtMutate && context.listInputAtMutate.reviewState !== 'pending') {
+        utils.tasks.listThin.setData(context.listInputAtMutate, (current) =>
+          current
+            ? current.map((item) => {
+                if (item.id !== thin.id) return item;
+                if (item.reviewState !== 'approved') return item;
+                return { ...item, ...thin };
+              })
+            : current
+        );
       }
     },
     onSettled: () => {
@@ -592,14 +717,16 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
                 {
                   text: 'Always ignore sender',
                   style: 'destructive' as const,
-                  onPress: async () => {
-                    try {
-                      await suppressSender.mutateAsync({ senderDomain: item.senderDomain! });
-                    } catch (err: any) {
-                      Alert.alert('Could not suppress sender', err?.message ?? 'Unknown error');
-                    } finally {
-                      handleReview(item.id, 'ignore');
-                    }
+                  onPress: () => {
+                    handleReview(item.id, 'ignore');
+                    suppressSender.mutate(
+                      { senderDomain: item.senderDomain! },
+                      {
+                        onError: (err: any) => {
+                          Alert.alert('Could not suppress sender', err?.message ?? 'Unknown error');
+                        },
+                      }
+                    );
                   },
                 },
               ]
