@@ -6,12 +6,16 @@ type ClassificationInput = {
   subject: string;
   snippet: string;
   body?: string | null;
+  sender?: string | null;
+  labelIds?: string[] | null;
+  headers?: Record<string, string | undefined> | null;
 };
 
 export type ClassificationResult =
   | {
       label: ClassificationLabel;
       confidence: number;
+      reason?: string;
       projectId?: string | null;
       rawText?: string;
     }
@@ -66,6 +70,26 @@ export const classifyEmailWithVertex = async (
 
   const url = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${LOCATION}/publishers/google/models/${MODEL_ID}:generateContent`;
 
+  const responseSchema = {
+    type: 'object',
+    properties: {
+      label: {
+        type: 'string',
+        enum: ['appointments', 'bills', 'medications', 'needs_review', 'ignore'],
+      },
+      confidence: { type: 'number', minimum: 0, maximum: 1 },
+      reason: { type: 'string' },
+    },
+    required: ['label', 'confidence', 'reason'],
+    additionalProperties: false,
+  };
+
+  const headerLines = Object.entries(input.headers ?? {})
+    .filter(([, v]) => Boolean(v))
+    .slice(0, 20)
+    .map(([k, v]) => `${k}: ${truncate(String(v), 300)}`)
+    .join('\n');
+
   const body = {
     contents: [
       {
@@ -73,20 +97,51 @@ export const classifyEmailWithVertex = async (
         parts: [
           {
             text: [
-              'Classify this email into one of: appointments, bills, medications, needs_review, ignore.',
-              'Return JSON: {"label": "<one_of_labels>", "confidence": 0.0-1.0, "reason": "..."}',
+              'You are an email-to-task filter for a caregiver app.',
+              'Goal: only create tasks for actionable care items. Everything else should be ignore or needs_review.',
+              '',
+              'Actionable examples (create task):',
+              '- Appointment confirmations or changes (often has date/time, location, calendar invite/ICS, provider name).',
+              '- Bills/invoices that require payment or follow-up (often has amount due, due date, statement period, account/invoice number).',
+              '- Medication prescriptions/refills (often has medication name, dosage, pharmacy, refill due date, prescribing provider).',
+              '',
+              'Non-actionable examples (ignore):',
+              '- Newsletters, promotions, marketing, coupons, “refill your cart”, “appointment specials”.',
+              '- Social notifications, forum digests, product updates.',
+              '- Shipping updates and receipts that do not require action.',
+              '',
+              'If uncertain, choose needs_review with lower confidence.',
+              'Return ONLY JSON matching this schema: {"label": "...", "confidence": 0.0-1.0, "reason": "..."}',
               `Subject: ${truncate(input.subject, 500)}`,
-              `Snippet: ${truncate(input.snippet, 500)}`,
+              `From: ${truncate(input.sender ?? '', 200)}`,
+              `Gmail labels: ${(input.labelIds ?? []).slice(0, 20).join(', ')}`,
+              headerLines ? `Headers:\n${headerLines}` : 'Headers: (none)',
+              `Snippet: ${truncate(input.snippet, 700)}`,
               `Body: ${truncate(input.body ?? '', 3500)}`,
             ].join('\n'),
           },
         ],
       },
     ],
+    // Vertex GenerateContent has multiple client surfaces/docs that show either camelCase or snake_case
+    // request fields. To be resilient, send both shapes.
     generationConfig: {
       temperature: 0,
       maxOutputTokens: 128,
+      responseMimeType: 'application/json',
+      responseSchema,
       response_mime_type: 'application/json',
+      response_schema: responseSchema,
+      max_output_tokens: 128,
+    },
+    generation_config: {
+      temperature: 0,
+      max_output_tokens: 128,
+      response_mime_type: 'application/json',
+      response_schema: responseSchema,
+      responseMimeType: 'application/json',
+      responseSchema,
+      maxOutputTokens: 128,
     },
   };
 
@@ -116,6 +171,7 @@ export const classifyEmailWithVertex = async (
 
     const label = normalizeLabel(parsed.label);
     const confidence = clamp01(Number(parsed.confidence ?? parsed.score ?? 0));
+    const reason = typeof parsed.reason === 'string' ? parsed.reason : undefined;
 
     if (!label) {
       return { error: new Error('Vertex returned unknown label') };
@@ -124,6 +180,7 @@ export const classifyEmailWithVertex = async (
     return {
       label,
       confidence,
+      reason,
       projectId,
       rawText: text,
     };

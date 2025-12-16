@@ -51,7 +51,17 @@ const stripHtml = (html: string) => {
   return decodeHtmlEntities(withoutTags);
 };
 
-const normalizeWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim();
+const normalizeWhitespacePreserveNewlines = (value: string) => {
+  const normalizedNewlines = value.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const collapsedSpaces = normalizedNewlines
+    .split('\n')
+    .map((line) => line.replace(/[ \t\f\v]+/g, ' ').trimEnd())
+    .join('\n');
+  return collapsedSpaces.replace(/\n{3,}/g, '\n\n').trim();
+};
+
+const normalizeWhitespace = (value: string) =>
+  normalizeWhitespacePreserveNewlines(value).replace(/\n+/g, ' ').trim();
 
 const base64ToString = (data: string) => Buffer.from(data, 'base64').toString('utf8');
 
@@ -94,11 +104,31 @@ const pickTextBody = (parts: FlattenedPart[]): { text?: string; html?: string } 
   return { text, html };
 };
 
+const stripCommonFooterNoise = (value: string) => {
+  const lower = value.toLowerCase();
+  const cutMarkers = [
+    '\nunsubscribe',
+    '\nmanage preferences',
+    '\nupdate your preferences',
+    '\nprivacy policy',
+    '\nterms of service',
+    '\nview in browser',
+  ];
+  const cutAt = cutMarkers
+    .map((marker) => lower.indexOf(marker))
+    .filter((idx) => idx >= 0)
+    .sort((a, b) => a - b)[0];
+  if (cutAt === undefined) return value;
+  if (cutAt < 200) return value;
+  return value.slice(0, cutAt).trim();
+};
+
 const toPlainDescription = (text?: string, html?: string) => {
   const raw = text ?? (html ? stripHtml(html) : null);
   if (!raw) return null;
-  const normalized = normalizeWhitespace(raw);
-  return normalized.slice(0, MAX_DESCRIPTION_LENGTH);
+  const normalized = normalizeWhitespacePreserveNewlines(raw);
+  const trimmedNoise = stripCommonFooterNoise(normalized);
+  return trimmedNoise.slice(0, MAX_DESCRIPTION_LENGTH);
 };
 
 const parseDateTokens = (value: string): Date | null => {
@@ -206,7 +236,9 @@ const parseMedicationDetails = (text: string, subject: string) => {
   const medicationName = (() => {
     const nameMatch =
       subject.match(/(rx|prescription):?\s*(.+)/i) ?? text.match(/medication[:\s]+(.+)/i);
-    return nameMatch ? normalizeWhitespace(nameMatch[2] ?? nameMatch[1]) : subject.trim();
+    return nameMatch
+      ? normalizeWhitespacePreserveNewlines(nameMatch[2] ?? nameMatch[1])
+      : subject.trim();
   })();
 
   const dosage = (() => {

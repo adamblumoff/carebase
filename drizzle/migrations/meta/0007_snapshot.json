@@ -1,6 +1,6 @@
 {
-  "id": "0eb5428e-8d0a-4b22-ae01-bc6fb74ae605",
-  "prevId": "e627d4cc-06a7-4c06-bcf7-fb798c9060c8",
+  "id": "087b55f7-b39f-43e1-b230-db0d44577b89",
+  "prevId": "45efad27-3561-4322-ad2b-0905cfed1520",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -220,6 +220,117 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.sender_suppressions": {
+      "name": "sender_suppressions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "caregiver_id": {
+          "name": "caregiver_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "source_provider",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sender_domain": {
+          "name": "sender_domain",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ignore_count": {
+          "name": "ignore_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "suppressed": {
+          "name": "suppressed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "last_ignored_at": {
+          "name": "last_ignored_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "sender_suppressions_caregiver_provider_domain_uidx": {
+          "name": "sender_suppressions_caregiver_provider_domain_uidx",
+          "columns": [
+            {
+              "expression": "caregiver_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sender_domain",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "sender_suppressions_caregiver_id_caregivers_id_fk": {
+          "name": "sender_suppressions_caregiver_id_caregivers_id_fk",
+          "tableFrom": "sender_suppressions",
+          "tableTo": "caregivers",
+          "columnsFrom": ["caregiver_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.sources": {
       "name": "sources",
       "schema": "",
@@ -321,6 +432,12 @@
         "calendar_sync_token": {
           "name": "calendar_sync_token",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_push_at": {
+          "name": "last_push_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -521,6 +638,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "sender_domain": {
+          "name": "sender_domain",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "raw_snippet": {
           "name": "raw_snippet",
           "type": "text",
@@ -542,6 +665,12 @@
         "ingestion_id": {
           "name": "ingestion_id",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ingestion_debug": {
+          "name": "ingestion_debug",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -668,7 +797,29 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "tasks_created_by_source_uidx": {
+          "name": "tasks_created_by_source_uidx",
+          "columns": [
+            {
+              "expression": "created_by_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "tasks_care_recipient_id_care_recipients_id_fk": {
           "name": "tasks_care_recipient_id_care_recipients_id_fk",
@@ -690,13 +841,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "tasks_created_by_source_uidx": {
-          "name": "tasks_created_by_source_uidx",
-          "columns": ["created_by_id", "source_id"],
-          "nullsNotDistinct": false
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

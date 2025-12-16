@@ -86,6 +86,13 @@ export default function TabsLayout() {
           title: 'Details',
         }}
       />
+      <Tabs.Screen
+        name="suppressed-senders"
+        options={{
+          href: null,
+          title: 'Suppressed senders',
+        }}
+      />
     </Tabs>
   );
 }

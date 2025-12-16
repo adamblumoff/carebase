@@ -1,13 +1,62 @@
 import { TRPCError } from '@trpc/server';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { caregivers, tasks } from '../../db/schema';
+import { caregivers, senderSuppressions, tasks } from '../../db/schema';
 import { authedProcedure, router } from '../../trpc/trpc';
 import { ensureCaregiver } from '../../lib/caregiver';
+import {
+  parseSenderDomain,
+  SENDER_SUPPRESSION_IGNORE_THRESHOLD,
+} from '../../lib/senderSuppression';
 
 const statusEnum = z.enum(['todo', 'in_progress', 'scheduled', 'snoozed', 'done']);
 const typeEnum = z.enum(['appointment', 'bill', 'medication', 'general']);
 const reviewStateEnum = z.enum(['pending', 'approved', 'ignored']);
+
+const recordSenderSuppression = async ({
+  ctx,
+  caregiverId,
+  provider,
+  sender,
+  senderDomain,
+}: {
+  ctx: { db: any };
+  caregiverId: string;
+  provider: string | null;
+  sender: string | null;
+  senderDomain: string | null;
+}) => {
+  if (provider !== 'gmail') return;
+  const domain = parseSenderDomain(sender, senderDomain);
+  if (!domain) return;
+  const now = new Date();
+
+  await ctx.db
+    .insert(senderSuppressions)
+    .values({
+      caregiverId,
+      provider: 'gmail',
+      senderDomain: domain,
+      ignoreCount: 1,
+      suppressed: SENDER_SUPPRESSION_IGNORE_THRESHOLD <= 1,
+      lastIgnoredAt: now,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: [
+        senderSuppressions.caregiverId,
+        senderSuppressions.provider,
+        senderSuppressions.senderDomain,
+      ],
+      set: {
+        ignoreCount: sql`${senderSuppressions.ignoreCount} + 1`,
+        suppressed: sql<boolean>`(CASE WHEN ${senderSuppressions.ignoreCount} + 1 >= ${SENDER_SUPPRESSION_IGNORE_THRESHOLD} THEN true ELSE ${senderSuppressions.suppressed} END)`,
+        lastIgnoredAt: now,
+        updatedAt: now,
+      },
+    });
+};
 
 export const taskRouter = router({
   list: authedProcedure
@@ -100,11 +149,24 @@ export const taskRouter = router({
         .update(tasks)
         .set({ reviewState: 'ignored', status: 'done', updatedAt: new Date() })
         .where(and(eq(tasks.id, input.id), eq(tasks.createdById, caregiverId)))
-        .returning({ id: tasks.id });
+        .returning({
+          id: tasks.id,
+          provider: tasks.provider,
+          sender: tasks.sender,
+          senderDomain: tasks.senderDomain,
+        });
 
       if (!updated) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
       }
+
+      await recordSenderSuppression({
+        ctx,
+        caregiverId,
+        provider: updated.provider ?? null,
+        sender: updated.sender ?? null,
+        senderDomain: updated.senderDomain ?? null,
+      });
 
       return { id: updated.id };
     }),
@@ -214,11 +276,24 @@ export const taskRouter = router({
           .update(tasks)
           .set({ reviewState: 'ignored', status: 'done', updatedAt: new Date() })
           .where(and(eq(tasks.id, input.id), eq(tasks.createdById, caregiverId)))
-          .returning({ id: tasks.id });
+          .returning({
+            id: tasks.id,
+            provider: tasks.provider,
+            sender: tasks.sender,
+            senderDomain: tasks.senderDomain,
+          });
 
         if (!ignored) {
           throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
         }
+
+        await recordSenderSuppression({
+          ctx,
+          caregiverId,
+          provider: ignored.provider ?? null,
+          sender: ignored.sender ?? null,
+          senderDomain: ignored.senderDomain ?? null,
+        });
 
         return { id: ignored.id, action: 'ignored' as const };
       }

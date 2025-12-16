@@ -39,6 +39,6 @@
 
 - `caregivers`: app user record (maps to Clerk user via email).
 - `sources`: connected provider accounts (currently `gmail`), refresh tokens, watch metadata, status.
-- `tasks`: primary UI entity; both manual tasks and ingested tasks live here.
+- `tasks`: primary UI entity; both manual tasks and ingested tasks live here (ingested tasks also carry `senderDomain` + `ingestionDebug` for diagnosis).
 - `ingestion_events`: small log of sync runs and counts (drives “recent ingestion” UI and push events).
-
+- `sender_suppressions`: per-caregiver sender-domain suppression (used to auto-ignore repeat junk sources before model classification).

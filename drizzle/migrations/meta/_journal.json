@@ -50,6 +50,13 @@
       "when": 1764033600000,
       "tag": "0006_add_last_push_at",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1765905703366,
+      "tag": "0007_pretty_sentinel",
+      "breakpoints": true
     }
   ]
 }

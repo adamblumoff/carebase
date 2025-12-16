@@ -34,9 +34,9 @@ Key places:
 - Gmail sync: `api/modules/ingestion/router.ts`
 - Calendar sync: `api/modules/ingestion/calendar.ts`
 - Push-to-client events: `api/modules/ingestion/events.ts` + app toast in `app/_layout.tsx`
+- Sender suppression: `api/modules/tasks/router.ts` (ignore hooks), `api/modules/sender-suppressions/router.ts` (tRPC), and the Profile UI entry to `app/(tabs)/suppressed-senders.tsx`.
 
 Common gotchas:
 
 - Changing env vars requires restarting both the API and Expo bundler.
 - Emulator/device networking: `EXPO_PUBLIC_API_BASE_URL` must be reachable from that device.
-

@@ -17,7 +17,8 @@ Carebase is a caregiver-first mobile app that pulls every stream of care informa
 - Single source of truth for a care team’s daily tasks, notes, and documents.
 - Clear, timely updates that reduce phone/email back-and-forth.
 - Built for multi-platform access (iOS, Android, web) via Expo Router.
-- Gmail-driven task ingestion that classifies appointments, bills, and medications via Vertex Gemini; drops very low-confidence (<60%) emails, flags medium (60–<80%) for review, auto-approves ≥80%; ignored tasks are soft-deleted so they never resurrect on re-sync.
+- Gmail-driven task ingestion that classifies appointments, bills, and medications via Vertex Gemini; drops very low-confidence items, flags medium confidence for review, and auto-approves only when signals are strong; ignored tasks are soft-deleted so they never resurrect on re-sync.
+- Sender suppression: repeatedly ignoring tasks from the same sender domain auto-suppresses that domain (and you can manage suppressions in the Profile tab).
 - Task detail actions: open source email (Gmail app/web) and calendar for appointments; quick edit sheet for title/type/description.
 
 ## Tech stack

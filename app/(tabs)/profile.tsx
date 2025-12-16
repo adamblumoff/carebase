@@ -1,13 +1,15 @@
 import React from 'react';
 import { View, Text, Switch } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 
 import { Container } from '@/components/Container';
+import { Button } from '@/components/Button';
 import { SignOutButton } from '@/components/SignOutButton';
 import { useUserTheme } from '@/app/(hooks)/useUserTheme';
 
 export default function ProfileScreen() {
   const { systemColorScheme, isDark, setUserTheme, resetTheme, isUpdating } = useUserTheme();
+  const router = useRouter();
 
   const toggleTheme = (value: boolean) => {
     setUserTheme(value ? 'dark' : 'light');
@@ -39,6 +41,13 @@ export default function ProfileScreen() {
         </View>
 
         <View className="mt-6 w-full">
+          <Button
+            title="Suppressed senders"
+            onPress={() => router.push('/(tabs)/suppressed-senders')}
+          />
+        </View>
+
+        <View className="mt-4 w-full">
           <SignOutButton />
         </View>
       </Container>

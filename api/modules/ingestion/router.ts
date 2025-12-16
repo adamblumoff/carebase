@@ -3,18 +3,17 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { google } from 'googleapis';
 import { z } from 'zod';
 
-import { ingestionEvents, sources, tasks } from '../../db/schema';
+import { ingestionEvents, senderSuppressions, sources, tasks } from '../../db/schema';
 import { ensureCaregiver } from '../../lib/caregiver';
 import { createGmailClient, gmailQuery, isInvalidGrantError } from '../../lib/google';
 import { parseMessage } from '../../lib/emailParser';
+import { shouldTombstoneMessage } from '../../lib/ingestionHeuristics';
+import { processGmailMessageToTask } from '../../lib/ingestionPipeline';
 import { classifyEmailWithVertex } from '../../lib/vertexClassifier';
 import { authedProcedure, router } from '../../trpc/trpc';
 import { withSourceLock } from '../../lib/sourceLock';
 import { IngestionCtx } from '../../lib/ingestionTypes';
 import { ingestionEventBus } from '../../lib/eventBus';
-
-const gmailMessageLink = (accountEmail: string, messageId: string) =>
-  `https://mail.google.com/mail/u/${encodeURIComponent(accountEmail)}/#all/${messageId}`;
 
 type FetchedMessages = {
   messageIds: string[];
@@ -95,156 +94,96 @@ async function upsertTaskFromMessage({
   caregiverId,
   message,
   ignoredSourceIds,
+  suppressedSenderDomains,
+  classify = classifyEmailWithVertex,
 }: {
   ctx: IngestionCtx;
   source: typeof sources.$inferSelect;
   caregiverId: string;
   message: google.gmail_v1.Schema$Message;
   ignoredSourceIds: Set<string>;
+  suppressedSenderDomains?: Set<string>;
+  classify?: typeof classifyEmailWithVertex;
 }) {
   const log = ctx.req?.log ?? console;
 
-  // Do not resurrect tasks the caregiver explicitly ignored/deleted.
-  if (message.id && ignoredSourceIds.has(message.id)) {
+  const now = new Date();
+  const result = await processGmailMessageToTask({
+    message,
+    accountEmail: source.accountEmail,
+    caregiverId,
+    ignoredSourceIds,
+    suppressedSenderDomains,
+    classify,
+    parse: ({ message: msg, subject, sender, snippet }) =>
+      parseMessage({ message: msg as any, subject, sender, snippet }),
+    now,
+  });
+
+  if (result.action === 'skipped_ignored') {
     log.info?.({ messageId: message.id }, 'skip ignored message');
     return { action: 'skipped_ignored' as const, id: message.id };
   }
 
-  // Skip drafts and non-inbox messages; still allow self-sent mail that has both SENT and INBOX.
-  const labels = message.labelIds ?? [];
-  const isInbox = labels.includes('INBOX');
-  const isDraft = labels.includes('DRAFT');
-  if (!isInbox || isDraft) {
-    log.info?.({ messageId: message.id, labels }, 'skip non-inbox/draft message');
+  if (result.action === 'skipped_non_inbox') {
+    log.info?.({ messageId: message.id, labels: message.labelIds }, 'skip non-inbox/draft message');
     return { action: 'skipped_non_inbox' as const, id: message.id ?? 'unknown' };
   }
 
-  if (message.sizeEstimate && message.sizeEstimate > 200_000) {
+  if (result.action === 'skipped') {
     log.warn?.({ sizeEstimate: message.sizeEstimate, id: message.id }, 'skip large email');
     return { action: 'skipped' as const, id: message.id };
   }
-  const subject =
-    message.payload?.headers?.find((h) => h.name?.toLowerCase() === 'subject')?.value ?? 'Task';
-  const fromHeader = message.payload?.headers?.find((h) => h.name?.toLowerCase() === 'from')?.value;
-  const snippet = message.snippet ?? '';
 
-  const parsed = parseMessage({ message, subject, sender: fromHeader, snippet });
+  if (result.action === 'skipped_low_confidence') {
+    return { action: 'skipped_low_confidence' as const, id: message.id };
+  }
 
-  const classification = await classifyEmailWithVertex({
-    subject,
-    snippet,
-    body: parsed.description ?? snippet,
-  });
+  if (result.action === 'tombstoned') {
+    const payload = result.payload ?? {};
+    await ctx.db
+      .insert(tasks)
+      .values({ ...payload, createdAt: now })
+      .onConflictDoUpdate({
+        target: [tasks.createdById, tasks.sourceId],
+        set: { ...payload, updatedAt: now },
+      });
 
-  if ('error' in classification) {
-    log.error?.(
-      { err: classification.error, messageId: message.id },
-      'vertex classification failed'
-    );
     log.info?.(
-      { messageId: message.id, projectId: classification.projectId ?? 'unknown' },
-      'vertex classification fallback'
+      { messageId: message.id, labels: message.labelIds },
+      'tombstoned promotional message'
+    );
+    return { action: 'tombstoned' as const, id: message.id };
+  }
+
+  // upsert
+  if ('error' in result.classification) {
+    log.error?.(
+      { err: result.classification.error, messageId: message.id },
+      'vertex classification failed'
     );
   } else {
     log.info?.(
       {
         messageId: message.id,
-        projectId: classification.projectId ?? 'unknown',
-        label: classification.label,
-        confidence: classification.confidence,
+        label: result.classification.label,
+        confidence: result.classification.confidence,
       },
       'vertex classification success'
     );
   }
 
-  const classificationFailed = 'error' in classification;
-  const bucket = classificationFailed ? null : classification.label;
-  const modelConfidence = classificationFailed ? null : classification.confidence;
-
-  const confidence = modelConfidence ?? parsed.confidence;
-
-  // Drop very low-confidence items (<60%) entirely.
-  if (
-    !classificationFailed &&
-    confidence < 0.6 &&
-    bucket !== 'needs_review' &&
-    bucket !== 'ignore'
-  ) {
-    return { action: 'skipped_low_confidence' as const, id: message.id };
-  }
-
-  let reviewState: 'pending' | 'approved' | 'ignored' = 'approved';
-  if (bucket === 'ignore') {
-    reviewState = 'ignored';
-  } else if (bucket === 'needs_review' || classificationFailed || confidence < 0.8) {
-    reviewState = 'pending';
-  }
-
-  const taskType =
-    bucket === 'appointments'
-      ? 'appointment'
-      : bucket === 'bills'
-        ? 'bill'
-        : bucket === 'medications'
-          ? 'medication'
-          : parsed.type;
-
-  const description =
-    classificationFailed && (parsed.description || snippet)
-      ? `[model failed] ${parsed.description ?? snippet}`
-      : parsed.description;
-
-  const payload = {
-    title: parsed.title,
-    type: taskType,
-    status: taskType === 'appointment' ? 'scheduled' : 'todo',
-    reviewState,
-    provider: 'gmail' as const,
-    sourceId: message.id ?? undefined,
-    sourceLink: message.id ? gmailMessageLink(source.accountEmail, message.id) : undefined,
-    sender: fromHeader ?? undefined,
-    rawSnippet: snippet,
-    description,
-    confidence: Number(confidence.toFixed(2)),
-    syncedAt: new Date(),
-    ingestionId: undefined,
-    amount: parsed.amount,
-    currency: parsed.amount ? (parsed.currency ?? 'USD') : undefined,
-    vendor: parsed.vendor,
-    referenceNumber: parsed.referenceNumber,
-    statementPeriod: parsed.statementPeriod,
-    medicationName: parsed.medicationName,
-    dosage: parsed.dosage,
-    frequency: parsed.frequency,
-    route: parsed.route,
-    nextDoseAt: parsed.nextDoseAt,
-    prescribingProvider: parsed.prescribingProvider,
-    startAt: parsed.startAt,
-    endAt: parsed.endAt,
-    location: parsed.location,
-    organizer: parsed.organizer,
-    dueAt: parsed.dueAt,
-    createdById: caregiverId,
-    updatedAt: new Date(),
-  } satisfies Partial<typeof tasks.$inferInsert>;
-
-  const now = new Date();
-  const [result] = await ctx.db
+  const payload = result.payload;
+  const [row] = await ctx.db
     .insert(tasks)
-    .values({
-      ...payload,
-      createdAt: now,
-    })
+    .values({ ...payload, createdAt: now })
     .onConflictDoUpdate({
       target: [tasks.createdById, tasks.sourceId],
-      set: {
-        ...payload,
-        updatedAt: now,
-      },
+      set: { ...payload, updatedAt: now },
     })
     .returning({ id: tasks.id, isNew: sql<boolean>`(xmax = 0)` });
 
-  return { action: (result.isNew ? 'created' : 'updated') as const, id: result.id };
+  return { action: (row.isNew ? 'created' : 'updated') as const, id: row.id };
 }
 
 export async function syncSource({
@@ -332,6 +271,21 @@ export async function syncSource({
       });
     }
 
+    const suppressedSenderDomains = new Set<string>();
+    const suppressionRows = await ctx.db
+      .select({ senderDomain: senderSuppressions.senderDomain })
+      .from(senderSuppressions)
+      .where(
+        and(
+          eq(senderSuppressions.caregiverId, caregiverId),
+          eq(senderSuppressions.provider, 'gmail'),
+          eq(senderSuppressions.suppressed, true)
+        )
+      );
+    suppressionRows.forEach((row) => {
+      if (row.senderDomain) suppressedSenderDomains.add(row.senderDomain.toLowerCase());
+    });
+
     const results = { created: 0, updated: 0, skipped: 0, errors: 0 };
 
     const concurrency = 3;
@@ -342,6 +296,38 @@ export async function syncSource({
           try {
             if (ignoredSourceIds.has(id)) {
               results.skipped += 1;
+              return;
+            }
+
+            const { data: meta } = await gmail.users.messages.get({
+              userId: 'me',
+              id,
+              format: 'metadata',
+              metadataHeaders: [
+                'Subject',
+                'From',
+                'To',
+                'Reply-To',
+                'List-Id',
+                'List-Unsubscribe',
+                'Precedence',
+                'Auto-Submitted',
+                'X-Auto-Response-Suppress',
+              ],
+            });
+
+            if (shouldTombstoneMessage(meta.labelIds ?? [])) {
+              const outcome = await upsertTaskFromMessage({
+                ctx,
+                source,
+                caregiverId,
+                message: meta,
+                ignoredSourceIds,
+                suppressedSenderDomains,
+              });
+              if (outcome.action === 'created') results.created += 1;
+              if (outcome.action === 'updated') results.updated += 1;
+              if (outcome.action === 'tombstoned') results.skipped += 1;
               return;
             }
 
@@ -357,13 +343,16 @@ export async function syncSource({
               caregiverId,
               message: data,
               ignoredSourceIds,
+              suppressedSenderDomains,
             });
             if (outcome.action === 'created') results.created += 1;
             if (outcome.action === 'updated') results.updated += 1;
             if (
               outcome.action === 'skipped' ||
               outcome.action === 'skipped_low_confidence' ||
-              outcome.action === 'skipped_ignored'
+              outcome.action === 'skipped_ignored' ||
+              outcome.action === 'skipped_non_inbox' ||
+              outcome.action === 'tombstoned'
             )
               results.skipped += 1;
           } catch (error) {

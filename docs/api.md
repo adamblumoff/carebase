@@ -34,6 +34,13 @@ Run it locally with `pnpm api:dev`.
   - `pnpm db:migrate`
   - `pnpm db:push` (use carefully; prefer migrations)
 
+### Ingestion debugging fields
+
+Ingested tasks store extra context for diagnosis:
+
+- `tasks.senderDomain`: parsed sender domain (best-effort).
+- `tasks.ingestionDebug`: JSON blob containing model output, key header/category signals, and the final routing decision.
+
 ## Google ingestion (Gmail + Calendar)
 
 ### Source lifecycle
@@ -60,9 +67,19 @@ See `.env.example` for the canonical list. Commonly required:
 
 - Gmail watch is Pub/Sub-backed. If watch registration fails with a permissions hint, grant Pub/Sub Publisher for `gmail-api-push@system.gserviceaccount.com` on the topic.
 - Ingestion writes tasks idempotently per `(createdById, sourceId)` and will not resurrect tasks the caregiver explicitly ignored.
+- Sender suppression: when a caregiver ignores tasks from the same sender domain repeatedly, the API auto-suppresses that domain and future messages are tombstoned (ignored) before classification.
+
+## Sender suppressions (tRPC)
+
+Manage suppressed sender domains (currently Gmail only):
+
+- `trpc.senderSuppressions.list({ includeUnsuppressed?: boolean })`
+- `trpc.senderSuppressions.suppress({ senderDomain })`
+- `trpc.senderSuppressions.unsuppress({ id, resetCount?: boolean })`
+- `trpc.senderSuppressions.remove({ id })`
+- `trpc.senderSuppressions.stats()`
 
 ## Observability
 
 - Server logs via pino (pretty logs in local TTY unless disabled).
 - Optional PostHog server events via `POSTHOG_API_KEY` / `POSTHOG_HOST` (captures a basic `api_request` event on response).
-

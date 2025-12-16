@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm';
 import {
+  boolean,
   integer,
+  jsonb,
   numeric,
   pgEnum,
   pgTable,
@@ -56,10 +58,12 @@ export const tasks = pgTable(
     sourceId: text('source_id'),
     sourceLink: text('source_link'),
     sender: text('sender'),
+    senderDomain: text('sender_domain'),
     rawSnippet: text('raw_snippet'),
     confidence: numeric('confidence', { precision: 3, scale: 2 }),
     syncedAt: timestamp('synced_at', { withTimezone: true }),
     ingestionId: text('ingestion_id'),
+    ingestionDebug: jsonb('ingestion_debug'),
     careRecipientId: uuid('care_recipient_id').references(() => careRecipients.id),
     createdById: uuid('created_by_id').references(() => caregivers.id),
     startAt: timestamp('start_at', { withTimezone: true }),
@@ -167,3 +171,29 @@ export const ingestionEvents = pgTable('ingestion_events', {
   errorMessage: text('error_message'),
   durationMs: integer('duration_ms'),
 });
+
+export const senderSuppressions = pgTable(
+  'sender_suppressions',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    caregiverId: uuid('caregiver_id')
+      .notNull()
+      .references(() => caregivers.id),
+    provider: sourceProvider('provider').notNull(),
+    senderDomain: varchar('sender_domain', { length: 255 }).notNull(),
+    ignoreCount: integer('ignore_count').default(0).notNull(),
+    suppressed: boolean('suppressed').default(false).notNull(),
+    lastIgnoredAt: timestamp('last_ignored_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .default(sql`now()`)
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .default(sql`now()`)
+      .notNull(),
+  },
+  (table) => ({
+    caregiverProviderDomainIdx: uniqueIndex(
+      'sender_suppressions_caregiver_provider_domain_uidx'
+    ).on(table.caregiverId, table.provider, table.senderDomain),
+  })
+);
