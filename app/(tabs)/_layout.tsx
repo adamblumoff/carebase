@@ -22,8 +22,10 @@ export default function TabsLayout() {
 
   useEffect(() => {
     if (!isSignedIn) return;
-    utils.tasks.list.prefetch().catch(() => {});
-  }, [isSignedIn, utils.tasks.list]);
+    utils.tasks.listThin.prefetch().catch(() => {});
+    utils.tasks.stats.prefetch({ upcomingDays: 7 }).catch(() => {});
+    utils.tasks.upcoming.prefetch({ days: 7 }).catch(() => {});
+  }, [isSignedIn, utils.tasks.listThin, utils.tasks.stats, utils.tasks.upcoming]);
 
   return (
     <Tabs

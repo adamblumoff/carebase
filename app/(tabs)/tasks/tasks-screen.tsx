@@ -59,16 +59,38 @@ const ROW_HEIGHT = 124;
 
 type TasksView = 'all' | 'review' | 'upcoming';
 
-type Task = NonNullable<ReturnType<typeof trpc.tasks.list.useQuery>['data']>[number];
+type Task = NonNullable<ReturnType<typeof trpc.tasks.listThin.useQuery>['data']>[number];
 
-const withinNextDays = (value?: string | Date | null, days = 7) => {
-  if (!value) return false;
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return false;
-  const now = new Date();
-  const end = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
-  return date >= now && date <= end;
-};
+const asTaskThin = (value: any): Task => ({
+  id: value.id,
+  title: value.title,
+  description: value.description ?? null,
+  type: value.type,
+  status: value.status,
+  reviewState: value.reviewState,
+  confidence: value.confidence ?? null,
+  provider: value.provider ?? null,
+  sourceLink: value.sourceLink ?? null,
+  sender: value.sender ?? null,
+  senderDomain: value.senderDomain ?? null,
+  rawSnippet: value.rawSnippet ?? null,
+  startAt: value.startAt ?? null,
+  endAt: value.endAt ?? null,
+  location: value.location ?? null,
+  dueAt: value.dueAt ?? null,
+  amount: value.amount ?? null,
+  currency: value.currency ?? null,
+  vendor: value.vendor ?? null,
+  referenceNumber: value.referenceNumber ?? null,
+  statementPeriod: value.statementPeriod ?? null,
+  medicationName: value.medicationName ?? null,
+  dosage: value.dosage ?? null,
+  frequency: value.frequency ?? null,
+  route: value.route ?? null,
+  prescribingProvider: value.prescribingProvider ?? null,
+  createdAt: value.createdAt,
+  updatedAt: value.updatedAt,
+});
 
 export const TasksScreen = ({ view }: { view: TasksView }) => {
   useColorScheme();
@@ -94,7 +116,17 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
 
   const utils = trpc.useUtils();
 
-  const tasksQuery = trpc.tasks.list.useQuery(listInput, {
+  const statsQuery = trpc.tasks.stats.useQuery(
+    { upcomingDays: 7 },
+    {
+      staleTime: 5 * 60 * 1000,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+    }
+  );
+
+  const listThinQuery = trpc.tasks.listThin.useQuery(listInput, {
+    enabled: view !== 'upcoming',
     keepPreviousData: true,
     placeholderData: (prev) => prev,
     staleTime: 5 * 60 * 1000,
@@ -102,20 +134,38 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
     refetchOnWindowFocus: false,
   });
 
-  useEffect(() => {
-    if (tasksQuery.isError) {
-      console.error('tasks.list failed', tasksQuery.error);
+  const upcomingQuery = trpc.tasks.upcoming.useQuery(
+    { days: 7 },
+    {
+      enabled: view === 'upcoming',
+      keepPreviousData: true,
+      placeholderData: (prev) => prev,
+      staleTime: 2 * 60 * 1000,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
     }
-  }, [tasksQuery.isError, tasksQuery.error]);
+  );
+
+  const tasksData = view === 'upcoming' ? upcomingQuery.data : listThinQuery.data;
+  const tasksError = view === 'upcoming' ? upcomingQuery.error : listThinQuery.error;
+  const tasksIsError = view === 'upcoming' ? upcomingQuery.isError : listThinQuery.isError;
+  const tasksIsLoading = view === 'upcoming' ? upcomingQuery.isLoading : listThinQuery.isLoading;
+  const refetchTasks = view === 'upcoming' ? upcomingQuery.refetch : listThinQuery.refetch;
+
+  useEffect(() => {
+    if (tasksIsError) {
+      console.error('tasks query failed', tasksError);
+    }
+  }, [tasksError, tasksIsError]);
 
   const pendingReview = useMemo(() => {
-    return tasksQuery.data?.find((item) => item.reviewState === 'pending');
-  }, [tasksQuery.data]);
+    return tasksData?.find((item) => item.reviewState === 'pending');
+  }, [tasksData]);
 
   const onRefresh = async () => {
     try {
       setIsRefreshing(true);
-      await tasksQuery.refetch();
+      await Promise.all([refetchTasks(), statsQuery.refetch()]);
     } finally {
       setIsRefreshing(false);
     }
@@ -126,36 +176,28 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
       const optimisticId = `temp-${Date.now()}`;
       const hasFilter = !!listInput;
       await Promise.all([
-        utils.tasks.list.cancel(),
-        hasFilter ? utils.tasks.list.cancel(listInput) : Promise.resolve(),
+        utils.tasks.listThin.cancel(),
+        hasFilter ? utils.tasks.listThin.cancel(listInput) : Promise.resolve(),
       ]);
 
-      const previousAll = utils.tasks.list.getData();
-      const previousFiltered = hasFilter ? utils.tasks.list.getData(listInput) : undefined;
+      const previousAll = utils.tasks.listThin.getData();
+      const previousFiltered = hasFilter ? utils.tasks.listThin.getData(listInput) : undefined;
 
-      const optimisticTask = {
+      const optimisticTask: Task = {
         id: optimisticId,
         title: input.title,
         description: input.description ?? null,
         type: input.type ?? 'general',
         status: input.status ?? 'todo',
         reviewState: 'approved' as const,
-        dueAt: input.dueAt ?? null,
-        provider: null,
-        sourceId: null,
         sourceLink: null,
         sender: null,
+        senderDomain: null,
         rawSnippet: null,
         confidence: null,
-        syncedAt: null,
-        ingestionId: null,
-        careRecipientId: input.careRecipientId ?? null,
-        createdById: null,
         startAt: null,
         endAt: null,
         location: null,
-        organizer: null,
-        attendees: null,
         amount: null,
         currency: null,
         vendor: null,
@@ -165,18 +207,17 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
         dosage: null,
         frequency: null,
         route: null,
-        nextDoseAt: null,
         prescribingProvider: null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
 
-      utils.tasks.list.setData(undefined, (current) =>
+      utils.tasks.listThin.setData(undefined, (current) =>
         current ? [optimisticTask, ...current] : [optimisticTask]
       );
 
       if (hasFilter) {
-        utils.tasks.list.setData(listInput, (current) => {
+        utils.tasks.listThin.setData(listInput, (current) => {
           if (!current) return [optimisticTask];
           if (listInput?.type && listInput.type !== optimisticTask.type) return current;
           return [optimisticTask, ...current];
@@ -188,28 +229,30 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
     onError: (_error, _input, context) => {
       console.error('tasks.create failed', _error);
       if (context?.previousAll) {
-        utils.tasks.list.setData(undefined, context.previousAll);
+        utils.tasks.listThin.setData(undefined, context.previousAll);
       }
       if (listInput && context?.previousFiltered) {
-        utils.tasks.list.setData(listInput, context.previousFiltered);
+        utils.tasks.listThin.setData(listInput, context.previousFiltered);
       }
     },
     onSuccess: (task, _input, context) => {
-      utils.tasks.list.setData(undefined, (current) => {
-        if (!current) return [task];
-        if (!context) return [task, ...current];
-        return current.map((item) => (item.id === context.optimisticId ? task : item));
+      const thin = asTaskThin(task);
+      utils.tasks.listThin.setData(undefined, (current) => {
+        if (!current) return [thin];
+        if (!context) return [thin, ...current];
+        return current.map((item) => (item.id === context.optimisticId ? thin : item));
       });
 
       if (listInput) {
-        utils.tasks.list.setData(listInput, (current) => {
-          if (!current) return [task];
-          return current.map((item) => (item.id === context?.optimisticId ? task : item));
+        utils.tasks.listThin.setData(listInput, (current) => {
+          if (!current) return [thin];
+          return current.map((item) => (item.id === context?.optimisticId ? thin : item));
         });
       }
     },
     onSettled: () => {
-      utils.tasks.list.invalidate();
+      utils.tasks.listThin.invalidate();
+      utils.tasks.stats.invalidate();
       setTitle('');
       setNewTaskType('general');
       setIsCreateModalOpen(false);
@@ -226,25 +269,30 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
   const deleteTask = trpc.tasks.delete.useMutation({
     onMutate: async (input) => {
       setDeletingId(input.id);
-      await utils.tasks.list.cancel();
-      const previous = utils.tasks.list.getData();
-      utils.tasks.list.setData(undefined, (current) =>
+      await utils.tasks.listThin.cancel();
+      const previous = utils.tasks.listThin.getData();
+      utils.tasks.listThin.setData(undefined, (current) =>
         current ? current.filter((item) => item.id !== input.id) : current
       );
-      utils.tasks.list.setData(listInput, (current) =>
+      utils.tasks.listThin.setData(listInput, (current) =>
+        current ? current.filter((item) => item.id !== input.id) : current
+      );
+      utils.tasks.upcoming.setData(undefined, (current) =>
         current ? current.filter((item) => item.id !== input.id) : current
       );
       return { previous };
     },
     onError: (_error, _input, context) => {
       if (context?.previous) {
-        utils.tasks.list.setData(undefined, context.previous);
-        utils.tasks.list.setData(listInput, context.previous);
+        utils.tasks.listThin.setData(undefined, context.previous);
+        utils.tasks.listThin.setData(listInput, context.previous);
       }
     },
     onSettled: () => {
       setDeletingId(null);
-      utils.tasks.list.invalidate();
+      utils.tasks.listThin.invalidate();
+      utils.tasks.upcoming.invalidate();
+      utils.tasks.stats.invalidate();
     },
   });
 
@@ -375,24 +423,28 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
   }, []);
 
   const applyTaskPatch = (updater: (task: Task) => Task) => {
-    utils.tasks.list.setData(undefined, (current) => (current ? current.map(updater) : current));
-    utils.tasks.list.setData(listInput, (current) => (current ? current.map(updater) : current));
+    utils.tasks.listThin.setData(undefined, (current) => (current ? current.map(updater) : current));
+    utils.tasks.listThin.setData(listInput, (current) => (current ? current.map(updater) : current));
+    utils.tasks.upcoming.setData(undefined, (current) => (current ? current.map(updater) : current));
   };
 
   const getCurrentTask = (id: string) => {
     const fromFiltered = listInput
-      ? utils.tasks.list.getData(listInput)?.find((t) => t.id === id)
+      ? utils.tasks.listThin.getData(listInput)?.find((t) => t.id === id)
       : null;
     if (fromFiltered) return fromFiltered;
-    return utils.tasks.list.getData()?.find((t) => t.id === id) ?? null;
+    const fromAll = utils.tasks.listThin.getData()?.find((t) => t.id === id) ?? null;
+    if (fromAll) return fromAll;
+    return utils.tasks.upcoming.getData()?.find((t) => t.id === id) ?? null;
   };
 
   const toggleStatus = trpc.tasks.toggleStatus.useMutation({
     onMutate: (input) => {
-      void utils.tasks.list.cancel();
+      void utils.tasks.listThin.cancel();
+      void utils.tasks.upcoming.cancel();
 
-      const previousAll = utils.tasks.list.getData();
-      const previousFiltered = listInput ? utils.tasks.list.getData(listInput) : undefined;
+      const previousAll = utils.tasks.listThin.getData();
+      const previousFiltered = listInput ? utils.tasks.listThin.getData(listInput) : undefined;
 
       const currentTask = getCurrentTask(input.id);
       if (!currentTask) return { previousAll, previousFiltered };
@@ -406,21 +458,24 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
       return { previousAll, previousFiltered, optimisticStatus };
     },
     onError: (_error, _input, context) => {
-      if (context?.previousAll) utils.tasks.list.setData(undefined, context.previousAll);
+      if (context?.previousAll) utils.tasks.listThin.setData(undefined, context.previousAll);
       if (listInput && context?.previousFiltered) {
-        utils.tasks.list.setData(listInput, context.previousFiltered);
+        utils.tasks.listThin.setData(listInput, context.previousFiltered);
       }
     },
     onSuccess: (updated, _input, context) => {
       if (!context) return;
+      const thin = asTaskThin(updated);
       applyTaskPatch((item) => {
-        if (item.id !== updated.id) return item;
+        if (item.id !== thin.id) return item;
         if (item.status !== context.optimisticStatus) return item;
-        return { ...item, ...updated };
+        return { ...item, ...thin };
       });
     },
     onSettled: () => {
-      utils.tasks.list.invalidate();
+      utils.tasks.listThin.invalidate();
+      utils.tasks.upcoming.invalidate();
+      utils.tasks.stats.invalidate();
     },
   });
 
@@ -433,9 +488,10 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
 
   const reviewTask = trpc.tasks.review.useMutation({
     onMutate: async (input) => {
-      void utils.tasks.list.cancel();
-      const previousAll = utils.tasks.list.getData();
-      const previousFiltered = listInput ? utils.tasks.list.getData(listInput) : undefined;
+      void utils.tasks.listThin.cancel();
+      void utils.tasks.upcoming.cancel();
+      const previousAll = utils.tasks.listThin.getData();
+      const previousFiltered = listInput ? utils.tasks.listThin.getData(listInput) : undefined;
 
       if (input.action === 'ignore') {
         applyTaskPatch((item) =>
@@ -450,13 +506,15 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
       return { previousAll, previousFiltered };
     },
     onError: (_error, _input, context) => {
-      if (context?.previousAll) utils.tasks.list.setData(undefined, context.previousAll);
+      if (context?.previousAll) utils.tasks.listThin.setData(undefined, context.previousAll);
       if (listInput && context?.previousFiltered) {
-        utils.tasks.list.setData(listInput, context.previousFiltered);
+        utils.tasks.listThin.setData(listInput, context.previousFiltered);
       }
     },
     onSettled: () => {
-      utils.tasks.list.invalidate();
+      utils.tasks.listThin.invalidate();
+      utils.tasks.upcoming.invalidate();
+      utils.tasks.stats.invalidate();
     },
   });
 
@@ -470,7 +528,10 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
 
   const renderHeader = () => (
     <View className="pb-2">
-      <TasksTopNav />
+      <TasksTopNav
+        pendingReviewCount={statsQuery.data?.pendingReviewCount}
+        upcomingCount={statsQuery.data?.upcomingCount}
+      />
 
       {view === 'all' && pendingReview ? (
         <View className="gap-2 rounded-2xl border border-amber-300 bg-amber-50 p-4 shadow-sm">
@@ -512,7 +573,7 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
         </View>
       ) : null}
 
-      {view !== 'review' ? (
+      {view === 'all' ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -563,7 +624,7 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
   );
 
   const renderEmpty = () => {
-    if (tasksQuery.isLoading) {
+    if (tasksIsLoading) {
       return (
         <View className="items-center justify-center py-10">
           <ActivityIndicator />
@@ -571,12 +632,12 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
       );
     }
 
-    if (tasksQuery.isError) {
+    if (tasksIsError) {
       return (
         <View className="gap-2 py-8">
           <Text className="text-base text-red-600">Could not load tasks.</Text>
           <Text className="text-xs text-text-muted dark:text-text-muted-dark">
-            {tasksQuery.error.message}
+            {(tasksError as any)?.message ?? 'Unknown error'}
           </Text>
         </View>
       );
@@ -601,15 +662,10 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
   };
 
   const tasksForView = useMemo(() => {
-    const list = tasksQuery.data ?? [];
+    const list = tasksData ?? [];
     if (view !== 'upcoming') return list;
-    return list.filter((item) => {
-      if (item.reviewState === 'ignored' || item.status === 'done') return false;
-      if (item.type === 'appointment') return withinNextDays(item.startAt, 7);
-      if (item.type === 'bill') return withinNextDays(item.dueAt, 7);
-      return false;
-    });
-  }, [tasksQuery.data, view]);
+    return list.filter((item) => item.type === 'appointment' || item.type === 'bill');
+  }, [tasksData, view]);
 
   const renderItem = useCallback(
     ({ item }: { item: Task }) => (

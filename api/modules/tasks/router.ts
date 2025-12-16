@@ -23,6 +23,7 @@ const listThinInput = z
 const selectTaskThin = {
   id: tasks.id,
   title: tasks.title,
+  description: tasks.description,
   type: tasks.type,
   status: tasks.status,
   reviewState: tasks.reviewState,
@@ -31,6 +32,7 @@ const selectTaskThin = {
   sourceLink: tasks.sourceLink,
   sender: tasks.sender,
   senderDomain: tasks.senderDomain,
+  rawSnippet: tasks.rawSnippet,
   startAt: tasks.startAt,
   endAt: tasks.endAt,
   location: tasks.location,
