@@ -201,7 +201,6 @@ export const taskRouter = router({
         .where(
           and(
             eq(tasks.createdById, caregiverId),
-            eq(tasks.reviewState, 'pending'),
             sql`${tasks.reviewState} != 'ignored'`
           )
         );
