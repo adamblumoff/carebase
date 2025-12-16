@@ -7,7 +7,6 @@ import {
   Modal,
   Pressable,
   RefreshControl,
-  ScrollView,
   Text,
   TextInput,
   View,
@@ -16,7 +15,6 @@ import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { trpc } from '@/lib/trpc/client';
-import { Button } from '@/components/Button';
 import { Container } from '@/components/Container';
 import { TaskDetailsSheet } from '@/components/TaskDetailsSheet';
 import { EditTaskSheet } from '@/components/EditTaskSheet';
@@ -97,6 +95,7 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
   const [title, setTitle] = useState('');
   const [newTaskType, setNewTaskType] = useState<CreateTaskType>('general');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [selectedType, setSelectedType] = useState<TaskTypeFilter>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
@@ -736,57 +735,33 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
 
   const renderHeader = () => (
     <View className="pb-2">
-      <TasksTopNav
-        pendingReviewCount={statsQuery.data?.pendingReviewCount}
-        upcomingCount={statsQuery.data?.upcomingCount}
-      />
-
-      {view === 'all' ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{
-            gap: 8,
-            paddingRight: 8,
-            alignItems: 'center',
-            paddingVertical: 2,
-          }}
-          style={{ minHeight: 44 }}
-          className="mb-2">
-          {filterOptions.map((option) => {
-            const isActive = selectedType === option;
-            return (
-              <Pressable
-                key={option}
-                onPress={() => setSelectedType(option)}
-                className={`rounded-full border px-3 py-2 ${
-                  isActive
-                    ? 'border-primary bg-primary/10'
-                    : 'border-border dark:border-border-dark'
-                }`}
-                style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}>
-                <Text
-                  className={`text-sm font-semibold ${
-                    isActive ? 'text-primary' : 'text-text dark:text-text-dark'
-                  }`}>
-                  {option === 'all' ? 'All' : formatType(option)}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      ) : null}
-
-      {view === 'all' ? (
-        <Button
-          title="Add task"
-          onPress={() => {
-            setTitle('');
-            setNewTaskType('general');
-            setIsCreateModalOpen(true);
-          }}
-          disabled={createTask.isLoading}
+      <View className="mb-3 flex-row items-center gap-2">
+        <TasksTopNav
+          pendingReviewCount={statsQuery.data?.pendingReviewCount}
+          upcomingCount={statsQuery.data?.upcomingCount}
         />
+        <Pressable
+          accessibilityLabel="Filter tasks"
+          onPress={() => setIsFilterModalOpen(true)}
+          className="h-11 w-11 items-center justify-center rounded-full border border-border bg-surface-strong dark:border-border-dark dark:bg-surface-card-dark"
+          style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
+          <Ionicons name="options-outline" size={20} color="#4A8F6A" />
+        </Pressable>
+      </View>
+
+      {selectedType !== 'all' ? (
+        <View className="mb-2 flex-row">
+          <Pressable
+            accessibilityLabel="Clear type filter"
+            onPress={() => setSelectedType('all')}
+            className="flex-row items-center gap-2 rounded-full border border-border bg-surface-strong px-3 py-2 dark:border-border-dark dark:bg-surface-card-dark"
+            style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
+            <Text className="text-sm font-semibold text-text dark:text-text-dark">
+              Type: {formatType(selectedType)}
+            </Text>
+            <Ionicons name="close" size={16} color="#9CA3AF" />
+          </Pressable>
+        </View>
       ) : null}
     </View>
   );
@@ -831,9 +806,17 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
 
   const tasksForView = useMemo(() => {
     const list = tasksData ?? [];
-    if (view !== 'upcoming') return list;
-    return list.filter((item) => item.type === 'appointment' || item.type === 'bill');
-  }, [tasksData, view]);
+    const typeFilter = selectedType === 'all' ? null : selectedType;
+
+    if (view === 'upcoming') {
+      const upcomingList = list.filter(
+        (item) => item.type === 'appointment' || item.type === 'bill'
+      );
+      return typeFilter ? upcomingList.filter((item) => item.type === typeFilter) : upcomingList;
+    }
+
+    return typeFilter ? list.filter((item) => item.type === typeFilter) : list;
+  }, [selectedType, tasksData, view]);
 
   const renderItem = useCallback(
     ({ item }: { item: Task }) => (
@@ -886,6 +869,68 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
           contentContainerStyle={{ paddingBottom: 24, gap: 12 }}
         />
       </Container>
+
+      <Modal
+        visible={isFilterModalOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsFilterModalOpen(false)}
+        statusBarTranslucent>
+        <Pressable className="flex-1 bg-black/40" onPress={() => setIsFilterModalOpen(false)}>
+          <Pressable
+            className="absolute bottom-0 w-full rounded-t-3xl border border-border bg-white px-5 pb-8 pt-4 dark:border-border-dark dark:bg-surface-card-dark"
+            onPress={() => {}}>
+            <View className="mb-3 flex-row items-center justify-between">
+              <Text className="text-base font-semibold text-text dark:text-text-dark">Filter</Text>
+              <Pressable
+                accessibilityLabel="Close filters"
+                onPress={() => setIsFilterModalOpen(false)}
+                className="h-9 w-9 items-center justify-center rounded-full"
+                style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
+                <Ionicons name="close" size={20} color="#9CA3AF" />
+              </Pressable>
+            </View>
+
+            <Text className="mb-2 text-xs font-semibold text-text-muted dark:text-text-muted-dark">
+              Type
+            </Text>
+
+            <View className="gap-2">
+              {filterOptions.map((option) => {
+                const active = selectedType === option;
+                const label = option === 'all' ? 'All types' : formatType(option);
+
+                return (
+                  <Pressable
+                    key={option}
+                    onPress={() => {
+                      setSelectedType(option);
+                      setIsFilterModalOpen(false);
+                    }}
+                    className={`flex-row items-center justify-between rounded-2xl border px-4 py-3 ${
+                      active
+                        ? 'border-primary bg-primary/10'
+                        : 'border-border dark:border-border-dark'
+                    }`}
+                    style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
+                    <Text
+                      className={`text-sm font-semibold ${
+                        active ? 'text-primary' : 'text-text dark:text-text-dark'
+                      }`}>
+                      {label}
+                    </Text>
+                    {active ? (
+                      <Ionicons name="checkmark" size={20} color="#4A8F6A" />
+                    ) : (
+                      <View style={{ width: 20, height: 20 }} />
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal
         visible={isCreateModalOpen}
