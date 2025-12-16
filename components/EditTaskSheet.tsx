@@ -29,17 +29,41 @@ export const EditTaskSheet = ({
   onClose: () => void;
   onUpdated: (updated: TaskLike) => void;
 }) => {
+  const [hasHydratedFromServer, setHasHydratedFromServer] = useState(false);
   const [title, setTitle] = useState(task?.title ?? '');
   const [description, setDescription] = useState(task?.description ?? '');
   const [taskType, setTaskType] = useState<(typeof typeOptions)[number]>(
     (task?.type as (typeof typeOptions)[number]) ?? 'general'
   );
 
+  const taskDetailsQuery = trpc.tasks.byId.useQuery(
+    { id: task?.id ?? '00000000-0000-0000-0000-000000000000' },
+    {
+      enabled: visible && !!task?.id,
+      staleTime: 60 * 1000,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+    }
+  );
+
   useEffect(() => {
+    setHasHydratedFromServer(false);
     setTitle(task?.title ?? '');
     setDescription(task?.description ?? '');
     setTaskType((task?.type as (typeof typeOptions)[number]) ?? 'general');
   }, [task?.id, task?.title, task?.description, task?.type]);
+
+  useEffect(() => {
+    if (!task?.id) return;
+    if (hasHydratedFromServer) return;
+    if (!taskDetailsQuery.data) return;
+    if (taskDetailsQuery.data.id !== task.id) return;
+
+    setTitle(taskDetailsQuery.data.title ?? '');
+    setDescription(taskDetailsQuery.data.description ?? '');
+    setTaskType((taskDetailsQuery.data.type as (typeof typeOptions)[number]) ?? 'general');
+    setHasHydratedFromServer(true);
+  }, [hasHydratedFromServer, task?.id, taskDetailsQuery.data]);
 
   const updateDetails = trpc.tasks.updateDetails.useMutation({
     onSuccess: (updated) => {

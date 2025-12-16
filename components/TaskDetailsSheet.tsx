@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Linking, Modal, Pressable, Text, View, Platform } from 'react-native';
+
+import { trpc } from '@/lib/trpc/client';
 export type TaskLike = {
   id: string;
   title: string;
@@ -104,37 +106,49 @@ export const TaskDetailsSheet = ({
   task: TaskLike | null;
   onClose: () => void;
 }) => {
+  const taskDetailsQuery = trpc.tasks.byId.useQuery(
+    { id: task?.id ?? '00000000-0000-0000-0000-000000000000' },
+    {
+      enabled: visible && !!task?.id,
+      staleTime: 60 * 1000,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+    }
+  );
+
+  const resolvedTask = (taskDetailsQuery.data as any as TaskLike | null) ?? task;
+
   const details = useMemo(() => {
-    if (!task) return [] as { label: string; value: string | null }[];
+    if (!resolvedTask) return [] as { label: string; value: string | null }[];
     const items: { label: string; value: string | null }[] = [];
 
-    if (task.type === 'appointment') {
-      items.push({ label: 'When', value: formatRange(task.startAt, task.endAt) });
-      items.push({ label: 'Location', value: task.location ?? null });
-      items.push({ label: 'Organizer', value: task.organizer ?? null });
-    } else if (task.type === 'bill') {
-      items.push({ label: 'Amount', value: formatMoney(task.amount, task.currency) });
-      items.push({ label: 'Due', value: formatDateTime(task.dueAt) });
-      items.push({ label: 'Vendor', value: task.vendor ?? null });
-      items.push({ label: 'Statement Period', value: task.statementPeriod ?? null });
-      items.push({ label: 'Reference', value: task.referenceNumber ?? null });
-    } else if (task.type === 'medication') {
-      items.push({ label: 'Medication', value: task.medicationName ?? task.title });
-      items.push({ label: 'Dosage', value: task.dosage ?? null });
-      items.push({ label: 'Frequency', value: task.frequency ?? null });
-      items.push({ label: 'Route', value: task.route ?? null });
-      items.push({ label: 'Prescriber', value: task.prescribingProvider ?? null });
+    if (resolvedTask.type === 'appointment') {
+      items.push({ label: 'When', value: formatRange(resolvedTask.startAt, resolvedTask.endAt) });
+      items.push({ label: 'Location', value: resolvedTask.location ?? null });
+      items.push({ label: 'Organizer', value: resolvedTask.organizer ?? null });
+    } else if (resolvedTask.type === 'bill') {
+      items.push({ label: 'Amount', value: formatMoney(resolvedTask.amount, resolvedTask.currency) });
+      items.push({ label: 'Due', value: formatDateTime(resolvedTask.dueAt) });
+      items.push({ label: 'Vendor', value: resolvedTask.vendor ?? null });
+      items.push({ label: 'Statement Period', value: resolvedTask.statementPeriod ?? null });
+      items.push({ label: 'Reference', value: resolvedTask.referenceNumber ?? null });
+    } else if (resolvedTask.type === 'medication') {
+      items.push({ label: 'Medication', value: resolvedTask.medicationName ?? resolvedTask.title });
+      items.push({ label: 'Dosage', value: resolvedTask.dosage ?? null });
+      items.push({ label: 'Frequency', value: resolvedTask.frequency ?? null });
+      items.push({ label: 'Route', value: resolvedTask.route ?? null });
+      items.push({ label: 'Prescriber', value: resolvedTask.prescribingProvider ?? null });
     }
 
     return items.filter((item) => item.value);
-  }, [task]);
+  }, [resolvedTask]);
 
-  const description = task?.description ?? task?.rawSnippet ?? null;
-  const sender = task?.sender ? `From ${task.sender}` : null;
+  const description = resolvedTask?.description ?? resolvedTask?.rawSnippet ?? null;
+  const sender = resolvedTask?.sender ? `From ${resolvedTask.sender}` : null;
 
   const handleOpenEmail = async () => {
-    if (!task?.sourceLink) return;
-    const webUrl = task.sourceLink;
+    if (!resolvedTask?.sourceLink) return;
+    const webUrl = resolvedTask.sourceLink;
 
     // Best-effort: on Android try to target the Gmail app explicitly; otherwise fall back to the web URL.
     if (Platform.OS === 'android') {
@@ -170,7 +184,7 @@ export const TaskDetailsSheet = ({
 
   const handleOpenCalendar = async () => {
     // Use event link if we have one; otherwise fall back to Google Calendar web.
-    const calendarUrl = task?.sourceLink ?? 'https://calendar.google.com';
+    const calendarUrl = resolvedTask?.sourceLink ?? 'https://calendar.google.com';
 
     if (Platform.OS === 'android') {
       // Try Google Calendar app first.
@@ -206,8 +220,8 @@ export const TaskDetailsSheet = ({
         }
       }
       // Fall back to default iOS Calendar if Google Calendar isn't available.
-      if (task?.startAt) {
-        const date = new Date(task.startAt);
+      if (resolvedTask?.startAt) {
+        const date = new Date(resolvedTask.startAt);
         const seconds = Math.floor(date.getTime() / 1000);
         const calUrl = `calshow:${seconds}`;
         try {
@@ -259,31 +273,39 @@ export const TaskDetailsSheet = ({
             </Pressable>
           </View>
 
-          {!task ? (
+          {!resolvedTask ? (
             <Text className="text-sm text-text-muted">Task not available.</Text>
           ) : (
             <View className="gap-3">
               <View className="gap-2">
                 <View className="flex-row flex-wrap items-center gap-2">
-                  <Badge label={formatType(task.type)} />
-                  {task.provider ? <Badge label={task.provider} tone="muted" /> : null}
-                  {task.reviewState === 'pending' ? (
+                  <Badge label={formatType(resolvedTask.type)} />
+                  {resolvedTask.provider ? (
+                    <Badge label={resolvedTask.provider} tone="muted" />
+                  ) : null}
+                  {resolvedTask.reviewState === 'pending' ? (
                     <Badge label="Needs review" tone="warn" />
                   ) : null}
                 </View>
                 <Text className="text-lg font-semibold text-text dark:text-text-dark">
-                  {task.title}
+                  {resolvedTask.title}
                 </Text>
                 <Text className="text-xs text-text-muted dark:text-text-muted-dark">
-                  Status: {task.status.replace('_', ' ')} • Confidence{' '}
-                  {formatConfidence(task.confidence)}
+                  Status: {resolvedTask.status.replace('_', ' ')} • Confidence{' '}
+                  {formatConfidence(resolvedTask.confidence)}
                 </Text>
               </View>
+
+              {taskDetailsQuery.isFetching ? (
+                <Text className="text-xs text-text-muted dark:text-text-muted-dark">
+                  Loading details…
+                </Text>
+              ) : null}
 
               {details.length ? (
                 <View className="gap-2">
                   {details.map((item) => (
-                    <View key={`${task.id}-${item.label}`} className="flex-row gap-3">
+                    <View key={`${resolvedTask.id}-${item.label}`} className="flex-row gap-3">
                       <Text className="w-28 text-xs font-semibold uppercase tracking-wide text-text-muted dark:text-text-muted-dark">
                         {item.label}
                       </Text>
@@ -310,7 +332,7 @@ export const TaskDetailsSheet = ({
                 <Text className="text-xs text-text-muted dark:text-text-muted-dark">{sender}</Text>
               ) : null}
 
-              {task.type === 'appointment' ? (
+              {resolvedTask.type === 'appointment' ? (
                 <View className="flex-row gap-3">
                   <Pressable
                     onPress={handleOpenCalendar}
@@ -325,7 +347,7 @@ export const TaskDetailsSheet = ({
                     <Text className="text-sm font-semibold text-primary">Open in Gmail</Text>
                   </Pressable>
                 </View>
-              ) : task.sourceLink ? (
+              ) : resolvedTask.sourceLink ? (
                 <Pressable
                   onPress={handleOpenEmail}
                   className="self-start rounded-full border border-border px-3 py-1.5 dark:border-border-dark"
