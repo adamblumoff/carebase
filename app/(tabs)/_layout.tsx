@@ -64,6 +64,20 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="tasks/review"
+        options={{
+          href: null,
+          title: 'Review',
+        }}
+      />
+      <Tabs.Screen
+        name="tasks/upcoming"
+        options={{
+          href: null,
+          title: 'Upcoming',
+        }}
+      />
+      <Tabs.Screen
         name="connections"
         options={{
           title: 'Sync',
