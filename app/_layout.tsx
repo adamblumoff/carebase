@@ -143,13 +143,17 @@ function PreloadTasks() {
 
   useEffect(() => {
     if (!isSignedIn) return;
-    utils.tasks.list.prefetch().catch(() => {});
-    const filters = ['appointment', 'bill', 'medication', 'general'] as const;
-    filters.forEach((type) => {
-      utils.tasks.list.prefetch({ type }).catch(() => {});
-    });
+    utils.tasks.listThin.prefetch().catch(() => {});
+    utils.tasks.stats.prefetch({ upcomingDays: 7 }).catch(() => {});
+    utils.tasks.upcoming.prefetch({ days: 7 }).catch(() => {});
     utils.ingestionEvents.recent.prefetch({ limit: 1 }).catch(() => {});
-  }, [isSignedIn, utils.ingestionEvents.recent, utils.tasks.list]);
+  }, [
+    isSignedIn,
+    utils.ingestionEvents.recent,
+    utils.tasks.listThin,
+    utils.tasks.stats,
+    utils.tasks.upcoming,
+  ]);
 
   return null;
 }
@@ -185,7 +189,9 @@ function PushToastLayer({ children }: { children: React.ReactNode }) {
   trpc.ingestionEvents.onPush.useSubscription(undefined, {
     enabled: isSignedIn,
     onData: () => {
-      void utils.tasks.list.invalidate();
+      void utils.tasks.listThin.invalidate();
+      void utils.tasks.upcoming.invalidate();
+      void utils.tasks.stats.invalidate({ upcomingDays: 7 });
       show('New task synced');
     },
     onError: (err) => {
