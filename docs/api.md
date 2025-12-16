@@ -79,6 +79,27 @@ Manage suppressed sender domains (currently Gmail only):
 - `trpc.senderSuppressions.remove({ id })`
 - `trpc.senderSuppressions.stats()`
 
+## Tasks (tRPC)
+
+Key procedures used by the app:
+
+- `trpc.tasks.listThin({ type?, reviewState? })`: main list feed for `/tasks` (All) and `/tasks/review` (Review).
+  - If `reviewState` is omitted, the API excludes `ignored` tasks by default.
+- `trpc.tasks.upcoming({ days })`: upcoming appointments + bills used by `/tasks/upcoming` (Upcoming).
+  - Excludes `ignored` tasks and tasks with `status = done`.
+- `trpc.tasks.stats({ upcomingDays })`: lightweight counts for the Tasks top nav (pending review + upcoming).
+- `trpc.tasks.review({ id, action: "approve" | "ignore" })`:
+  - `approve` sets `reviewState = approved`.
+  - `ignore` sets `reviewState = ignored` and `status = done`, and increments sender suppression stats when applicable.
+- `trpc.tasks.toggleStatus({ id })`: toggles `status` between `todo` and `done`.
+- `trpc.tasks.updateDetails({ id, title?, description?, type? })`: used by the edit sheet.
+
+Review/ignore semantics:
+
+- `reviewState = pending` is the “needs review” queue.
+- `reviewState = ignored` is a tombstone state; ignored tasks are excluded from default lists and do not resurrect on ingestion re-sync.
+- Ignoring a Gmail-derived task may contribute to sender-domain suppression (after enough ignores, that domain is auto-suppressed and future messages are tombstoned earlier in ingestion).
+
 ## Observability
 
 - Server logs via pino (pretty logs in local TTY unless disabled).

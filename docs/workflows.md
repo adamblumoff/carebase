@@ -33,7 +33,7 @@ Key places:
 - Webhook handler: `POST /webhooks/google/push` in `api/index.ts`
 - Gmail sync: `api/modules/ingestion/router.ts`
 - Calendar sync: `api/modules/ingestion/calendar.ts`
-- Push-to-client events: `api/modules/ingestion/events.ts` + app toast in `app/_layout.tsx`
+- Push-to-client events: `api/modules/ingestion/events.ts` + app toast in `app/_layout.tsx` (invalidates `tasks.listThin`, `tasks.upcoming`, and `tasks.stats`)
 - Sender suppression: `api/modules/tasks/router.ts` (ignore hooks), `api/modules/sender-suppressions/router.ts` (tRPC), and the Profile UI entry to `app/(tabs)/suppressed-senders.tsx`.
 
 Common gotchas:

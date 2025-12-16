@@ -48,7 +48,7 @@ The canonical list (with notes) lives in `.env.example`. Key variables you’ll 
 ## Project layout
 
 - `app/` — routes/screens (Expo Router file-based).
-  - `app/(tabs)/tasks/` — task list, detail sheet, and edit sheet trigger.
+  - `app/(tabs)/tasks/` — Tasks area (All + Upcoming + Review as in-Tasks subtabs).
   - `app/(tabs)/connections.tsx` — Gmail connect/sync status.
 - `components/` — shared UI building blocks.
 - `assets/` — images, fonts, icons.
