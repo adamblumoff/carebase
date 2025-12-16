@@ -14,8 +14,18 @@
   - `PostHogProvider` when `EXPO_PUBLIC_POSTHOG_KEY` is set
   - TanStack Query persistence to AsyncStorage + tRPC provider (`lib/trpc/client.ts`)
   - `AuthGate` to keep unauth users in `app/(auth)`
-  - Task prefetch on sign-in (`tasks.list` and common filters) + recent ingestion events
-  - Subscription toast: `ingestionEvents.onPush` triggers a background invalidate + “New task synced” toast
+  - Task prefetch on sign-in (`tasks.listThin`, `tasks.upcoming`, `tasks.stats`) + recent ingestion events
+  - Subscription toast: `ingestionEvents.onPush` triggers a background invalidate (`listThin`, `upcoming`, `stats`) + “New task synced” toast
+
+## Tasks UI (routing)
+
+- Bottom tab entry: `/tasks` (route: `app/(tabs)/tasks/index.tsx`).
+- Subtabs within Tasks:
+  - `/tasks` (All)
+  - `/tasks/upcoming` (Upcoming)
+  - `/tasks/review` (Review)
+- `Review` and `Upcoming` are hidden from the bottom tab bar (they remain routable for deep links).
+- Review actions (`approve`/`ignore`) are optimistic client-side; the app updates cached lists immediately and commits to the database in the background.
 
 ## Data flow
 
