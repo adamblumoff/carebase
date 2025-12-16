@@ -2,6 +2,16 @@
 
 Carebase is a caregiver-first mobile app that pulls every stream of care information into one place. It keeps caregivers aligned on schedules, medications, care plans, and real-time updates so they can spend less time coordinating and more time caring.
 
+## Developer docs
+
+- Start here: `docs/README.md`
+- Daily setup/run: `docs/development.md`
+- System overview: `docs/architecture.md`
+- API + ingestion: `docs/api.md`
+- Infra/deploy: `docs/infra.md`
+- Common workflows: `docs/workflows.md`
+- Builds/releases: `docs/release.md`
+
 ## Key ideas
 
 - Single source of truth for a care team’s daily tasks, notes, and documents.
@@ -19,28 +29,20 @@ Carebase is a caregiver-first mobile app that pulls every stream of care informa
 
 ## Getting started
 
-1. Copy `.env.example` to `.env` and fill in the values (Clerk keys, database URL, API host/port, `EXPO_PUBLIC_API_BASE_URL`).
-2. Install dependencies: `pnpm install` (corepack recommended).
-3. Run the API: `pnpm api:dev` (expects `DATABASE_URL`); default host/port come from `.env`.
-4. Run the app: `pnpm start` then choose iOS, Android, or Web (or use `pnpm ios` / `pnpm android` / `pnpm web`). Ensure `EXPO_PUBLIC_API_BASE_URL` points to the reachable API URL for your simulator/device (e.g., `http://localhost:3000` for web/simulator or your tunnel URL for Expo Go).
-5. Lint/format: `pnpm lint` to check, `pnpm format` to fix.
-6. Performance defaults: query cache persists to AsyncStorage and hydrates on startup; Home and root layouts prefetch tasks (and filters) plus recent ingestion events so the Tasks tab should render instantly from cache and refresh in the background.
+1. Copy `.env.example` to `.env` and fill in values.
+2. Install: `pnpm install`
+3. Run API: `pnpm api:dev`
+4. Run app: `pnpm start` (or `pnpm ios` / `pnpm android` / `pnpm web`)
+
+See `docs/development.md` for the full, up-to-date setup checklist and platform-specific base URL tips.
 
 ## Environment variables
 
-- `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`: Clerk publishable key for the app.
-- `CLERK_SECRET_KEY`: Backend Clerk secret.
-- `EXPO_PUBLIC_API_BASE_URL`: Base URL for the tRPC API (used by the Expo app). The app requests Clerk tokens using the `trpc` template, so configure that template in Clerk.
-- `EXPO_PUBLIC_API_BASE_URL_PROD`: Optional production base URL (used when `NODE_ENV=production`).
-- `EXPO_PUBLIC_GOOGLE_REDIRECT_URI` / `_PROD`: OAuth redirect URI the Expo app passes when connecting Google (must be authorized in your Google OAuth client).
-- `API_HOST` / `API_PORT`: Fastify server bind values.
-- `PORT`: If set by the host (e.g., Railway), the API binds to this instead of `API_PORT`.
-- `DATABASE_URL`: Postgres connection string for Drizzle/pg.
-- `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW`: Rate limiting settings.
-- `POSTHOG_API_KEY` / `POSTHOG_HOST`: Backend PostHog ingestion (optional; required if you want server events).
-- Google ingestion: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` (needed for Gmail sync). Use `prompt=consent&access_type=offline` in the OAuth flow to ensure a refresh token.
-- Vertex AI classification: `GOOGLE_VERTEX_PROJECT_ID`, `GOOGLE_VERTEX_LOCATION` (default `us-central1`). Use ADC/service account (no secrets in git).
-- Pub/Sub push: `GOOGLE_PUBSUB_PROJECT`, `GOOGLE_PUBSUB_TOPIC_DEV/PROD`, `GOOGLE_WEBHOOK_URL(_PROD)`, `GOOGLE_PUBSUB_VERIFICATION_TOKEN`.
+The canonical list (with notes) lives in `.env.example`. Key variables you’ll almost always need:
+
+- `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY`
+- `EXPO_PUBLIC_API_BASE_URL` (and `DATABASE_URL` for the API)
+- Google ingestion: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GOOGLE_STATE_SECRET`
 
 ## Project layout
 
@@ -51,10 +53,3 @@ Carebase is a caregiver-first mobile app that pulls every stream of care informa
 - `assets/` — images, fonts, icons.
 - `global.css` — global style tokens.
 - Configs: `app.json`, `babel.config.js`, `metro.config.js`, `tailwind.config.js`.
-
-## Next steps (suggested)
-
-1. Define the first concrete user flows (e.g., daily task list, medication reminders) and the data model each requires.
-2. Add state/data layer decisions: TanStack Query for server sync and optional Zustand for local state, wired to sample endpoints or mocked services.
-3. Set up auth scaffolding (e.g., email/OTP) and environment handling with `.env.example`.
-4. Add testing harness (Jest + React Native Testing Library) and wire `pnpm test`.
