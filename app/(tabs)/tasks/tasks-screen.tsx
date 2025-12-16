@@ -341,8 +341,9 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
               <Pressable
                 accessibilityLabel={isDone ? 'Mark task as todo' : 'Mark task as done'}
                 onPress={() => onToggle(item.id)}
+                disabled={view === 'review'}
                 style={({ pressed }) => ({
-                  opacity: pressed ? 0.7 : 1,
+                  opacity: view === 'review' ? 0.4 : pressed ? 0.7 : 1,
                 })}>
                 <View
                   className={`h-6 w-6 items-center justify-center rounded-full border ${
@@ -376,32 +377,67 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
                       From {item.sender}
                     </Text>
                   ) : null}
+
+                  {view === 'review' ? (
+                    <View className="mt-3 flex-row items-center gap-2">
+                      <Pressable
+                        onPress={() => handleReview(item.id, 'approve')}
+                        disabled={reviewTask.isLoading || suppressSender.isLoading}
+                        className="flex-1 items-center justify-center rounded-full bg-primary px-3 py-2"
+                        style={({ pressed }) => ({
+                          opacity:
+                            reviewTask.isLoading || suppressSender.isLoading
+                              ? 0.6
+                              : pressed
+                                ? 0.85
+                                : 1,
+                        })}>
+                        <Text className="text-sm font-semibold text-white">Accept</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => confirmIgnore(item)}
+                        disabled={reviewTask.isLoading || suppressSender.isLoading}
+                        className="flex-1 items-center justify-center rounded-full border border-border px-3 py-2 dark:border-border-dark"
+                        style={({ pressed }) => ({
+                          opacity:
+                            reviewTask.isLoading || suppressSender.isLoading
+                              ? 0.6
+                              : pressed
+                                ? 0.75
+                                : 1,
+                        })}>
+                        <Text className="text-sm font-semibold text-text">Ignore</Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
                 </View>
               </Pressable>
             </View>
-            <View className="flex-row items-center gap-3">
-              <Pressable
-                accessibilityLabel="Edit task"
-                onPress={() => onEdit(item)}
-                style={({ pressed }) => ({
-                  opacity: pressed ? 0.7 : 1,
-                })}>
-                <Ionicons name="create-outline" size={22} color="#4A8F6A" />
-              </Pressable>
-              <Pressable
-                accessibilityLabel="Delete task"
-                onPress={() => onDelete(item.id)}
-                disabled={isDeleting}
-                style={({ pressed }) => ({
-                  opacity: isDeleting ? 0.5 : pressed ? 0.7 : 1,
-                })}>
-                {isDeleting ? (
-                  <ActivityIndicator color="#E06262" />
-                ) : (
-                  <Ionicons name="trash-outline" size={22} color="#E06262" />
-                )}
-              </Pressable>
-            </View>
+            {view !== 'review' ? (
+              <View className="flex-row items-center gap-3">
+                <Pressable
+                  accessibilityLabel="Edit task"
+                  onPress={() => onEdit(item)}
+                  style={({ pressed }) => ({
+                    opacity: pressed ? 0.7 : 1,
+                  })}>
+                  <Ionicons name="create-outline" size={22} color="#4A8F6A" />
+                </Pressable>
+                <Pressable
+                  accessibilityLabel="Delete task"
+                  onPress={() => onDelete(item.id)}
+                  disabled={isDeleting}
+                  style={({ pressed }) => ({
+                    opacity: isDeleting ? 0.5 : pressed ? 0.7 : 1,
+                  })}>
+                  {isDeleting ? (
+                    <ActivityIndicator color="#E06262" />
+                  ) : (
+                    <Ionicons name="trash-outline" size={22} color="#E06262" />
+                  )}
+                </Pressable>
+              </View>
+            ) : null}
           </View>
         </View>
       );
@@ -519,11 +555,54 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
   });
 
   const handleReview = useCallback(
-    (action: 'approve' | 'ignore') => {
-      if (!pendingReview) return;
-      reviewTask.mutate({ id: pendingReview.id, action });
+    (id: string, action: 'approve' | 'ignore') => {
+      reviewTask.mutate({ id, action });
     },
-    [pendingReview, reviewTask]
+    [reviewTask]
+  );
+
+  const suppressSender = trpc.senderSuppressions.suppress.useMutation({
+    onSuccess: () => {
+      utils.senderSuppressions.list.invalidate();
+    },
+  });
+
+  const confirmIgnore = useCallback(
+    (item: Task) => {
+      Alert.alert(
+        'Ignore task',
+        item.senderDomain
+          ? `Ignore this task, or always ignore future emails from ${item.senderDomain}?`
+          : 'Ignore this task?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Ignore',
+            style: 'destructive',
+            onPress: () => handleReview(item.id, 'ignore'),
+          },
+          ...(item.senderDomain
+            ? [
+                {
+                  text: 'Always ignore sender',
+                  style: 'destructive' as const,
+                  onPress: async () => {
+                    try {
+                      await suppressSender.mutateAsync({ senderDomain: item.senderDomain! });
+                    } catch (err: any) {
+                      Alert.alert('Could not suppress sender', err?.message ?? 'Unknown error');
+                    } finally {
+                      handleReview(item.id, 'ignore');
+                    }
+                  },
+                },
+              ]
+            : []),
+        ],
+        { cancelable: true }
+      );
+    },
+    [handleReview, suppressSender]
   );
 
   const renderHeader = () => (
@@ -548,7 +627,7 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
           </Text>
           <View className="mt-3 flex-row items-center gap-3">
             <Pressable
-              onPress={() => handleReview('approve')}
+              onPress={() => handleReview(pendingReview.id, 'approve')}
               disabled={reviewTask.isLoading}
               className="flex-1 items-center justify-center rounded-full bg-primary px-4 py-2"
               style={({ pressed }) => ({
@@ -561,7 +640,7 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
               )}
             </Pressable>
             <Pressable
-              onPress={() => handleReview('ignore')}
+              onPress={() => handleReview(pendingReview.id, 'ignore')}
               disabled={reviewTask.isLoading}
               className="flex-1 items-center justify-center rounded-full border border-border px-4 py-2 dark:border-border-dark"
               style={({ pressed }) => ({
