@@ -127,7 +127,10 @@ export const TaskDetailsSheet = ({
       items.push({ label: 'Location', value: resolvedTask.location ?? null });
       items.push({ label: 'Organizer', value: resolvedTask.organizer ?? null });
     } else if (resolvedTask.type === 'bill') {
-      items.push({ label: 'Amount', value: formatMoney(resolvedTask.amount, resolvedTask.currency) });
+      items.push({
+        label: 'Amount',
+        value: formatMoney(resolvedTask.amount, resolvedTask.currency),
+      });
       items.push({ label: 'Due', value: formatDateTime(resolvedTask.dueAt) });
       items.push({ label: 'Vendor', value: resolvedTask.vendor ?? null });
       items.push({ label: 'Statement Period', value: resolvedTask.statementPeriod ?? null });

@@ -459,9 +459,15 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
   }, []);
 
   const applyTaskPatch = (updater: (task: Task) => Task) => {
-    utils.tasks.listThin.setData(undefined, (current) => (current ? current.map(updater) : current));
-    utils.tasks.listThin.setData(listInput, (current) => (current ? current.map(updater) : current));
-    utils.tasks.upcoming.setData(undefined, (current) => (current ? current.map(updater) : current));
+    utils.tasks.listThin.setData(undefined, (current) =>
+      current ? current.map(updater) : current
+    );
+    utils.tasks.listThin.setData(listInput, (current) =>
+      current ? current.map(updater) : current
+    );
+    utils.tasks.upcoming.setData(undefined, (current) =>
+      current ? current.map(updater) : current
+    );
   };
 
   const getCurrentTask = (id: string) => {
