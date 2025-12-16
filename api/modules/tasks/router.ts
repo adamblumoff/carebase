@@ -1,5 +1,5 @@
 import { TRPCError } from '@trpc/server';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, lte, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { caregivers, senderSuppressions, tasks } from '../../db/schema';
 import { authedProcedure, router } from '../../trpc/trpc';
@@ -12,6 +12,72 @@ import {
 const statusEnum = z.enum(['todo', 'in_progress', 'scheduled', 'snoozed', 'done']);
 const typeEnum = z.enum(['appointment', 'bill', 'medication', 'general']);
 const reviewStateEnum = z.enum(['pending', 'approved', 'ignored']);
+
+const listThinInput = z
+  .object({
+    type: typeEnum.optional(),
+    reviewState: reviewStateEnum.optional(),
+  })
+  .optional();
+
+const selectTaskThin = {
+  id: tasks.id,
+  title: tasks.title,
+  type: tasks.type,
+  status: tasks.status,
+  reviewState: tasks.reviewState,
+  confidence: tasks.confidence,
+  provider: tasks.provider,
+  sourceLink: tasks.sourceLink,
+  sender: tasks.sender,
+  senderDomain: tasks.senderDomain,
+  startAt: tasks.startAt,
+  endAt: tasks.endAt,
+  location: tasks.location,
+  dueAt: tasks.dueAt,
+  amount: tasks.amount,
+  currency: tasks.currency,
+  vendor: tasks.vendor,
+  referenceNumber: tasks.referenceNumber,
+  statementPeriod: tasks.statementPeriod,
+  medicationName: tasks.medicationName,
+  dosage: tasks.dosage,
+  frequency: tasks.frequency,
+  route: tasks.route,
+  prescribingProvider: tasks.prescribingProvider,
+  createdAt: tasks.createdAt,
+  updatedAt: tasks.updatedAt,
+} as const;
+
+const buildListPredicate = ({
+  caregiverId,
+  type,
+  reviewState,
+}: {
+  caregiverId: string;
+  type?: z.infer<typeof typeEnum>;
+  reviewState?: z.infer<typeof reviewStateEnum>;
+}) => {
+  const conditions = [eq(tasks.createdById, caregiverId)];
+
+  if (type) {
+    conditions.push(eq(tasks.type, type));
+  }
+
+  if (reviewState) {
+    conditions.push(eq(tasks.reviewState, reviewState));
+  } else {
+    conditions.push(sql`${tasks.reviewState} != 'ignored'`);
+  }
+
+  return conditions.length === 1 ? conditions[0] : and(...conditions);
+};
+
+const upcomingWindow = (days: number) => {
+  const now = new Date();
+  const end = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+  return { now, end };
+};
 
 const recordSenderSuppression = async ({
   ctx,
@@ -59,6 +125,116 @@ const recordSenderSuppression = async ({
 };
 
 export const taskRouter = router({
+  listThin: authedProcedure.input(listThinInput).query(async ({ ctx, input }) => {
+    const caregiverId = await ensureCaregiver(ctx);
+    const predicate = buildListPredicate({
+      caregiverId,
+      type: input?.type,
+      reviewState: input?.reviewState,
+    });
+
+    return ctx.db
+      .select(selectTaskThin)
+      .from(tasks)
+      .where(predicate)
+      .orderBy(desc(tasks.createdAt));
+  }),
+
+  byId: authedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const caregiverId = await ensureCaregiver(ctx);
+
+      const [row] = await ctx.db
+        .select()
+        .from(tasks)
+        .where(and(eq(tasks.id, input.id), eq(tasks.createdById, caregiverId)))
+        .limit(1);
+
+      if (!row) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
+      }
+
+      return row;
+    }),
+
+  upcoming: authedProcedure
+    .input(z.object({ days: z.number().int().min(1).max(30).default(7) }).optional())
+    .query(async ({ ctx, input }) => {
+      const caregiverId = await ensureCaregiver(ctx);
+      const { now, end } = upcomingWindow(input?.days ?? 7);
+
+      const appointmentPredicate = and(
+        eq(tasks.type, 'appointment'),
+        gte(tasks.startAt, now),
+        lte(tasks.startAt, end)
+      );
+      const billPredicate = and(
+        eq(tasks.type, 'bill'),
+        gte(tasks.dueAt, now),
+        lte(tasks.dueAt, end)
+      );
+
+      const predicate = and(
+        eq(tasks.createdById, caregiverId),
+        sql`${tasks.reviewState} != 'ignored'`,
+        sql`${tasks.status} != 'done'`,
+        or(appointmentPredicate, billPredicate)
+      );
+
+      return ctx.db
+        .select(selectTaskThin)
+        .from(tasks)
+        .where(predicate)
+        .orderBy(desc(tasks.createdAt));
+    }),
+
+  stats: authedProcedure
+    .input(z.object({ upcomingDays: z.number().int().min(1).max(30).default(7) }).optional())
+    .query(async ({ ctx, input }) => {
+      const caregiverId = await ensureCaregiver(ctx);
+      const { now, end } = upcomingWindow(input?.upcomingDays ?? 7);
+
+      const [pendingReview] = await ctx.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(tasks)
+        .where(
+          and(
+            eq(tasks.createdById, caregiverId),
+            eq(tasks.reviewState, 'pending'),
+            sql`${tasks.reviewState} != 'ignored'`
+          )
+        );
+
+      const appointmentPredicate = and(
+        eq(tasks.type, 'appointment'),
+        gte(tasks.startAt, now),
+        lte(tasks.startAt, end)
+      );
+      const billPredicate = and(
+        eq(tasks.type, 'bill'),
+        gte(tasks.dueAt, now),
+        lte(tasks.dueAt, end)
+      );
+
+      const [upcoming] = await ctx.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(tasks)
+        .where(
+          and(
+            eq(tasks.createdById, caregiverId),
+            sql`${tasks.reviewState} != 'ignored'`,
+            sql`${tasks.status} != 'done'`,
+            or(appointmentPredicate, billPredicate)
+          )
+        );
+
+      return {
+        pendingReviewCount: pendingReview?.count ?? 0,
+        upcomingCount: upcoming?.count ?? 0,
+      };
+    }),
+
   list: authedProcedure
     .input(
       z
@@ -71,20 +247,11 @@ export const taskRouter = router({
     .query(async ({ ctx, input }) => {
       const caregiverId = await ensureCaregiver(ctx);
 
-      const conditions = [eq(tasks.createdById, caregiverId)];
-
-      if (input?.type) {
-        conditions.push(eq(tasks.type, input.type));
-      }
-
-      if (input?.reviewState) {
-        conditions.push(eq(tasks.reviewState, input.reviewState));
-      } else {
-        // Hide ignored tasks by default unless explicitly requested.
-        conditions.push(sql`${tasks.reviewState} != 'ignored'`);
-      }
-
-      const predicate = conditions.length === 1 ? conditions[0] : and(...conditions);
+      const predicate = buildListPredicate({
+        caregiverId,
+        type: input?.type,
+        reviewState: input?.reviewState,
+      });
 
       return ctx.db.select().from(tasks).where(predicate).orderBy(desc(tasks.createdAt));
     }),
