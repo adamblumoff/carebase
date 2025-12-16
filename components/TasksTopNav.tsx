@@ -30,26 +30,35 @@ export const TasksTopNav = ({
   };
 
   return (
-    <View className="mb-3 flex-row items-center gap-2">
+    <View className="flex-1 flex-row rounded-full border border-border bg-surface-strong p-1 dark:border-border-dark dark:bg-surface-card-dark">
       {tabs.map((tab) => {
         const active = isActiveTab(pathname, tab.key);
         const badge = badgeFor(tab.key);
+
         return (
           <Link key={tab.key} href={tab.href} asChild>
             <Pressable
-              className={`flex-row items-center gap-2 rounded-full border px-3 py-2 ${
-                active ? 'border-primary bg-primary/10' : 'border-border dark:border-border-dark'
+              className={`flex-1 flex-row items-center justify-center gap-2 rounded-full px-3 py-2 ${
+                active ? 'bg-primary' : ''
               }`}
-              style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}>
+              style={({ pressed }) => ({
+                opacity: pressed ? 0.85 : 1,
+              })}>
               <Text
                 className={`text-sm font-semibold ${
-                  active ? 'text-primary' : 'text-text dark:text-text-dark'
+                  active ? 'text-white' : 'text-text dark:text-text-dark'
                 }`}>
                 {tab.label}
               </Text>
               {badge !== null && badge > 0 ? (
-                <View className="min-w-[20px] items-center justify-center rounded-full bg-primary px-2 py-0.5">
-                  <Text className="text-xs font-semibold text-white">{badge}</Text>
+                <View
+                  className={`min-w-[20px] items-center justify-center rounded-full px-2 py-0.5 ${
+                    active ? 'bg-white/20' : 'bg-primary/10'
+                  }`}>
+                  <Text
+                    className={`text-xs font-semibold ${active ? 'text-white' : 'text-primary'}`}>
+                    {badge}
+                  </Text>
                 </View>
               ) : null}
             </Pressable>
