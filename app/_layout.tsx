@@ -204,7 +204,7 @@ function SetupGate({ children }: { children: React.ReactNode }) {
 
     if (shouldRouteToSetup) {
       if (!isInSetupGroup) {
-        router.replace('/(setup)');
+        router.replace('/(setup)/setup');
       }
       return;
     }
@@ -230,6 +230,8 @@ function SetupGate({ children }: { children: React.ReactNode }) {
   }
 
   if (shouldRouteToSetup) {
+    // Avoid rendering the main app route while we redirect into setup.
+    if (!isInSetupGroup) return null;
     return <>{children}</>;
   }
 
@@ -265,7 +267,7 @@ function SetupGate({ children }: { children: React.ReactNode }) {
       </Pressable>
 
       <Pressable
-        onPress={() => router.replace('/(setup)')}
+        onPress={() => router.replace('/(setup)/setup')}
         style={({ pressed }) => ({
           marginTop: 10,
           paddingVertical: 10,
