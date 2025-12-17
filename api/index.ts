@@ -98,27 +98,22 @@ const registerPlugins = async () => {
           .limit(1);
 
         const shouldBecomePrimary = await (async () => {
-          if (membership?.careRecipientId && membership?.role === 'owner') {
-            const [existingPrimary] = await db
-              .select({ id: sources.id })
-              .from(sources)
-              .innerJoin(
-                careRecipientMemberships,
-                eq(careRecipientMemberships.caregiverId, sources.caregiverId)
-              )
-              .where(
-                sql`${careRecipientMemberships.careRecipientId} = ${membership.careRecipientId} AND ${sources.provider} = 'gmail' AND ${sources.isPrimary} = true`
-              )
-              .limit(1);
-            return !existingPrimary;
-          }
+          if (!membership?.careRecipientId) return false;
 
-          const [anyForCaregiver] = await db
+          // Only an owner may create the hub's primary inbox, and only if none exists.
+          const [existingPrimary] = await db
             .select({ id: sources.id })
             .from(sources)
-            .where(sql`${sources.caregiverId} = ${caregiverId} AND ${sources.provider} = 'gmail'`)
+            .innerJoin(
+              careRecipientMemberships,
+              eq(careRecipientMemberships.caregiverId, sources.caregiverId)
+            )
+            .where(
+              sql`${careRecipientMemberships.careRecipientId} = ${membership.careRecipientId} AND ${sources.provider} = 'gmail' AND ${sources.isPrimary} = true`
+            )
             .limit(1);
-          return !anyForCaregiver;
+
+          return membership.role === 'owner' && !existingPrimary;
         })();
 
         await db
