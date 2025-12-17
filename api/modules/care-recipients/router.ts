@@ -3,7 +3,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
 import { z } from 'zod';
 
-import { careInvitations, careRecipientMemberships, careRecipients } from '../../db/schema';
+import { careInvitations, careRecipientMemberships, careRecipients, tasks } from '../../db/schema';
 import { ensureCaregiver } from '../../lib/caregiver';
 import {
   INVITE_TOKEN_BYTES,
@@ -73,6 +73,12 @@ export const careRecipientsRouter = router({
       role: 'owner',
       createdAt: now,
     });
+
+    // Backfill existing tasks created by this caregiver so their list doesn't go empty after scoping.
+    await ctx.db
+      .update(tasks)
+      .set({ careRecipientId: recipient.id, updatedAt: now })
+      .where(and(eq(tasks.createdById, caregiverId), isNull(tasks.careRecipientId)));
 
     return {
       careRecipient: recipient,
@@ -151,6 +157,12 @@ export const careRecipientsRouter = router({
       role: invite.role,
       createdAt: now,
     });
+
+    // Backfill any existing tasks created by this caregiver into the joined hub.
+    await ctx.db
+      .update(tasks)
+      .set({ careRecipientId: invite.careRecipientId, updatedAt: now })
+      .where(and(eq(tasks.createdById, caregiverId), isNull(tasks.careRecipientId)));
 
     await ctx.db
       .update(careInvitations)
