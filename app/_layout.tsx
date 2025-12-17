@@ -180,7 +180,15 @@ function SetupGate({ children }: { children: React.ReactNode }) {
   const errorCode =
     (membershipQuery.error as any)?.data?.code ?? (membershipQuery.error as any)?.code ?? null;
 
-  const shouldRouteToSetup = errorCode === 'FAILED_PRECONDITION' || errorCode === 'NOT_FOUND';
+  const errorMessage =
+    (membershipQuery.error as any)?.message ??
+    (membershipQuery.error as any)?.data?.message ??
+    null;
+
+  const shouldRouteToSetup =
+    errorCode === 'FAILED_PRECONDITION' ||
+    errorCode === 'NOT_FOUND' ||
+    errorMessage === 'Care recipient not set up';
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -254,6 +262,20 @@ function SetupGate({ children }: { children: React.ReactNode }) {
           opacity: pressed ? 0.85 : 1,
         })}>
         <Text style={{ color: '#fff', fontWeight: '600' }}>Retry</Text>
+      </Pressable>
+
+      <Pressable
+        onPress={() => router.replace('/(setup)')}
+        style={({ pressed }) => ({
+          marginTop: 10,
+          paddingVertical: 10,
+          paddingHorizontal: 16,
+          borderRadius: 9999,
+          borderWidth: 1,
+          borderColor: '#D1D5DB',
+          opacity: pressed ? 0.85 : 1,
+        })}>
+        <Text style={{ fontWeight: '600' }}>Go to setup</Text>
       </Pressable>
     </View>
   );
