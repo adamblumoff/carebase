@@ -57,6 +57,10 @@ const registerPlugins = async () => {
     timeWindow: process.env.RATE_LIMIT_WINDOW ?? '1 minute',
   });
 
+  server.addHook('onError', async (request, _reply, error) => {
+    request.log.error({ err: error }, 'request error');
+  });
+
   server.get('/healthz', async () => ({ ok: true }));
 
   // OAuth redirect catcher for Expo/WebBrowser flows
@@ -312,7 +316,7 @@ const registerPlugins = async () => {
   server.addHook('onResponse', async (request, reply) => {
     if (!posthog) return;
 
-    const durationMs = reply.getResponseTime();
+    const durationMs = reply.elapsedTime;
     posthog.capture({
       distinctId: request.headers['x-user-id']?.toString() ?? 'anonymous',
       event: 'api_request',
