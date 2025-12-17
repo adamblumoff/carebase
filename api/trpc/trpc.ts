@@ -4,8 +4,20 @@ import { Context } from './context';
 const t = initTRPC.context<Context>().create();
 
 export const router = t.router;
-export const procedure = t.procedure;
-export const authedProcedure = t.procedure.use(
+
+const logErrorsMiddleware = t.middleware(async ({ ctx, path, type, rawInput, next }) => {
+  const result = await next();
+  if (!result.ok) {
+    ctx.req?.log?.error?.(
+      { err: result.error, path, type, input: rawInput },
+      'trpc request failed'
+    );
+  }
+  return result;
+});
+
+export const procedure = t.procedure.use(logErrorsMiddleware);
+export const authedProcedure = procedure.use(
   t.middleware(({ ctx, next }) => {
     if (!ctx.auth?.userId) {
       throw new TRPCError({ code: 'UNAUTHORIZED' });
