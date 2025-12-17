@@ -1,7 +1,7 @@
 import '../global.css';
 import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
 import { tokenCache } from '@clerk/clerk-expo/token-cache';
-import { Slot, useRouter, useSegments } from 'expo-router';
+import { Slot, router, useSegments } from 'expo-router';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Animated, Pressable, Text, View } from 'react-native';
@@ -118,7 +118,6 @@ function TrpcProvider({ children }: { children: React.ReactNode }) {
 function AuthGate() {
   const { isLoaded, isSignedIn } = useAuth();
   const segments = useSegments();
-  const router = useRouter();
   const { colorScheme } = useColorScheme();
 
   useEffect(() => {
@@ -129,10 +128,15 @@ function AuthGate() {
     } else if (isSignedIn && inAuthGroup) {
       router.replace('/');
     }
-  }, [isLoaded, isSignedIn, segments, router]);
+  }, [isLoaded, isSignedIn, segments]);
 
   if (!isLoaded) return <FullScreenLoading title="Loading…" colorScheme={colorScheme} />;
-  return <Slot />;
+  const backgroundColor = colorScheme === 'dark' ? '#1C2521' : '#F5F7F6';
+  return (
+    <View style={{ flex: 1, backgroundColor }}>
+      <Slot />
+    </View>
+  );
 }
 
 function ThemeGate({ children }: { children: React.ReactNode }) {
@@ -171,7 +175,8 @@ function PreloadTasks() {
 function SetupGate({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn } = useAuth();
   const segments = useSegments();
-  const router = useRouter();
+  const { colorScheme } = useColorScheme();
+  const [showMembershipError, setShowMembershipError] = useState(false);
 
   const isInSetupRoute = segments[0] === '(setup)' || segments[0] === 'setup';
 
@@ -197,6 +202,14 @@ function SetupGate({ children }: { children: React.ReactNode }) {
     errorMessage === 'Care recipient not set up';
 
   useEffect(() => {
+    if (membershipQuery.isError && !membershipQuery.isFetching && !shouldRouteToSetup) {
+      const timer = setTimeout(() => setShowMembershipError(true), 500);
+      return () => clearTimeout(timer);
+    }
+    setShowMembershipError(false);
+  }, [membershipQuery.isError, membershipQuery.isFetching, shouldRouteToSetup]);
+
+  useEffect(() => {
     if (!isLoaded) return;
     if (!isSignedIn) return;
     if (membershipQuery.isLoading) return;
@@ -220,7 +233,6 @@ function SetupGate({ children }: { children: React.ReactNode }) {
     isSignedIn,
     membershipQuery.isLoading,
     membershipQuery.isSuccess,
-    router,
     shouldRouteToSetup,
   ]);
 
@@ -237,13 +249,14 @@ function SetupGate({ children }: { children: React.ReactNode }) {
 
   if (shouldRouteToSetup) {
     // Avoid rendering the main app route while we redirect into setup.
-    if (!isInSetupRoute) return null;
+    if (!isInSetupRoute) return <FullScreenLoading title="Loading…" colorScheme={colorScheme} />;
     return <>{children}</>;
   }
 
-  if (membershipQuery.isLoading) return null;
+  if (membershipQuery.isLoading || membershipQuery.isFetching || !showMembershipError)
+    return <FullScreenLoading title="Loading…" colorScheme={colorScheme} />;
 
-  const message = membershipQuery.error?.message ?? 'Could not load your care hub.';
+  const message = membershipQuery.error?.message ?? 'Could not load your CareHub.';
   const hint =
     typeof message === 'string' && message.toLowerCase().includes('relation')
       ? 'Hint: run `pnpm db:migrate` on the API database, then restart `pnpm api:dev`.'

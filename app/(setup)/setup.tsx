@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { useColorScheme } from 'nativewind';
 import { Ionicons } from '@expo/vector-icons';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
@@ -11,7 +11,6 @@ import { trpc } from '@/lib/trpc/client';
 
 export default function SetupScreen() {
   useColorScheme();
-  const router = useRouter();
   const { user } = useUser();
 
   const initialName = useMemo(() => {
@@ -85,7 +84,7 @@ export default function SetupScreen() {
           <View className="pt-6" />
           <View className="mt-10 gap-2">
             <Text className="text-3xl font-semibold text-text dark:text-text-dark">
-              Set up your care hub
+              Set up your CareHub
             </Text>
             <Text className="text-base leading-5 text-text-muted dark:text-text-muted-dark">
               Start with one person you’re caring for. You can invite family caregivers later.

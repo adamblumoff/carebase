@@ -19,7 +19,7 @@
     "db:push": "drizzle-kit push",
     "test": "jest",
     "reset:deps": "rm -rf node_modules .expo .pnpm-store && pnpm install",
-    "lines": "git ls-files | xargs wc -l"
+    "lines": "git ls-files \"\": ':(exclude)*.json' \"\": ':(exclude)*.md' \"\": ':(exclude)*.yaml' \"\": ':(exclude)*.yml' | xargs wc -l"
   },
   "dependencies": {
     "@clerk/backend": "^2.23.2",
@@ -43,6 +43,7 @@
     "expo": "~54.0.29",
     "expo-application": "~7.0.8",
     "expo-auth-session": "~7.0.10",
+    "expo-clipboard": "~8.0.8",
     "expo-constants": "~18.0.12",
     "expo-device": "~8.0.10",
     "expo-file-system": "~19.0.21",
