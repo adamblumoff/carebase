@@ -121,7 +121,11 @@ export const processGmailMessageToTask = async ({
   const fromHeader = rawFromHeader ? decodeRfc2047HeaderValue(rawFromHeader) : undefined;
   const snippet = message.snippet ?? '';
   const bulkSignals = hasBulkHeaderSignals(headerMap);
-  const messageIdHeader = getHeader(headerMap, 'message-id')?.trim() ?? null;
+  const messageIdHeaderRaw = getHeader(headerMap, 'message-id')?.trim() ?? null;
+  const messageIdHeader =
+    messageIdHeaderRaw && messageIdHeaderRaw.startsWith('<') && messageIdHeaderRaw.endsWith('>')
+      ? messageIdHeaderRaw.slice(1, -1).trim() || null
+      : messageIdHeaderRaw;
   const externalId = messageIdHeader || message.id || null;
   const senderDomain =
     fromHeader?.match(/@([^>\s]+)/)?.[1]?.toLowerCase() ??
