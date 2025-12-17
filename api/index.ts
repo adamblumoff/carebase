@@ -313,10 +313,33 @@ const registerPlugins = async () => {
   });
 
   // telemetry hook
+  server.addHook('onRequest', async (request) => {
+    (request as any)._telemetryStartNs = process.hrtime.bigint();
+  });
+
   server.addHook('onResponse', async (request, reply) => {
     if (!posthog) return;
 
-    const durationMs = reply.elapsedTime;
+    const startNs = (request as any)._telemetryStartNs as bigint | undefined;
+    const fastifyDurationMs =
+      typeof (reply as any).getResponseTime === 'function'
+        ? (reply as any).getResponseTime()
+        : null;
+    const elapsedTimeMs =
+      typeof (reply as any).elapsedTime === 'number'
+        ? ((reply as any).elapsedTime as number)
+        : null;
+
+    const durationMsRaw =
+      typeof startNs === 'bigint'
+        ? Number(process.hrtime.bigint() - startNs) / 1e6
+        : (fastifyDurationMs ?? elapsedTimeMs ?? null);
+
+    const durationMs =
+      typeof durationMsRaw === 'number' && Number.isFinite(durationMsRaw)
+        ? Math.round(durationMsRaw)
+        : undefined;
+
     posthog.capture({
       distinctId: request.headers['x-user-id']?.toString() ?? 'anonymous',
       event: 'api_request',
