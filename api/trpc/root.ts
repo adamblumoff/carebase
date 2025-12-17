@@ -6,6 +6,7 @@ import { ingestionRouter } from '../modules/ingestion/router';
 import { watchRouter } from '../modules/watch/router';
 import { ingestionEventsRouter } from '../modules/ingestion/events';
 import { senderSuppressionsRouter } from '../modules/sender-suppressions/router';
+import { careRecipientsRouter } from '../modules/care-recipients/router';
 
 export const appRouter = router({
   tasks: taskRouter,
@@ -15,6 +16,7 @@ export const appRouter = router({
   watch: watchRouter,
   ingestionEvents: ingestionEventsRouter,
   senderSuppressions: senderSuppressionsRouter,
+  careRecipients: careRecipientsRouter,
 });
 
 export type AppRouter = typeof appRouter;

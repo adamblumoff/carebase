@@ -25,6 +25,7 @@ export const reviewState = pgEnum('review_state', ['pending', 'approved', 'ignor
 export const sourceProvider = pgEnum('source_provider', ['gmail']);
 export const sourceStatus = pgEnum('source_status', ['active', 'errored', 'disconnected']);
 export const themePreference = pgEnum('theme_preference', ['light', 'dark']);
+export const careRecipientRole = pgEnum('care_recipient_role', ['owner', 'viewer']);
 
 export const caregivers = pgTable('caregivers', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -43,6 +44,54 @@ export const careRecipients = pgTable('care_recipients', {
     .default(sql`now()`)
     .notNull(),
 });
+
+export const careRecipientMemberships = pgTable(
+  'care_recipient_memberships',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    careRecipientId: uuid('care_recipient_id')
+      .notNull()
+      .references(() => careRecipients.id),
+    caregiverId: uuid('caregiver_id')
+      .notNull()
+      .references(() => caregivers.id),
+    role: careRecipientRole('role').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .default(sql`now()`)
+      .notNull(),
+  },
+  (table) => ({
+    caregiverUnique: uniqueIndex('care_recipient_memberships_caregiver_uidx').on(table.caregiverId),
+    careRecipientCaregiverUnique: uniqueIndex(
+      'care_recipient_memberships_care_recipient_caregiver_uidx'
+    ).on(table.careRecipientId, table.caregiverId),
+  })
+);
+
+export const careInvitations = pgTable(
+  'care_invitations',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    token: varchar('token', { length: 64 }).notNull(),
+    careRecipientId: uuid('care_recipient_id')
+      .notNull()
+      .references(() => careRecipients.id),
+    invitedByCaregiverId: uuid('invited_by_caregiver_id')
+      .notNull()
+      .references(() => caregivers.id),
+    invitedEmail: varchar('invited_email', { length: 255 }),
+    role: careRecipientRole('role').notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    usedByCaregiverId: uuid('used_by_caregiver_id').references(() => caregivers.id),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .default(sql`now()`)
+      .notNull(),
+  },
+  (table) => ({
+    tokenUnique: uniqueIndex('care_invitations_token_uidx').on(table.token),
+  })
+);
 
 export const tasks = pgTable(
   'tasks',
