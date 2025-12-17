@@ -19,6 +19,15 @@ const statusStyles: Record<string, string> = {
 export default function ConnectionsScreen() {
   useColorScheme();
 
+  const hubQuery = trpc.careRecipients.my.useQuery(undefined, {
+    staleTime: 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+  const isOwner = hubQuery.data?.membership.role === 'owner';
+  const myCaregiverId = hubQuery.data?.membership.caregiverId ?? null;
+
   const redirectUri = useMemo(() => {
     const useProd =
       process.env.EXPO_PUBLIC_APP_ENV === 'prod' ||
@@ -47,8 +56,7 @@ export default function ConnectionsScreen() {
 
   const hasRedirect = Boolean(redirectUri);
   const gmailSources = sourcesQuery.data?.filter((s) => s.provider === 'gmail') ?? [];
-  const activeGmail = gmailSources.filter((s) => s.status === 'active');
-  const hasGmail = activeGmail.length > 0;
+  const hasGmail = gmailSources.length > 0;
 
   const connectGoogle = trpc.sources.connectGoogle.useMutation({
     onSuccess: () => {
@@ -64,6 +72,10 @@ export default function ConnectionsScreen() {
     onSuccess: () => sourcesQuery.refetch(),
   });
 
+  const setPrimary = trpc.sources.setPrimary.useMutation({
+    onSuccess: () => sourcesQuery.refetch(),
+  });
+
   const registerWatch = trpc.watch.register.useMutation({
     onSuccess: () => sourcesQuery.refetch(),
   });
@@ -72,7 +84,11 @@ export default function ConnectionsScreen() {
 
   const triggerWatchIfNeeded = useCallback(
     (sources?: typeof sourcesQuery.data) => {
-      const gmail = sources?.filter((s) => s.provider === 'gmail' && s.status === 'active') ?? [];
+      if (!isOwner) return;
+      const gmail =
+        sources?.filter(
+          (s) => s.provider === 'gmail' && s.status === 'active' && (s as any).isPrimary
+        ) ?? [];
       const now = new Date();
       gmail.forEach((src) => {
         const needsWatch = !src.watchExpiration || new Date(src.watchExpiration) <= now;
@@ -87,7 +103,7 @@ export default function ConnectionsScreen() {
         }
       });
     },
-    [registerWatch, sourcesQuery]
+    [isOwner, registerWatch, sourcesQuery]
   );
 
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
@@ -152,9 +168,8 @@ export default function ConnectionsScreen() {
 
       // Always refetch after browser closes to pick up server-side exchange
       const refreshed = await sourcesQuery.refetch();
-      const nowHasGmail =
-        refreshed.data?.some((s) => s.provider === 'gmail' && s.status === 'active') ?? false;
-      if (nowHasGmail) {
+      const nowHasGmail = refreshed.data?.some((s) => s.provider === 'gmail') ?? false;
+      if (nowHasGmail && isOwner) {
         triggerWatchIfNeeded(refreshed.data);
       }
 
@@ -175,7 +190,7 @@ export default function ConnectionsScreen() {
         if (code && state) {
           await connectGoogle.mutateAsync({ code, redirectUri, state });
           const refreshedAfterConnect = await sourcesQuery.refetch();
-          triggerWatchIfNeeded(refreshedAfterConnect.data);
+          if (isOwner) triggerWatchIfNeeded(refreshedAfterConnect.data);
         } else {
           setConnectError('No code/state returned from Google.');
         }
@@ -186,7 +201,15 @@ export default function ConnectionsScreen() {
     } finally {
       sourcesQuery.refetch();
     }
-  }, [authUrlQuery, connectGoogle, redirectUri, hasRedirect, sourcesQuery, triggerWatchIfNeeded]);
+  }, [
+    authUrlQuery,
+    connectGoogle,
+    isOwner,
+    redirectUri,
+    hasRedirect,
+    sourcesQuery,
+    triggerWatchIfNeeded,
+  ]);
 
   useEffect(() => {
     if (hasGmail && connectError) {
@@ -225,6 +248,15 @@ export default function ConnectionsScreen() {
     [disconnect, showToast]
   );
 
+  const handleMakePrimary = useCallback(
+    async (id: string) => {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      await setPrimary.mutateAsync({ sourceId: id });
+      showToast('Set as primary');
+    },
+    [setPrimary, showToast]
+  );
+
   const isBusy =
     connectGoogle.isLoading || syncNow.isLoading || disconnect.isLoading || sourcesQuery.isFetching;
 
@@ -240,11 +272,20 @@ export default function ConnectionsScreen() {
           </Text>
           <Button
             title={
-              hasGmail ? 'Connected' : connectGoogle.isLoading ? 'Connecting…' : 'Connect Google'
+              connectGoogle.isLoading
+                ? 'Connecting…'
+                : hasGmail
+                  ? 'Add another inbox'
+                  : 'Connect Google'
             }
             onPress={handleConnect}
-            disabled={isBusy || hasGmail || !hasRedirect}
+            disabled={isBusy || !hasRedirect}
           />
+          {hasGmail ? (
+            <Text className="text-xs text-text-muted dark:text-text-muted-dark">
+              Only the Primary inbox syncs by default. {isOwner ? 'You can change it below.' : ''}
+            </Text>
+          ) : null}
           {!hasRedirect ? (
             <Text className="text-xs text-red-600">
               Set EXPO_PUBLIC_GOOGLE_REDIRECT_URI to enable Google connect.
@@ -270,6 +311,11 @@ export default function ConnectionsScreen() {
           ) : sourcesQuery.data?.length ? (
             sourcesQuery.data
               .filter((source) => source.provider === 'gmail' && source.status !== 'disconnected')
+              .sort((a, b) => {
+                const aPrimary = (a as any).isPrimary ? 1 : 0;
+                const bPrimary = (b as any).isPrimary ? 1 : 0;
+                return bPrimary - aPrimary;
+              })
               .map((source) => {
                 const tone = statusStyles[source.status] ?? statusStyles.active;
                 const watchStatus = source.watchExpiration
@@ -277,6 +323,11 @@ export default function ConnectionsScreen() {
                     ? 'Active (push)'
                     : 'Renewing/polling'
                   : 'Polling';
+                const isPrimary = Boolean((source as any).isPrimary);
+                const canDisconnect =
+                  isOwner ||
+                  (myCaregiverId ? (source as any).caregiverId === myCaregiverId : false);
+                const canSync = isOwner && isPrimary && source.status === 'active';
                 return (
                   <View
                     key={source.id}
@@ -287,7 +338,8 @@ export default function ConnectionsScreen() {
                           {source.accountEmail}
                         </Text>
                         <Text className="text-xs text-text-muted dark:text-text-muted-dark">
-                          Provider: {source.provider} • {watchStatus}
+                          Provider: {source.provider} •{' '}
+                          {isPrimary ? `Primary • ${watchStatus}` : 'Not syncing'}
                         </Text>
                       </View>
                       <View className={`rounded-full px-2 py-1 ${tone}`}>
@@ -296,16 +348,39 @@ export default function ConnectionsScreen() {
                         </Text>
                       </View>
                     </View>
+                    {(source as any).caregiverName ? (
+                      <Text className="text-xs text-text-muted dark:text-text-muted-dark">
+                        Connected by: {(source as any).caregiverName}
+                      </Text>
+                    ) : null}
                     <Text className="text-xs text-text-muted dark:text-text-muted-dark">
                       Last sync:{' '}
                       {source.lastSyncAt ? new Date(source.lastSyncAt).toLocaleString() : 'never'}
                     </Text>
+                    {isOwner && !isPrimary ? (
+                      <Pressable
+                        onPress={() => handleMakePrimary(source.id)}
+                        disabled={setPrimary.isLoading || source.status !== 'active'}
+                        className="self-start rounded-full border border-border px-3 py-1.5 dark:border-border-dark"
+                        style={({ pressed }) => ({
+                          opacity:
+                            setPrimary.isLoading || source.status !== 'active'
+                              ? 0.5
+                              : pressed
+                                ? 0.75
+                                : 1,
+                        })}>
+                        <Text className="text-sm font-semibold text-primary">Make primary</Text>
+                      </Pressable>
+                    ) : null}
                     <View className="flex-row items-center gap-3">
                       <Pressable
                         onPress={() => handleSync(source.id)}
-                        disabled={syncNow.isLoading || source.status !== 'active'}
+                        disabled={syncNow.isLoading || !canSync}
                         className="flex-1 items-center justify-center rounded-full bg-primary px-4 py-3"
-                        style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
+                        style={({ pressed }) => ({
+                          opacity: syncNow.isLoading || !canSync ? 0.5 : pressed ? 0.85 : 1,
+                        })}>
                         {syncNow.isLoading ? (
                           <ActivityIndicator color="#fff" />
                         ) : (
@@ -314,9 +389,11 @@ export default function ConnectionsScreen() {
                       </Pressable>
                       <Pressable
                         onPress={() => handleDisconnect(source.id)}
-                        disabled={disconnect.isLoading}
+                        disabled={disconnect.isLoading || !canDisconnect}
                         className="flex-1 items-center justify-center rounded-full border border-border px-4 py-3 dark:border-border-dark"
-                        style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}>
+                        style={({ pressed }) => ({
+                          opacity: disconnect.isLoading || !canDisconnect ? 0.5 : pressed ? 0.8 : 1,
+                        })}>
                         {disconnect.isLoading ? (
                           <ActivityIndicator />
                         ) : (
