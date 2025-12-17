@@ -134,7 +134,11 @@ function ThemeGate({ children }: { children: React.ReactNode }) {
   const { themeReady } = useUserTheme();
 
   if (!themeReady) return null;
-  return <PushToastLayer>{children}</PushToastLayer>;
+  return (
+    <PushToastLayer>
+      <SetupGate>{children}</SetupGate>
+    </PushToastLayer>
+  );
 }
 
 function PreloadTasks() {
@@ -154,6 +158,69 @@ function PreloadTasks() {
     utils.tasks.stats,
     utils.tasks.upcoming,
   ]);
+
+  return null;
+}
+
+function SetupGate({ children }: { children: React.ReactNode }) {
+  const { isLoaded, isSignedIn } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  const isInSetupGroup = segments[0] === '(setup)';
+
+  const membershipQuery = trpc.careRecipients.my.useQuery(undefined, {
+    enabled: isSignedIn,
+    retry: false,
+    staleTime: 30 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (!isSignedIn) return;
+    if (membershipQuery.isLoading) return;
+
+    if (membershipQuery.isSuccess) {
+      if (isInSetupGroup) {
+        router.replace('/');
+      }
+      return;
+    }
+
+    const code = (membershipQuery.error as any)?.data?.code ?? (membershipQuery.error as any)?.code;
+    if (code === 'FAILED_PRECONDITION') {
+      if (!isInSetupGroup) {
+        router.replace('/(setup)');
+      }
+      return;
+    }
+  }, [
+    isInSetupGroup,
+    isLoaded,
+    isSignedIn,
+    membershipQuery.error,
+    membershipQuery.isLoading,
+    membershipQuery.isSuccess,
+    router,
+  ]);
+
+  if (!isSignedIn) return <>{children}</>;
+
+  if (membershipQuery.isSuccess) {
+    return (
+      <>
+        <PreloadTasks />
+        {children}
+      </>
+    );
+  }
+
+  const code = (membershipQuery.error as any)?.data?.code ?? (membershipQuery.error as any)?.code;
+  if (code === 'FAILED_PRECONDITION') {
+    return <>{children}</>;
+  }
 
   return null;
 }
