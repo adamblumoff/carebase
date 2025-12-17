@@ -194,18 +194,22 @@ export const sourcesRouter = router({
 
       const now = new Date();
 
-      await ctx.db
-        .update(sources)
-        .set({ isPrimary: false, updatedAt: now })
-        .where(
-          and(eq(sources.provider, source.provider), inArray(sources.caregiverId, caregiverIds))
-        );
+      const updated = await ctx.db.transaction(async (tx) => {
+        await tx
+          .update(sources)
+          .set({ isPrimary: false, updatedAt: now })
+          .where(
+            and(eq(sources.provider, source.provider), inArray(sources.caregiverId, caregiverIds))
+          );
 
-      const [updated] = await ctx.db
-        .update(sources)
-        .set({ isPrimary: true, updatedAt: now })
-        .where(eq(sources.id, source.id))
-        .returning();
+        const [updated] = await tx
+          .update(sources)
+          .set({ isPrimary: true, updatedAt: now })
+          .where(eq(sources.id, source.id))
+          .returning();
+
+        return updated;
+      });
 
       return updated;
     }),
