@@ -133,12 +133,12 @@ export default function ProfileScreen() {
           {isOwner ? (
             <Pressable
               onPress={() => invite.mutate({})}
-              disabled={invite.isLoading}
+              disabled={invite.isPending}
               className="items-center rounded-full bg-primary px-4 py-3 dark:bg-primary-deep"
               style={({ pressed }) => ({
-                opacity: invite.isLoading ? 0.5 : pressed ? 0.85 : 1,
+                opacity: invite.isPending ? 0.5 : pressed ? 0.85 : 1,
               })}>
-              {invite.isLoading ? (
+              {invite.isPending ? (
                 <ActivityIndicator color="#fff" />
               ) : (
                 <Text className="text-sm font-semibold text-white">Create invite code</Text>
@@ -165,7 +165,7 @@ export default function ProfileScreen() {
         transparent
         animationType="fade"
         onRequestClose={() => {
-          if (setName.isLoading) return;
+          if (setName.isPending) return;
           setIsEditNameOpen(false);
           setEditNameError(null);
         }}
@@ -173,7 +173,7 @@ export default function ProfileScreen() {
         <Pressable
           className="flex-1 items-center justify-center bg-black/40 px-6"
           onPress={() => {
-            if (setName.isLoading) return;
+            if (setName.isPending) return;
             setIsEditNameOpen(false);
             setEditNameError(null);
           }}>
@@ -186,7 +186,7 @@ export default function ProfileScreen() {
               </Text>
               <Pressable
                 onPress={() => {
-                  if (setName.isLoading) return;
+                  if (setName.isPending) return;
                   setIsEditNameOpen(false);
                   setEditNameError(null);
                 }}
@@ -203,7 +203,7 @@ export default function ProfileScreen() {
                 setEditNameError(null);
                 setDisplayNameDraft(text);
               }}
-              editable={!setName.isLoading}
+              editable={!setName.isPending}
               placeholder="Your name"
               autoFocus
               className="rounded-xl border border-border bg-surface px-4 py-3 text-[16px] leading-[20px] dark:border-border-dark dark:bg-surface-dark dark:text-text-dark"
@@ -221,7 +221,7 @@ export default function ProfileScreen() {
             <View className="mt-4 flex-row gap-3">
               <Pressable
                 onPress={() => {
-                  if (setName.isLoading) return;
+                  if (setName.isPending) return;
                   setIsEditNameOpen(false);
                   setEditNameError(null);
                 }}
@@ -238,12 +238,12 @@ export default function ProfileScreen() {
                   }
                   setName.mutate({ name: trimmed });
                 }}
-                disabled={setName.isLoading}
+                disabled={setName.isPending}
                 className="flex-1 items-center rounded-full bg-primary px-4 py-3 dark:bg-primary-deep"
                 style={({ pressed }) => ({
-                  opacity: setName.isLoading ? 0.5 : pressed ? 0.85 : 1,
+                  opacity: setName.isPending ? 0.5 : pressed ? 0.85 : 1,
                 })}>
-                {setName.isLoading ? (
+                {setName.isPending ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
                   <Text className="text-sm font-semibold text-white">Save</Text>

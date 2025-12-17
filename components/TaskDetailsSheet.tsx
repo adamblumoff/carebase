@@ -388,19 +388,19 @@ export const TaskDetailsSheet = ({
                 <View className="flex-row flex-wrap gap-3">
                   <Pressable
                     onPress={() => setIsAssignOpen(true)}
-                    disabled={assign.isLoading}
+                    disabled={assign.isPending}
                     className="items-center justify-center rounded-full border border-border px-3 py-2 dark:border-border-dark"
                     style={({ pressed }) => ({
-                      opacity: assign.isLoading ? 0.6 : pressed ? 0.75 : 1,
+                      opacity: assign.isPending ? 0.6 : pressed ? 0.75 : 1,
                     })}>
                     <Text className="text-sm font-semibold text-primary">Assign</Text>
                   </Pressable>
                   <Pressable
                     onPress={() => setIsSnoozeOpen(true)}
-                    disabled={snooze.isLoading}
+                    disabled={snooze.isPending}
                     className="items-center justify-center rounded-full border border-border px-3 py-2 dark:border-border-dark"
                     style={({ pressed }) => ({
-                      opacity: snooze.isLoading ? 0.6 : pressed ? 0.75 : 1,
+                      opacity: snooze.isPending ? 0.6 : pressed ? 0.75 : 1,
                     })}>
                     <Text className="text-sm font-semibold text-primary">Snooze</Text>
                   </Pressable>
@@ -462,9 +462,9 @@ export const TaskDetailsSheet = ({
               onPress={() =>
                 resolvedTask && assign.mutate({ taskId: resolvedTask.id, caregiverId: null })
               }
-              disabled={!resolvedTask || assign.isLoading}
+              disabled={!resolvedTask || assign.isPending}
               className="mb-2 rounded-2xl border border-border px-4 py-3 dark:border-border-dark"
-              style={({ pressed }) => ({ opacity: assign.isLoading ? 0.6 : pressed ? 0.85 : 1 })}>
+              style={({ pressed }) => ({ opacity: assign.isPending ? 0.6 : pressed ? 0.85 : 1 })}>
               <Text className="text-sm font-semibold text-text dark:text-text-dark">
                 Unassigned
               </Text>
@@ -479,14 +479,14 @@ export const TaskDetailsSheet = ({
                     resolvedTask &&
                     assign.mutate({ taskId: resolvedTask.id, caregiverId: member.caregiverId })
                   }
-                  disabled={!resolvedTask || assign.isLoading}
+                  disabled={!resolvedTask || assign.isPending}
                   className={`mb-2 rounded-2xl border px-4 py-3 ${
                     isActive
                       ? 'border-primary bg-primary/10'
                       : 'border-border dark:border-border-dark'
                   }`}
                   style={({ pressed }) => ({
-                    opacity: assign.isLoading ? 0.6 : pressed ? 0.85 : 1,
+                    opacity: assign.isPending ? 0.6 : pressed ? 0.85 : 1,
                   })}>
                   <Text
                     className={`text-sm font-semibold ${
@@ -526,9 +526,11 @@ export const TaskDetailsSheet = ({
               <Pressable
                 key={days}
                 onPress={() => resolvedTask && snooze.mutate({ id: resolvedTask.id, days })}
-                disabled={!resolvedTask || snooze.isLoading}
+                disabled={!resolvedTask || snooze.isPending}
                 className="mb-2 rounded-2xl border border-border px-4 py-3 dark:border-border-dark"
-                style={({ pressed }) => ({ opacity: snooze.isLoading ? 0.6 : pressed ? 0.85 : 1 })}>
+                style={({ pressed }) => ({
+                  opacity: snooze.isPending ? 0.6 : pressed ? 0.85 : 1,
+                })}>
                 <Text className="text-sm font-semibold text-text dark:text-text-dark">
                   Snooze {days} day{days === 1 ? '' : 's'}
                 </Text>

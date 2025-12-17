@@ -86,9 +86,8 @@ export default function ConnectionsScreen() {
     (sources?: typeof sourcesQuery.data) => {
       if (!isOwner) return;
       const gmail =
-        sources?.filter(
-          (s) => s.provider === 'gmail' && s.status === 'active' && (s as any).isPrimary
-        ) ?? [];
+        sources?.filter((s) => s.provider === 'gmail' && s.status === 'active' && s.isPrimary) ??
+        [];
       const now = new Date();
       gmail.forEach((src) => {
         const needsWatch = !src.watchExpiration || new Date(src.watchExpiration) <= now;
@@ -312,8 +311,8 @@ export default function ConnectionsScreen() {
             sourcesQuery.data
               .filter((source) => source.provider === 'gmail' && source.status !== 'disconnected')
               .sort((a, b) => {
-                const aPrimary = (a as any).isPrimary ? 1 : 0;
-                const bPrimary = (b as any).isPrimary ? 1 : 0;
+                const aPrimary = a.isPrimary ? 1 : 0;
+                const bPrimary = b.isPrimary ? 1 : 0;
                 return bPrimary - aPrimary;
               })
               .map((source) => {
@@ -323,7 +322,7 @@ export default function ConnectionsScreen() {
                     ? 'Active (push)'
                     : 'Renewing/polling'
                   : 'Polling';
-                const isPrimary = Boolean((source as any).isPrimary);
+                const isPrimary = Boolean(source.isPrimary);
                 const canDisconnect =
                   isOwner ||
                   (myCaregiverId ? (source as any).caregiverId === myCaregiverId : false);

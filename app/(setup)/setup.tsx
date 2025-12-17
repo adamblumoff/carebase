@@ -48,7 +48,7 @@ export default function SetupScreen() {
     onError: (err) => setError(err.message ?? 'Could not accept invite'),
   });
 
-  const isBusy = create.isLoading || acceptInvite.isLoading;
+  const isBusy = create.isPending || acceptInvite.isPending;
 
   const canCreate = useMemo(
     () => caregiverName.trim().length > 0 && recipientName.trim().length > 0,
@@ -148,7 +148,7 @@ export default function SetupScreen() {
               style={({ pressed }) => ({
                 opacity: !canCreate || isBusy ? 0.5 : pressed ? 0.88 : 1,
               })}>
-              {create.isLoading ? (
+              {create.isPending ? (
                 <ActivityIndicator color="#fff" />
               ) : (
                 <Text className="text-base font-semibold text-white">Create hub</Text>
@@ -200,7 +200,7 @@ export default function SetupScreen() {
                 style={({ pressed }) => ({
                   opacity: !canJoin || isBusy ? 0.5 : pressed ? 0.88 : 1,
                 })}>
-                {acceptInvite.isLoading ? (
+                {acceptInvite.isPending ? (
                   <ActivityIndicator />
                 ) : (
                   <Text className="text-base font-semibold text-text dark:text-text-dark">
