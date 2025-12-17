@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, Switch, Text, View, TextInput } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 
 import { Container } from '@/components/Container';
@@ -13,6 +13,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const [inviteToken, setInviteToken] = useState<string | null>(null);
   const [inviteExpiresAt, setInviteExpiresAt] = useState<string | null>(null);
+  const [displayNameDraft, setDisplayNameDraft] = useState('');
 
   const toggleTheme = (value: boolean) => {
     setUserTheme(value ? 'dark' : 'light');
@@ -27,6 +28,23 @@ export default function ProfileScreen() {
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     retry: false,
+  });
+
+  const meQuery = trpc.caregivers.me.useQuery(undefined, {
+    staleTime: 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
+
+  React.useEffect(() => {
+    if (!meQuery.data?.name) return;
+    setDisplayNameDraft((current) => (current ? current : meQuery.data!.name));
+  }, [meQuery.data]);
+
+  const setName = trpc.caregivers.setName.useMutation({
+    onSuccess: () => {
+      meQuery.refetch();
+    },
   });
   const teamQuery = trpc.careRecipients.team.useQuery(undefined, {
     enabled: hubQuery.isSuccess,
@@ -50,6 +68,45 @@ export default function ProfileScreen() {
     <View className="flex flex-1 bg-surface px-4 dark:bg-surface-dark">
       <Stack.Screen options={{ title: 'Profile' }} />
       <Container>
+        <View className="mt-4 w-full gap-4 rounded-xl border border-border bg-white p-4 dark:border-border-dark dark:bg-surface-card-dark">
+          <View className="gap-1">
+            <Text className="text-base font-semibold text-text dark:text-text-dark">Your name</Text>
+            <Text className="text-sm text-text-muted dark:text-text-muted-dark">
+              This is what your family sees in CareHub.
+            </Text>
+          </View>
+          <TextInput
+            value={displayNameDraft}
+            onChangeText={setDisplayNameDraft}
+            editable={!setName.isLoading}
+            placeholder="Your name"
+            className="rounded-xl border border-border bg-white px-4 py-3 text-[16px] leading-[20px] dark:border-border-dark dark:bg-surface-dark dark:text-text-dark"
+          />
+          <Pressable
+            onPress={() => setName.mutate({ name: displayNameDraft.trim() })}
+            disabled={setName.isLoading || !displayNameDraft.trim()}
+            className="items-center rounded-full bg-primary px-4 py-3 dark:bg-primary-deep"
+            style={({ pressed }) => ({
+              opacity: setName.isLoading || !displayNameDraft.trim() ? 0.5 : pressed ? 0.85 : 1,
+            })}>
+            {setName.isLoading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text className="text-sm font-semibold text-white">Save</Text>
+            )}
+          </Pressable>
+          {meQuery.isError ? (
+            <Text className="text-xs text-rose-700 dark:text-rose-200">
+              {meQuery.error.message}
+            </Text>
+          ) : null}
+          {setName.isError ? (
+            <Text className="text-xs text-rose-700 dark:text-rose-200">
+              {setName.error.message}
+            </Text>
+          ) : null}
+        </View>
+
         <View className="mt-4 w-full gap-4 rounded-xl border border-border bg-white p-4 dark:border-border-dark dark:bg-surface-card-dark">
           <View className="flex-row items-center justify-between">
             <View className="gap-1">

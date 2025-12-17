@@ -15,7 +15,7 @@ import { createQueryClientAndPersister, createTrpcClient, trpc } from '@/lib/trp
 import { useUserTheme } from '@/app/(hooks)/useUserTheme';
 
 export default function Layout() {
-  useColorScheme();
+  const { colorScheme } = useColorScheme();
   const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
   const posthogKey = process.env.EXPO_PUBLIC_POSTHOG_KEY;
@@ -26,7 +26,7 @@ export default function Layout() {
   if (!fontsLoaded) {
     return (
       <SafeAreaProvider>
-        <Text style={{ marginTop: 48, textAlign: 'center' }}>Loading fonts...</Text>
+        <FullScreenLoading title="Loading…" colorScheme={colorScheme} />
       </SafeAreaProvider>
     );
   }
@@ -34,9 +34,10 @@ export default function Layout() {
   if (!publishableKey) {
     return (
       <SafeAreaProvider>
-        <Text style={{ marginTop: 48, textAlign: 'center' }}>
-          Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY in .env
-        </Text>
+        <FullScreenLoading
+          title="Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY in .env"
+          colorScheme={colorScheme}
+        />
       </SafeAreaProvider>
     );
   }
@@ -67,6 +68,7 @@ export default function Layout() {
 }
 
 function TrpcProvider({ children }: { children: React.ReactNode }) {
+  const { colorScheme } = useColorScheme();
   const { getToken, isLoaded, isSignedIn, userId } = useAuth();
   const apiBaseUrl =
     process.env.NODE_ENV === 'production'
@@ -91,13 +93,15 @@ function TrpcProvider({ children }: { children: React.ReactNode }) {
 
   if (!apiBaseUrl) {
     return (
-      <Text style={{ marginTop: 48, textAlign: 'center' }}>
-        Missing EXPO_PUBLIC_API_BASE_URL in .env
-      </Text>
+      <FullScreenLoading
+        title="Missing EXPO_PUBLIC_API_BASE_URL in .env"
+        colorScheme={colorScheme}
+      />
     );
   }
 
-  if (!isLoaded || !trpcClient) return null;
+  if (!isLoaded || !trpcClient)
+    return <FullScreenLoading title="Loading…" colorScheme={colorScheme} />;
 
   return (
     <PersistQueryClientProvider client={queryClient} persistOptions={{ persister }}>
@@ -115,6 +119,7 @@ function AuthGate() {
   const { isLoaded, isSignedIn } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  const { colorScheme } = useColorScheme();
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -126,14 +131,15 @@ function AuthGate() {
     }
   }, [isLoaded, isSignedIn, segments, router]);
 
-  if (!isLoaded) return null;
+  if (!isLoaded) return <FullScreenLoading title="Loading…" colorScheme={colorScheme} />;
   return <Slot />;
 }
 
 function ThemeGate({ children }: { children: React.ReactNode }) {
   const { themeReady } = useUserTheme();
+  const { colorScheme } = useColorScheme();
 
-  if (!themeReady) return null;
+  if (!themeReady) return <FullScreenLoading title="Loading…" colorScheme={colorScheme} />;
   return (
     <PushToastLayer>
       <SetupGate>{children}</SetupGate>
@@ -287,6 +293,22 @@ function SetupGate({ children }: { children: React.ReactNode }) {
         })}>
         <Text style={{ fontWeight: '600', color: textColor }}>Go to setup</Text>
       </Pressable>
+    </View>
+  );
+}
+
+function FullScreenLoading({
+  title,
+  colorScheme,
+}: {
+  title: string;
+  colorScheme?: 'light' | 'dark';
+}) {
+  const backgroundColor = colorScheme === 'dark' ? '#1C2521' : '#F5F7F6';
+  const textColor = colorScheme === 'dark' ? '#FFFFFF' : '#0E1A14';
+  return (
+    <View style={{ flex: 1, backgroundColor, alignItems: 'center', justifyContent: 'center' }}>
+      <Text style={{ textAlign: 'center', color: textColor, paddingHorizontal: 20 }}>{title}</Text>
     </View>
   );
 }
