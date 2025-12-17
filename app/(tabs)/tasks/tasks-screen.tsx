@@ -66,6 +66,7 @@ const asTaskThin = (value: any): Task => ({
   type: value.type,
   status: value.status,
   reviewState: value.reviewState,
+  assigneeId: value.assigneeId ?? null,
   confidence: value.confidence ?? null,
   provider: value.provider ?? null,
   sourceLink: value.sourceLink ?? null,
@@ -114,6 +115,14 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
   }, [selectedType, view]);
 
   const utils = trpc.useUtils();
+
+  const hubQuery = trpc.careRecipients.my.useQuery(undefined, {
+    staleTime: 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+  const canEdit = hubQuery.data?.membership.role === 'owner';
 
   const statsQuery = trpc.tasks.stats.useQuery(
     { upcomingDays: 7 },
@@ -185,6 +194,7 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
         type: input.type ?? 'general',
         status: input.status ?? 'todo',
         reviewState: 'approved' as const,
+        assigneeId: null,
         sourceLink: null,
         sender: null,
         senderDomain: null,
@@ -324,11 +334,21 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
     onEdit: (task: Task) => void;
     onDelete: (id: string) => void;
     onOpenDetails: (id: string) => void;
+    canEdit: boolean;
   };
 
   const TaskListItem = React.memo(
-    ({ item, isDeleting, onToggle, onEdit, onDelete, onOpenDetails }: TaskListItemProps) => {
+    ({
+      item,
+      isDeleting,
+      onToggle,
+      onEdit,
+      onDelete,
+      onOpenDetails,
+      canEdit,
+    }: TaskListItemProps) => {
       const isDone = item.status === 'done';
+      const canToggle = canEdit && view !== 'review';
       return (
         <View className="rounded-lg border border-border bg-surface-strong px-4 py-3 dark:border-border-dark dark:bg-surface-card-dark">
           <View className="flex-row items-center justify-between">
@@ -336,9 +356,9 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
               <Pressable
                 accessibilityLabel={isDone ? 'Mark task as todo' : 'Mark task as done'}
                 onPress={() => onToggle(item.id)}
-                disabled={view === 'review'}
+                disabled={!canToggle}
                 style={({ pressed }) => ({
-                  opacity: view === 'review' ? 0.4 : pressed ? 0.7 : 1,
+                  opacity: !canToggle ? 0.4 : pressed ? 0.7 : 1,
                 })}>
                 <View
                   className={`h-6 w-6 items-center justify-center rounded-full border ${
@@ -375,40 +395,48 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
 
                   {view === 'review' ? (
                     <View className="mt-3 flex-row items-center gap-2">
-                      <Pressable
-                        onPress={() => handleReview(item.id, 'approve')}
-                        disabled={reviewTask.isLoading || suppressSender.isLoading}
-                        className="flex-1 items-center justify-center rounded-full bg-primary px-3 py-2"
-                        style={({ pressed }) => ({
-                          opacity:
-                            reviewTask.isLoading || suppressSender.isLoading
-                              ? 0.6
-                              : pressed
-                                ? 0.85
-                                : 1,
-                        })}>
-                        <Text className="text-sm font-semibold text-white">Accept</Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={() => confirmIgnore(item)}
-                        disabled={reviewTask.isLoading || suppressSender.isLoading}
-                        className="flex-1 items-center justify-center rounded-full border border-border px-3 py-2 dark:border-border-dark"
-                        style={({ pressed }) => ({
-                          opacity:
-                            reviewTask.isLoading || suppressSender.isLoading
-                              ? 0.6
-                              : pressed
-                                ? 0.75
-                                : 1,
-                        })}>
-                        <Text className="text-sm font-semibold text-text">Ignore</Text>
-                      </Pressable>
+                      {canEdit ? (
+                        <>
+                          <Pressable
+                            onPress={() => handleReview(item.id, 'approve')}
+                            disabled={reviewTask.isLoading || suppressSender.isLoading}
+                            className="flex-1 items-center justify-center rounded-full bg-primary px-3 py-2"
+                            style={({ pressed }) => ({
+                              opacity:
+                                reviewTask.isLoading || suppressSender.isLoading
+                                  ? 0.6
+                                  : pressed
+                                    ? 0.85
+                                    : 1,
+                            })}>
+                            <Text className="text-sm font-semibold text-white">Accept</Text>
+                          </Pressable>
+                          <Pressable
+                            onPress={() => confirmIgnore(item)}
+                            disabled={reviewTask.isLoading || suppressSender.isLoading}
+                            className="flex-1 items-center justify-center rounded-full border border-border px-3 py-2 dark:border-border-dark"
+                            style={({ pressed }) => ({
+                              opacity:
+                                reviewTask.isLoading || suppressSender.isLoading
+                                  ? 0.6
+                                  : pressed
+                                    ? 0.75
+                                    : 1,
+                            })}>
+                            <Text className="text-sm font-semibold text-text">Ignore</Text>
+                          </Pressable>
+                        </>
+                      ) : (
+                        <Text className="text-xs text-text-muted dark:text-text-muted-dark">
+                          Waiting for the hub owner to review.
+                        </Text>
+                      )}
                     </View>
                   ) : null}
                 </View>
               </Pressable>
             </View>
-            {view !== 'review' ? (
+            {view !== 'review' && canEdit ? (
               <View className="flex-row items-center gap-3">
                 <Pressable
                   accessibilityLabel="Edit task"
@@ -740,6 +768,15 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
           pendingReviewCount={statsQuery.data?.pendingReviewCount}
           upcomingCount={statsQuery.data?.upcomingCount}
         />
+        {canEdit ? (
+          <Pressable
+            accessibilityLabel="Add task"
+            onPress={() => setIsCreateModalOpen(true)}
+            className="h-11 w-11 items-center justify-center rounded-full border border-border bg-surface-strong dark:border-border-dark dark:bg-surface-card-dark"
+            style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
+            <Ionicons name="add" size={22} color="#4A8F6A" />
+          </Pressable>
+        ) : null}
         <Pressable
           accessibilityLabel="Filter tasks"
           onPress={() => setIsFilterModalOpen(true)}
@@ -798,7 +835,9 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
         <Ionicons name="checkmark-done-outline" size={28} color="#9CA3AF" />
         <Text className="text-base font-semibold text-text dark:text-text-dark">{emptyLabel}</Text>
         <Text className="text-xs text-text-muted dark:text-text-muted-dark">
-          Add a task or wait for new emails to sync.
+          {canEdit
+            ? 'Add a task or wait for new emails to sync.'
+            : 'Wait for the hub owner to add tasks or sync email.'}
         </Text>
       </View>
     );
@@ -827,10 +866,12 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
         onEdit={openEditSheet}
         onDelete={confirmDelete}
         onOpenDetails={openDetails}
+        canEdit={canEdit}
       />
     ),
     [
       TaskListItem,
+      canEdit,
       confirmDelete,
       deleteTask.isLoading,
       deletingId,

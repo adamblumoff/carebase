@@ -57,6 +57,34 @@
       "when": 1765905703366,
       "tag": "0007_pretty_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1765994709017,
+      "tag": "0008_hesitant_black_widow",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1765995161633,
+      "tag": "0009_careless_carmella_unuscione",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1765995632779,
+      "tag": "0010_far_cloak",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1765995910289,
+      "tag": "0011_peaceful_quasimodo",
+      "breakpoints": true
     }
   ]
 }

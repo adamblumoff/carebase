@@ -22,7 +22,8 @@ describe('ingestion pipeline', () => {
       },
       accountEmail: 'user@example.com',
       caregiverId: 'caregiver-1',
-      ignoredSourceIds: new Set(),
+      careRecipientId: 'recipient-1',
+      ignoredExternalIds: new Set(),
       classify,
       parse,
       now: new Date('2026-01-01T00:00:00Z'),
@@ -55,7 +56,8 @@ describe('ingestion pipeline', () => {
       },
       accountEmail: 'user@example.com',
       caregiverId: 'caregiver-1',
-      ignoredSourceIds: new Set(),
+      careRecipientId: 'recipient-1',
+      ignoredExternalIds: new Set(),
       suppressedSenderDomains: new Set(['news.example.com']),
       classify,
       parse,
@@ -99,7 +101,8 @@ describe('ingestion pipeline', () => {
       },
       accountEmail: 'user@example.com',
       caregiverId: 'caregiver-1',
-      ignoredSourceIds: new Set(),
+      careRecipientId: 'recipient-1',
+      ignoredExternalIds: new Set(),
       classify,
       parse,
       now: new Date('2026-01-01T00:00:00Z'),
@@ -145,7 +148,8 @@ describe('ingestion pipeline', () => {
       },
       accountEmail: 'user@example.com',
       caregiverId: 'caregiver-1',
-      ignoredSourceIds: new Set(),
+      careRecipientId: 'recipient-1',
+      ignoredExternalIds: new Set(),
       classify,
       parse,
       now: new Date('2026-01-01T00:00:00Z'),
@@ -153,6 +157,41 @@ describe('ingestion pipeline', () => {
 
     expect(result.action).toBe('upsert');
     expect(classify).toHaveBeenCalled();
+  });
+
+  test('strips angle brackets from Message-ID before ignore checks', async () => {
+    const classify = jest.fn(async () => ({ label: 'appointments', confidence: 0.9 }) as any);
+    const parse = jest.fn(() => ({
+      title: 'Ignored',
+      type: 'general' as const,
+      confidence: 0.5,
+      description: 'Ignored',
+    }));
+
+    const result = await processGmailMessageToTask({
+      message: {
+        id: 'm5',
+        labelIds: ['INBOX'],
+        snippet: 'Ignored',
+        payload: {
+          headers: [
+            { name: 'Subject', value: 'Ignored' },
+            { name: 'From', value: 'Sender <sender@example.com>' },
+            { name: 'Message-ID', value: ' <abc123@example.com> ' },
+          ],
+        },
+      },
+      accountEmail: 'user@example.com',
+      caregiverId: 'caregiver-1',
+      careRecipientId: 'recipient-1',
+      ignoredExternalIds: new Set(['abc123@example.com']),
+      classify,
+      parse,
+      now: new Date('2026-01-01T00:00:00Z'),
+    });
+
+    expect(result).toEqual({ action: 'skipped_ignored', id: 'm5' });
+    expect(classify).not.toHaveBeenCalled();
   });
 
   test.each(classificationFixtures)('$kind $case: $name', async (fixture) => {
@@ -191,7 +230,8 @@ describe('ingestion pipeline', () => {
       },
       accountEmail: 'user@example.com',
       caregiverId: 'caregiver-1',
-      ignoredSourceIds: new Set(),
+      careRecipientId: 'recipient-1',
+      ignoredExternalIds: new Set(),
       classify,
       parse,
     });

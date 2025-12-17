@@ -53,6 +53,15 @@ Ingested tasks store extra context for diagnosis:
    - Manual: `trpc.ingestion.syncNow`
    - Fallback poll (server ticker)
 
+### CareHub + Primary inbox rules
+
+- Carebase operates around a single CareHub per caregiver (one care recipient + care team membership).
+- For Gmail ingestion, the hub has a single **Primary** inbox (`sources.isPrimary=true` for provider `gmail`).
+- Only the CareHub `owner` can create/set the Primary inbox.
+  - `trpc.sources.connectGoogle` enforces this.
+  - The server-side OAuth callback (`GET /auth/google/callback`) mirrors the same logic so viewers cannot accidentally create a second Primary.
+- Ingestion/watch logic skips non-primary sources by default.
+
 ### Required environment
 
 See `.env.example` for the canonical list. Commonly required:
@@ -104,3 +113,15 @@ Review/ignore semantics:
 
 - Server logs via pino (pretty logs in local TTY unless disabled).
 - Optional PostHog server events via `POSTHOG_API_KEY` / `POSTHOG_HOST` (captures a basic `api_request` event on response).
+
+## CareHub (tRPC)
+
+Core procedures:
+
+- `trpc.careRecipients.my()`: current CareHub + membership.
+- `trpc.careRecipients.create({ name, caregiverName? })`: create a CareHub (creates `owner` membership).
+- `trpc.careRecipients.invite({ email? })`: owner-only; returns `{ token, expiresAt }`.
+- `trpc.careRecipients.acceptInvite({ token, caregiverName? })`: join hub as `viewer`.
+- `trpc.careRecipients.team()`: list care team members.
+- `trpc.caregivers.me()`: current caregiver profile (name/email).
+- `trpc.caregivers.setName({ name })`: update caregiver display name.

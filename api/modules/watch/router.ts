@@ -1,24 +1,46 @@
 import { TRPCError } from '@trpc/server';
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 
-import { sources } from '../../db/schema';
-import { ensureCaregiver } from '../../lib/caregiver';
+import { careRecipientMemberships, sources } from '../../db/schema';
 import { createGmailClient } from '../../lib/google';
 import { google } from 'googleapis';
 import { registerCalendarWatch, registerGmailWatch } from '../../lib/watch';
 import { authedProcedure, router } from '../../trpc/trpc';
+import { requireOwnerRole } from '../../lib/careRecipient';
 
 export const watchRouter = router({
   register: authedProcedure
     .input(z.object({ sourceId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      const caregiverId = await ensureCaregiver(ctx);
+      const membership = await requireOwnerRole(ctx);
 
       try {
-        const [source] = await ctx.db.select().from(sources).where(eq(sources.id, input.sourceId));
-        if (!source || source.caregiverId !== caregiverId) {
+        const memberRows = await ctx.db
+          .select({ caregiverId: careRecipientMemberships.caregiverId })
+          .from(careRecipientMemberships)
+          .where(eq(careRecipientMemberships.careRecipientId, membership.careRecipientId));
+        const caregiverIds = memberRows.map((m) => m.caregiverId);
+
+        if (caregiverIds.length === 0) {
           throw new TRPCError({ code: 'NOT_FOUND', message: 'Source not found' });
+        }
+
+        const [source] = await ctx.db
+          .select()
+          .from(sources)
+          .where(and(eq(sources.id, input.sourceId), inArray(sources.caregiverId, caregiverIds)))
+          .limit(1);
+
+        if (!source) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Source not found' });
+        }
+
+        if (!source.isPrimary) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Only the Primary inbox can register watches',
+          });
         }
 
         const { gmail, auth } = createGmailClient(source.refreshToken);

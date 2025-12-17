@@ -1,9 +1,16 @@
 import { TRPCError } from '@trpc/server';
 import { and, desc, eq, gte, lte, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { caregivers, senderSuppressions, tasks } from '../../db/schema';
+import {
+  careRecipientMemberships,
+  caregivers,
+  senderSuppressions,
+  taskAssignments,
+  tasks,
+} from '../../db/schema';
 import { authedProcedure, router } from '../../trpc/trpc';
 import { ensureCaregiver } from '../../lib/caregiver';
+import { requireCareRecipientMembership, requireOwnerRole } from '../../lib/careRecipient';
 import {
   parseSenderDomain,
   SENDER_SUPPRESSION_IGNORE_THRESHOLD,
@@ -27,6 +34,7 @@ const selectTaskThin = {
   type: tasks.type,
   status: tasks.status,
   reviewState: tasks.reviewState,
+  assigneeId: taskAssignments.caregiverId,
   confidence: tasks.confidence,
   provider: tasks.provider,
   sourceLink: tasks.sourceLink,
@@ -52,15 +60,15 @@ const selectTaskThin = {
 } as const;
 
 const buildListPredicate = ({
-  caregiverId,
+  careRecipientId,
   type,
   reviewState,
 }: {
-  caregiverId: string;
+  careRecipientId: string;
   type?: z.infer<typeof typeEnum>;
   reviewState?: z.infer<typeof reviewStateEnum>;
 }) => {
-  const conditions = [eq(tasks.createdById, caregiverId)];
+  const conditions = [eq(tasks.careRecipientId, careRecipientId)];
 
   if (type) {
     conditions.push(eq(tasks.type, type));
@@ -128,9 +136,9 @@ const recordSenderSuppression = async ({
 
 export const taskRouter = router({
   listThin: authedProcedure.input(listThinInput).query(async ({ ctx, input }) => {
-    const caregiverId = await ensureCaregiver(ctx);
+    const membership = await requireCareRecipientMembership(ctx);
     const predicate = buildListPredicate({
-      caregiverId,
+      careRecipientId: membership.careRecipientId,
       type: input?.type,
       reviewState: input?.reviewState,
     });
@@ -138,30 +146,35 @@ export const taskRouter = router({
     return ctx.db
       .select(selectTaskThin)
       .from(tasks)
+      .leftJoin(taskAssignments, eq(taskAssignments.taskId, tasks.id))
       .where(predicate)
       .orderBy(desc(tasks.createdAt));
   }),
 
   byId: authedProcedure.input(z.object({ id: z.string().uuid() })).query(async ({ ctx, input }) => {
-    const caregiverId = await ensureCaregiver(ctx);
+    const membership = await requireCareRecipientMembership(ctx);
 
     const [row] = await ctx.db
-      .select()
+      .select({
+        task: tasks,
+        assigneeId: taskAssignments.caregiverId,
+      })
       .from(tasks)
-      .where(and(eq(tasks.id, input.id), eq(tasks.createdById, caregiverId)))
+      .leftJoin(taskAssignments, eq(taskAssignments.taskId, tasks.id))
+      .where(and(eq(tasks.id, input.id), eq(tasks.careRecipientId, membership.careRecipientId)))
       .limit(1);
 
     if (!row) {
       throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
     }
 
-    return row;
+    return { ...row.task, assigneeId: row.assigneeId ?? null };
   }),
 
   upcoming: authedProcedure
     .input(z.object({ days: z.number().int().min(1).max(30).default(7) }).optional())
     .query(async ({ ctx, input }) => {
-      const caregiverId = await ensureCaregiver(ctx);
+      const membership = await requireCareRecipientMembership(ctx);
       const { now, end } = upcomingWindow(input?.days ?? 7);
 
       const appointmentPredicate = and(
@@ -176,7 +189,7 @@ export const taskRouter = router({
       );
 
       const predicate = and(
-        eq(tasks.createdById, caregiverId),
+        eq(tasks.careRecipientId, membership.careRecipientId),
         sql`${tasks.reviewState} != 'ignored'`,
         sql`${tasks.status} != 'done'`,
         or(appointmentPredicate, billPredicate)
@@ -185,6 +198,7 @@ export const taskRouter = router({
       return ctx.db
         .select(selectTaskThin)
         .from(tasks)
+        .leftJoin(taskAssignments, eq(taskAssignments.taskId, tasks.id))
         .where(predicate)
         .orderBy(desc(tasks.createdAt));
     }),
@@ -192,7 +206,7 @@ export const taskRouter = router({
   stats: authedProcedure
     .input(z.object({ upcomingDays: z.number().int().min(1).max(30).default(7) }).optional())
     .query(async ({ ctx, input }) => {
-      const caregiverId = await ensureCaregiver(ctx);
+      const membership = await requireCareRecipientMembership(ctx);
       const { now, end } = upcomingWindow(input?.upcomingDays ?? 7);
 
       const [pendingReview] = await ctx.db
@@ -200,7 +214,7 @@ export const taskRouter = router({
         .from(tasks)
         .where(
           and(
-            eq(tasks.createdById, caregiverId),
+            eq(tasks.careRecipientId, membership.careRecipientId),
             eq(tasks.reviewState, 'pending'),
             sql`${tasks.reviewState} != 'ignored'`
           )
@@ -222,7 +236,7 @@ export const taskRouter = router({
         .from(tasks)
         .where(
           and(
-            eq(tasks.createdById, caregiverId),
+            eq(tasks.careRecipientId, membership.careRecipientId),
             sql`${tasks.reviewState} != 'ignored'`,
             sql`${tasks.status} != 'done'`,
             or(appointmentPredicate, billPredicate)
@@ -245,10 +259,10 @@ export const taskRouter = router({
         .optional()
     )
     .query(async ({ ctx, input }) => {
-      const caregiverId = await ensureCaregiver(ctx);
+      const membership = await requireCareRecipientMembership(ctx);
 
       const predicate = buildListPredicate({
-        caregiverId,
+        careRecipientId: membership.careRecipientId,
         type: input?.type,
         reviewState: input?.reviewState,
       });
@@ -281,19 +295,19 @@ export const taskRouter = router({
         description: z.string().optional(),
         status: statusEnum.optional(),
         type: typeEnum.optional(),
-        careRecipientId: z.string().uuid().optional(),
         dueAt: z.coerce.date().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const caregiverId = await ensureCaregiver(ctx);
+      const membership = await requireOwnerRole(ctx);
+      const caregiverId = membership.caregiverId;
 
       const payload = {
         title: input.title,
         description: input.description,
         status: input.status ?? 'todo',
         type: input.type ?? 'general',
-        careRecipientId: input.careRecipientId,
+        careRecipientId: membership.careRecipientId,
         createdById: caregiverId,
         dueAt: input.dueAt,
       };
@@ -303,6 +317,84 @@ export const taskRouter = router({
       return inserted;
     }),
 
+  assign: authedProcedure
+    .input(
+      z.object({
+        taskId: z.string().uuid(),
+        caregiverId: z.string().uuid().nullable(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const membership = await requireOwnerRole(ctx);
+      const now = new Date();
+
+      const [task] = await ctx.db
+        .select({ id: tasks.id })
+        .from(tasks)
+        .where(
+          and(eq(tasks.id, input.taskId), eq(tasks.careRecipientId, membership.careRecipientId))
+        )
+        .limit(1);
+
+      if (!task) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
+      }
+
+      if (input.caregiverId === null) {
+        await ctx.db.delete(taskAssignments).where(eq(taskAssignments.taskId, input.taskId));
+        return { taskId: input.taskId, assigneeId: null };
+      }
+
+      const [assigneeMembership] = await ctx.db
+        .select({ caregiverId: careRecipientMemberships.caregiverId })
+        .from(careRecipientMemberships)
+        .where(
+          and(
+            eq(careRecipientMemberships.careRecipientId, membership.careRecipientId),
+            eq(careRecipientMemberships.caregiverId, input.caregiverId)
+          )
+        )
+        .limit(1);
+
+      if (!assigneeMembership) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Assignee is not in this care hub' });
+      }
+
+      await ctx.db
+        .insert(taskAssignments)
+        .values({ taskId: input.taskId, caregiverId: input.caregiverId, createdAt: now })
+        .onConflictDoUpdate({
+          target: [taskAssignments.taskId],
+          set: { caregiverId: input.caregiverId },
+        });
+
+      return { taskId: input.taskId, assigneeId: input.caregiverId };
+    }),
+
+  snooze: authedProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        days: z.number().int().min(1).max(30),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const membership = await requireOwnerRole(ctx);
+      const until = new Date(Date.now() + input.days * 24 * 60 * 60 * 1000);
+
+      const [updated] = await ctx.db
+        .update(tasks)
+        .set({ status: 'snoozed', dueAt: until, updatedAt: new Date() })
+        .where(and(eq(tasks.id, input.id), eq(tasks.careRecipientId, membership.careRecipientId)))
+        .returning();
+
+      if (!updated) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
+      }
+
+      return updated;
+    }),
+
   delete: authedProcedure
     .input(
       z.object({
@@ -310,12 +402,13 @@ export const taskRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const caregiverId = await ensureCaregiver(ctx);
+      const membership = await requireOwnerRole(ctx);
+      const caregiverId = membership.caregiverId;
 
       const [updated] = await ctx.db
         .update(tasks)
         .set({ reviewState: 'ignored', status: 'done', updatedAt: new Date() })
-        .where(and(eq(tasks.id, input.id), eq(tasks.createdById, caregiverId)))
+        .where(and(eq(tasks.id, input.id), eq(tasks.careRecipientId, membership.careRecipientId)))
         .returning({
           id: tasks.id,
           provider: tasks.provider,
@@ -345,7 +438,7 @@ export const taskRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const caregiverId = await ensureCaregiver(ctx);
+      const membership = await requireOwnerRole(ctx);
 
       try {
         const [updated] = await ctx.db
@@ -354,7 +447,7 @@ export const taskRouter = router({
             status: sql`(CASE WHEN ${tasks.status} = 'done' THEN 'todo' ELSE 'done' END)::task_status`,
             updatedAt: new Date(),
           })
-          .where(and(eq(tasks.id, input.id), eq(tasks.createdById, caregiverId)))
+          .where(and(eq(tasks.id, input.id), eq(tasks.careRecipientId, membership.careRecipientId)))
           .returning();
 
         if (!updated) {
@@ -376,12 +469,12 @@ export const taskRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const caregiverId = await ensureCaregiver(ctx);
+      const membership = await requireOwnerRole(ctx);
 
       const [updated] = await ctx.db
         .update(tasks)
         .set({ title: input.title, updatedAt: new Date() })
-        .where(and(eq(tasks.id, input.id), eq(tasks.createdById, caregiverId)))
+        .where(and(eq(tasks.id, input.id), eq(tasks.careRecipientId, membership.careRecipientId)))
         .returning();
 
       if (!updated) {
@@ -401,7 +494,7 @@ export const taskRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const caregiverId = await ensureCaregiver(ctx);
+      const membership = await requireOwnerRole(ctx);
 
       if (!input.title && !input.description && !input.type) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Nothing to update' });
@@ -418,7 +511,7 @@ export const taskRouter = router({
       const [updated] = await ctx.db
         .update(tasks)
         .set(payload)
-        .where(and(eq(tasks.id, input.id), eq(tasks.createdById, caregiverId)))
+        .where(and(eq(tasks.id, input.id), eq(tasks.careRecipientId, membership.careRecipientId)))
         .returning();
 
       if (!updated) {
@@ -436,13 +529,14 @@ export const taskRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const caregiverId = await ensureCaregiver(ctx);
+      const membership = await requireOwnerRole(ctx);
+      const caregiverId = membership.caregiverId;
 
       if (input.action === 'ignore') {
         const [ignored] = await ctx.db
           .update(tasks)
           .set({ reviewState: 'ignored', status: 'done', updatedAt: new Date() })
-          .where(and(eq(tasks.id, input.id), eq(tasks.createdById, caregiverId)))
+          .where(and(eq(tasks.id, input.id), eq(tasks.careRecipientId, membership.careRecipientId)))
           .returning({
             id: tasks.id,
             provider: tasks.provider,
@@ -468,7 +562,7 @@ export const taskRouter = router({
       const [updated] = await ctx.db
         .update(tasks)
         .set({ reviewState: 'approved', updatedAt: new Date() })
-        .where(and(eq(tasks.id, input.id), eq(tasks.createdById, caregiverId)))
+        .where(and(eq(tasks.id, input.id), eq(tasks.careRecipientId, membership.careRecipientId)))
         .returning();
 
       if (!updated) {

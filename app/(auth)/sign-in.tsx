@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Text, View } from 'react-native';
-import { useRouter } from 'expo-router';
 import { useOAuth } from '@clerk/clerk-expo';
 import * as AuthSession from 'expo-auth-session';
 import { AuthLayout } from '@/components/auth/AuthLayout';
@@ -8,7 +7,6 @@ import { ErrorBanner } from '@/components/auth/ErrorBanner';
 import { GoogleButton } from '@/components/GoogleButton';
 
 export default function SignInScreen() {
-  const router = useRouter();
   const { startOAuthFlow } = useOAuth({ strategy: 'oauth_google' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +27,6 @@ export default function SignInScreen() {
 
       if (sessionId && setActive) {
         await setActive({ session: sessionId });
-        router.replace('/');
         return;
       }
 

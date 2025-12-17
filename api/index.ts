@@ -15,7 +15,7 @@ import {
   signWebhookToken,
   setOAuthRedirectUri,
 } from './lib/google';
-import { sources } from './db/schema';
+import { careRecipientMemberships, sources } from './db/schema';
 import { syncSource } from './modules/ingestion/router';
 import { syncCalendarSource } from './modules/ingestion/calendar';
 import { debounceRun, verifyPubsubJwt } from './lib/pubsub';
@@ -57,6 +57,10 @@ const registerPlugins = async () => {
     timeWindow: process.env.RATE_LIMIT_WINDOW ?? '1 minute',
   });
 
+  server.addHook('onError', async (request, _reply, error) => {
+    request.log.error({ err: error }, 'request error');
+  });
+
   server.get('/healthz', async () => ({ ok: true }));
 
   // OAuth redirect catcher for Expo/WebBrowser flows
@@ -84,6 +88,34 @@ const registerPlugins = async () => {
         const tokenInfo = await client.getTokenInfo(tokens.access_token ?? '');
         const accountEmail = tokenInfo.email ?? 'unknown';
 
+        const [membership] = await db
+          .select({
+            careRecipientId: careRecipientMemberships.careRecipientId,
+            role: careRecipientMemberships.role,
+          })
+          .from(careRecipientMemberships)
+          .where(eq(careRecipientMemberships.caregiverId, caregiverId))
+          .limit(1);
+
+        const shouldBecomePrimary = await (async () => {
+          if (!membership?.careRecipientId) return false;
+
+          // Only an owner may create the hub's primary inbox, and only if none exists.
+          const [existingPrimary] = await db
+            .select({ id: sources.id })
+            .from(sources)
+            .innerJoin(
+              careRecipientMemberships,
+              eq(careRecipientMemberships.caregiverId, sources.caregiverId)
+            )
+            .where(
+              sql`${careRecipientMemberships.careRecipientId} = ${membership.careRecipientId} AND ${sources.provider} = 'gmail' AND ${sources.isPrimary} = true`
+            )
+            .limit(1);
+
+          return membership.role === 'owner' && !existingPrimary;
+        })();
+
         await db
           .insert(sources)
           .values({
@@ -93,6 +125,7 @@ const registerPlugins = async () => {
             refreshToken: tokens.refresh_token,
             scopes: googleScope,
             status: 'active',
+            isPrimary: shouldBecomePrimary,
           })
           .onConflictDoUpdate({
             target: [sources.caregiverId, sources.provider, sources.accountEmail],
@@ -100,6 +133,7 @@ const registerPlugins = async () => {
               refreshToken: tokens.refresh_token,
               scopes: googleScope,
               status: 'active',
+              isPrimary: shouldBecomePrimary ? true : sources.isPrimary,
               updatedAt: new Date(),
             },
           });
@@ -186,6 +220,13 @@ const registerPlugins = async () => {
       return reply.status(202).send({ ok: true });
     }
 
+    if (!source.isPrimary) {
+      if (process.env.DEBUG_PUSH_LOGS === 'true') {
+        request.log.debug({ sourceId: source.id }, 'skip push: non-primary source');
+      }
+      return reply.status(202).send({ ok: true });
+    }
+
     const isPubsubPush = Boolean(pubsubMessage);
 
     if (isPubsubPush) {
@@ -267,10 +308,33 @@ const registerPlugins = async () => {
   });
 
   // telemetry hook
+  server.addHook('onRequest', async (request) => {
+    (request as any)._telemetryStartNs = process.hrtime.bigint();
+  });
+
   server.addHook('onResponse', async (request, reply) => {
     if (!posthog) return;
 
-    const durationMs = reply.getResponseTime();
+    const startNs = (request as any)._telemetryStartNs as bigint | undefined;
+    const fastifyDurationMs =
+      typeof (reply as any).getResponseTime === 'function'
+        ? (reply as any).getResponseTime()
+        : null;
+    const elapsedTimeMs =
+      typeof (reply as any).elapsedTime === 'number'
+        ? ((reply as any).elapsedTime as number)
+        : null;
+
+    const durationMsRaw =
+      typeof startNs === 'bigint'
+        ? Number(process.hrtime.bigint() - startNs) / 1e6
+        : (fastifyDurationMs ?? elapsedTimeMs ?? null);
+
+    const durationMs =
+      typeof durationMsRaw === 'number' && Number.isFinite(durationMsRaw)
+        ? Math.round(durationMsRaw)
+        : undefined;
+
     posthog.capture({
       distinctId: request.headers['x-user-id']?.toString() ?? 'anonymous',
       event: 'api_request',

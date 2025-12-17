@@ -1,10 +1,15 @@
 import { TRPCError } from '@trpc/server';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { google } from 'googleapis';
 import { z } from 'zod';
 
-import { ingestionEvents, senderSuppressions, sources, tasks } from '../../db/schema';
-import { ensureCaregiver } from '../../lib/caregiver';
+import {
+  careRecipientMemberships,
+  ingestionEvents,
+  senderSuppressions,
+  sources,
+  tasks,
+} from '../../db/schema';
 import { createGmailClient, gmailQuery, isInvalidGrantError } from '../../lib/google';
 import { parseMessage } from '../../lib/emailParser';
 import { shouldTombstoneMessage } from '../../lib/ingestionHeuristics';
@@ -14,6 +19,7 @@ import { authedProcedure, router } from '../../trpc/trpc';
 import { withSourceLock } from '../../lib/sourceLock';
 import { IngestionCtx } from '../../lib/ingestionTypes';
 import { ingestionEventBus } from '../../lib/eventBus';
+import { requireOwnerRole } from '../../lib/careRecipient';
 
 type FetchedMessages = {
   messageIds: string[];
@@ -92,16 +98,18 @@ async function upsertTaskFromMessage({
   ctx,
   source,
   caregiverId,
+  careRecipientId,
   message,
-  ignoredSourceIds,
+  ignoredExternalIds,
   suppressedSenderDomains,
   classify = classifyEmailWithVertex,
 }: {
   ctx: IngestionCtx;
   source: typeof sources.$inferSelect;
   caregiverId: string;
+  careRecipientId: string;
   message: google.gmail_v1.Schema$Message;
-  ignoredSourceIds: Set<string>;
+  ignoredExternalIds: Set<string>;
   suppressedSenderDomains?: Set<string>;
   classify?: typeof classifyEmailWithVertex;
 }) {
@@ -112,7 +120,8 @@ async function upsertTaskFromMessage({
     message,
     accountEmail: source.accountEmail,
     caregiverId,
-    ignoredSourceIds,
+    careRecipientId,
+    ignoredExternalIds,
     suppressedSenderDomains,
     classify,
     parse: ({ message: msg, subject, sender, snippet }) =>
@@ -145,7 +154,7 @@ async function upsertTaskFromMessage({
       .insert(tasks)
       .values({ ...payload, createdAt: now })
       .onConflictDoUpdate({
-        target: [tasks.createdById, tasks.sourceId],
+        target: [tasks.careRecipientId, tasks.provider, tasks.externalId],
         set: { ...payload, updatedAt: now },
       });
 
@@ -178,7 +187,7 @@ async function upsertTaskFromMessage({
     .insert(tasks)
     .values({ ...payload, createdAt: now })
     .onConflictDoUpdate({
-      target: [tasks.createdById, tasks.sourceId],
+      target: [tasks.careRecipientId, tasks.provider, tasks.externalId],
       set: { ...payload, updatedAt: now },
     })
     .returning({ id: tasks.id, isNew: sql<boolean>`(xmax = 0)` });
@@ -214,9 +223,44 @@ export async function syncSource({
       throw new TRPCError({ code: 'BAD_REQUEST', message: 'Source is disconnected' });
     }
 
+    if (!source.isPrimary) {
+      ctx.req?.log?.info?.({ sourceId: source.id }, 'skip sync: non-primary source');
+      return {
+        created: 0,
+        updated: 0,
+        skipped: 0,
+        errors: 0,
+        historyId: source.historyId,
+        messageCount: 0,
+      };
+    }
+
     const { gmail } = createGmailClient(source.refreshToken);
 
     const startedAt = new Date();
+
+    const [membership] = await ctx.db
+      .select({ careRecipientId: careRecipientMemberships.careRecipientId })
+      .from(careRecipientMemberships)
+      .where(eq(careRecipientMemberships.caregiverId, caregiverId))
+      .limit(1);
+
+    if (!membership?.careRecipientId) {
+      ctx.req?.log?.warn?.(
+        { sourceId: source.id, caregiverId },
+        'skip sync: missing care recipient'
+      );
+      return {
+        created: 0,
+        updated: 0,
+        skipped: 0,
+        errors: 0,
+        historyId: source.historyId,
+        messageCount: 0,
+      };
+    }
+
+    const careRecipientId = membership.careRecipientId;
 
     const markErrored = async (message: string) => {
       await ctx.db
@@ -232,7 +276,7 @@ export async function syncSource({
         if (isInvalidGrantError(err)) {
           await markErrored('Google access revoked or expired; reconnect this account');
           throw new TRPCError({
-            code: 'FAILED_PRECONDITION',
+            code: 'PRECONDITION_FAILED',
             message: 'Google connection expired; reconnect to resume syncing',
           });
         }
@@ -253,23 +297,22 @@ export async function syncSource({
       'gmail sync fetched messages'
     );
 
-    // Preload ignored tasks for this caregiver/source set to avoid per-message lookups.
-    const ignoredSourceIds = new Set<string>();
-    if (messageIds.length > 0) {
-      const ignoredRows = await ctx.db
-        .select({ sourceId: tasks.sourceId })
-        .from(tasks)
-        .where(
-          and(
-            eq(tasks.createdById, caregiverId),
-            eq(tasks.reviewState, 'ignored'),
-            inArray(tasks.sourceId, messageIds)
-          )
-        );
-      ignoredRows.forEach((row) => {
-        if (row.sourceId) ignoredSourceIds.add(row.sourceId);
-      });
-    }
+    // Preload tombstoned (ignored) external IDs so ignored items never resurrect across connectors.
+    const ignoredExternalIds = new Set<string>();
+    const ignoredRows = await ctx.db
+      .select({ externalId: tasks.externalId })
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.careRecipientId, careRecipientId),
+          eq(tasks.provider, 'gmail'),
+          eq(tasks.reviewState, 'ignored'),
+          isNotNull(tasks.externalId)
+        )
+      );
+    ignoredRows.forEach((row) => {
+      if (row.externalId) ignoredExternalIds.add(row.externalId);
+    });
 
     const suppressedSenderDomains = new Set<string>();
     const suppressionRows = await ctx.db
@@ -294,11 +337,6 @@ export async function syncSource({
       await Promise.all(
         batch.map(async (id) => {
           try {
-            if (ignoredSourceIds.has(id)) {
-              results.skipped += 1;
-              return;
-            }
-
             const { data: meta } = await gmail.users.messages.get({
               userId: 'me',
               id,
@@ -321,8 +359,9 @@ export async function syncSource({
                 ctx,
                 source,
                 caregiverId,
+                careRecipientId,
                 message: meta,
-                ignoredSourceIds,
+                ignoredExternalIds,
                 suppressedSenderDomains,
               });
               if (outcome.action === 'created') results.created += 1;
@@ -341,8 +380,9 @@ export async function syncSource({
               ctx,
               source,
               caregiverId,
+              careRecipientId,
               message: data,
-              ignoredSourceIds,
+              ignoredExternalIds,
               suppressedSenderDomains,
             });
             if (outcome.action === 'created') results.created += 1;
@@ -410,11 +450,32 @@ export const ingestionRouter = router({
   syncNow: authedProcedure
     .input(z.object({ sourceId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      const caregiverId = await ensureCaregiver(ctx);
+      const membership = await requireOwnerRole(ctx);
+
+      const memberRows = await ctx.db
+        .select({ caregiverId: careRecipientMemberships.caregiverId })
+        .from(careRecipientMemberships)
+        .where(eq(careRecipientMemberships.careRecipientId, membership.careRecipientId));
+      const caregiverIds = memberRows.map((m) => m.caregiverId);
+
+      const [source] = await ctx.db
+        .select()
+        .from(sources)
+        .where(and(eq(sources.id, input.sourceId), inArray(sources.caregiverId, caregiverIds)))
+        .limit(1);
+
+      if (!source) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Source not found' });
+      }
+
+      if (!source.isPrimary) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only the Primary inbox can sync' });
+      }
+
       return syncSource({
         ctx,
         sourceId: input.sourceId,
-        caregiverIdOverride: caregiverId,
+        caregiverIdOverride: source.caregiverId,
         reason: 'manual',
       });
     }),

@@ -18,8 +18,15 @@ Carebase uses EAS build profiles defined in `eas.json`.
   - `pnpm exec eas build --profile production --platform ios`
   - `pnpm exec eas build --profile production --platform android`
 
+## Deploy checklist (API + DB)
+
+- Run `pnpm lint` and `pnpm test`
+- Apply migrations in the target environment: `pnpm db:migrate`
+- Verify CareHub invariants in prod data:
+  - Each caregiver has exactly one membership.
+  - Each CareHub has at most one Primary Gmail source (`sources.isPrimary=true` for provider `gmail`).
+
 ## Notes
 
 - Keep Expo/RN versions aligned; prefer `pnpm exec expo install <pkg>` for native deps.
 - If you change native modules/config, run `pnpm prebuild` and ensure native projects (`ios/`, `android/`) still build.
-

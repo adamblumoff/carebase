@@ -1,7 +1,6 @@
 import '../global.css';
 import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
 import { tokenCache } from '@clerk/clerk-expo/token-cache';
-import { Slot, useRouter, useSegments } from 'expo-router';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Animated, Text } from 'react-native';
@@ -13,9 +12,10 @@ import { useColorScheme } from 'nativewind';
 
 import { createQueryClientAndPersister, createTrpcClient, trpc } from '@/lib/trpc/client';
 import { useUserTheme } from '@/app/(hooks)/useUserTheme';
+import { AuthGate, SetupGate, FullScreenLoading } from '@/components/gates';
 
 export default function Layout() {
-  useColorScheme();
+  const { colorScheme } = useColorScheme();
   const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
   const posthogKey = process.env.EXPO_PUBLIC_POSTHOG_KEY;
@@ -26,7 +26,7 @@ export default function Layout() {
   if (!fontsLoaded) {
     return (
       <SafeAreaProvider>
-        <Text style={{ marginTop: 48, textAlign: 'center' }}>Loading fonts...</Text>
+        <FullScreenLoading title="Loading…" colorScheme={colorScheme} />
       </SafeAreaProvider>
     );
   }
@@ -34,9 +34,10 @@ export default function Layout() {
   if (!publishableKey) {
     return (
       <SafeAreaProvider>
-        <Text style={{ marginTop: 48, textAlign: 'center' }}>
-          Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY in .env
-        </Text>
+        <FullScreenLoading
+          title="Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY in .env"
+          colorScheme={colorScheme}
+        />
       </SafeAreaProvider>
     );
   }
@@ -67,6 +68,7 @@ export default function Layout() {
 }
 
 function TrpcProvider({ children }: { children: React.ReactNode }) {
+  const { colorScheme } = useColorScheme();
   const { getToken, isLoaded, isSignedIn, userId } = useAuth();
   const apiBaseUrl =
     process.env.NODE_ENV === 'production'
@@ -91,13 +93,15 @@ function TrpcProvider({ children }: { children: React.ReactNode }) {
 
   if (!apiBaseUrl) {
     return (
-      <Text style={{ marginTop: 48, textAlign: 'center' }}>
-        Missing EXPO_PUBLIC_API_BASE_URL in .env
-      </Text>
+      <FullScreenLoading
+        title="Missing EXPO_PUBLIC_API_BASE_URL in .env"
+        colorScheme={colorScheme}
+      />
     );
   }
 
-  if (!isLoaded || !trpcClient) return null;
+  if (!isLoaded || !trpcClient)
+    return <FullScreenLoading title="Loading…" colorScheme={colorScheme} />;
 
   return (
     <PersistQueryClientProvider client={queryClient} persistOptions={{ persister }}>
@@ -111,30 +115,16 @@ function TrpcProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-function AuthGate() {
-  const { isLoaded, isSignedIn } = useAuth();
-  const segments = useSegments();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!isLoaded) return;
-    const inAuthGroup = segments[0] === '(auth)';
-    if (!isSignedIn && !inAuthGroup) {
-      router.replace('/(auth)/sign-in');
-    } else if (isSignedIn && inAuthGroup) {
-      router.replace('/');
-    }
-  }, [isLoaded, isSignedIn, segments, router]);
-
-  if (!isLoaded) return null;
-  return <Slot />;
-}
-
 function ThemeGate({ children }: { children: React.ReactNode }) {
   const { themeReady } = useUserTheme();
+  const { colorScheme } = useColorScheme();
 
-  if (!themeReady) return null;
-  return <PushToastLayer>{children}</PushToastLayer>;
+  if (!themeReady) return <FullScreenLoading title="Loading…" colorScheme={colorScheme} />;
+  return (
+    <PushToastLayer>
+      <SetupGate preload={<PreloadTasks />}>{children}</SetupGate>
+    </PushToastLayer>
+  );
 }
 
 function PreloadTasks() {
