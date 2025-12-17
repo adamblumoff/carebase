@@ -56,7 +56,7 @@ export const careRecipientsRouter = router({
 
     if (existing) {
       throw new TRPCError({
-        code: 'FAILED_PRECONDITION',
+        code: 'PRECONDITION_FAILED',
         message: 'Care recipient already set',
       });
     }
@@ -129,7 +129,7 @@ export const careRecipientsRouter = router({
 
     if (existing) {
       throw new TRPCError({
-        code: 'FAILED_PRECONDITION',
+        code: 'PRECONDITION_FAILED',
         message: 'Care recipient already set',
       });
     }

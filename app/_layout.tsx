@@ -167,7 +167,7 @@ function SetupGate({ children }: { children: React.ReactNode }) {
   const segments = useSegments();
   const router = useRouter();
 
-  const isInSetupGroup = segments[0] === '(setup)';
+  const isInSetupRoute = segments[0] === '(setup)' || segments[0] === 'setup';
 
   const membershipQuery = trpc.careRecipients.my.useQuery(undefined, {
     enabled: isSignedIn,
@@ -186,7 +186,7 @@ function SetupGate({ children }: { children: React.ReactNode }) {
     null;
 
   const shouldRouteToSetup =
-    errorCode === 'FAILED_PRECONDITION' ||
+    errorCode === 'PRECONDITION_FAILED' ||
     errorCode === 'NOT_FOUND' ||
     errorMessage === 'Care recipient not set up';
 
@@ -196,20 +196,20 @@ function SetupGate({ children }: { children: React.ReactNode }) {
     if (membershipQuery.isLoading) return;
 
     if (membershipQuery.isSuccess) {
-      if (isInSetupGroup) {
+      if (isInSetupRoute) {
         router.replace('/');
       }
       return;
     }
 
     if (shouldRouteToSetup) {
-      if (!isInSetupGroup) {
-        router.replace('/(setup)/setup');
+      if (!isInSetupRoute) {
+        router.replace('/setup');
       }
       return;
     }
   }, [
-    isInSetupGroup,
+    isInSetupRoute,
     isLoaded,
     isSignedIn,
     membershipQuery.isLoading,
@@ -231,7 +231,7 @@ function SetupGate({ children }: { children: React.ReactNode }) {
 
   if (shouldRouteToSetup) {
     // Avoid rendering the main app route while we redirect into setup.
-    if (!isInSetupGroup) return null;
+    if (!isInSetupRoute) return null;
     return <>{children}</>;
   }
 
@@ -243,6 +243,9 @@ function SetupGate({ children }: { children: React.ReactNode }) {
       ? 'Hint: run `pnpm db:migrate` on the API database, then restart `pnpm api:dev`.'
       : 'Try refreshing. If this persists, the API may be down or missing migrations.';
 
+  const textColor = '#FFFFFF';
+  const mutedTextColor = 'rgba(255,255,255,0.75)';
+
   return (
     <View
       style={{
@@ -250,10 +253,15 @@ function SetupGate({ children }: { children: React.ReactNode }) {
         alignItems: 'center',
         justifyContent: 'center',
         paddingHorizontal: 20,
+        backgroundColor: '#000000',
       }}>
-      <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 8 }}>Something went wrong</Text>
-      <Text style={{ textAlign: 'center', opacity: 0.8, marginBottom: 12 }}>{message}</Text>
-      <Text style={{ textAlign: 'center', opacity: 0.7, marginBottom: 16 }}>{hint}</Text>
+      <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 8, color: textColor }}>
+        Something went wrong
+      </Text>
+      <Text style={{ textAlign: 'center', marginBottom: 12, color: mutedTextColor }}>
+        {message}
+      </Text>
+      <Text style={{ textAlign: 'center', marginBottom: 16, color: mutedTextColor }}>{hint}</Text>
       <Pressable
         onPress={() => membershipQuery.refetch()}
         style={({ pressed }) => ({
@@ -267,7 +275,7 @@ function SetupGate({ children }: { children: React.ReactNode }) {
       </Pressable>
 
       <Pressable
-        onPress={() => router.replace('/(setup)/setup')}
+        onPress={() => router.replace('/setup')}
         style={({ pressed }) => ({
           marginTop: 10,
           paddingVertical: 10,
@@ -277,7 +285,7 @@ function SetupGate({ children }: { children: React.ReactNode }) {
           borderColor: '#D1D5DB',
           opacity: pressed ? 0.85 : 1,
         })}>
-        <Text style={{ fontWeight: '600' }}>Go to setup</Text>
+        <Text style={{ fontWeight: '600', color: textColor }}>Go to setup</Text>
       </Pressable>
     </View>
   );

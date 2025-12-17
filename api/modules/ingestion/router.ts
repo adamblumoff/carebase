@@ -276,7 +276,7 @@ export async function syncSource({
         if (isInvalidGrantError(err)) {
           await markErrored('Google access revoked or expired; reconnect this account');
           throw new TRPCError({
-            code: 'FAILED_PRECONDITION',
+            code: 'PRECONDITION_FAILED',
             message: 'Google connection expired; reconnect to resume syncing',
           });
         }

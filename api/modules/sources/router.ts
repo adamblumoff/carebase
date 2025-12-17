@@ -49,7 +49,7 @@ export const sourcesRouter = router({
     .input(z.object({ redirectUri: z.string().url().optional() }).optional())
     .query(async ({ ctx, input }) => {
       if (!hasGoogleConfig()) {
-        throw new TRPCError({ code: 'FAILED_PRECONDITION', message: 'Google config missing' });
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Google config missing' });
       }
 
       const caregiverId = await ensureCaregiver(ctx);
@@ -84,7 +84,7 @@ export const sourcesRouter = router({
     .mutation(async ({ ctx, input }) => {
       if (!hasGoogleConfig()) {
         throw new TRPCError({
-          code: 'FAILED_PRECONDITION',
+          code: 'PRECONDITION_FAILED',
           message: 'Google OAuth env vars are missing',
         });
       }
@@ -176,7 +176,10 @@ export const sourcesRouter = router({
         .where(eq(careRecipientMemberships.careRecipientId, membership.careRecipientId));
       const caregiverIds = memberRows.map((m) => m.caregiverId);
       if (caregiverIds.length === 0) {
-        throw new TRPCError({ code: 'FAILED_PRECONDITION', message: 'No care team members found' });
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: 'No care team members found',
+        });
       }
 
       const [source] = await ctx.db

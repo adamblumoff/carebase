@@ -81,7 +81,7 @@ export async function syncCalendarSource({
       .limit(1);
 
     if (!membership?.careRecipientId) {
-      throw new TRPCError({ code: 'FAILED_PRECONDITION', message: 'Care recipient not set up' });
+      throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Care recipient not set up' });
     }
 
     const calendar = ensureCalendarClient(source.refreshToken);
@@ -107,7 +107,7 @@ export async function syncCalendarSource({
         if (isInvalidGrantError(err)) {
           await markErrored('Google calendar access expired; please reconnect');
           throw new TRPCError({
-            code: 'FAILED_PRECONDITION',
+            code: 'PRECONDITION_FAILED',
             message: 'Google connection expired; reconnect to continue syncing calendar',
           });
         }
