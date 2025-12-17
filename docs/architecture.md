@@ -13,7 +13,8 @@
   - `ClerkProvider` for auth
   - `PostHogProvider` when `EXPO_PUBLIC_POSTHOG_KEY` is set
   - TanStack Query persistence to AsyncStorage + tRPC provider (`lib/trpc/client.ts`)
-  - `AuthGate` to keep unauth users in `app/(auth)`
+  - `AuthGate` to keep unauth users in `app/(auth)` (implemented in `components/gates.tsx`)
+  - `SetupGate` to route signed-in users without a CareHub to `/setup` (implemented in `components/gates.tsx`)
   - Task prefetch on sign-in (`tasks.listThin`, `tasks.upcoming`, `tasks.stats`) + recent ingestion events
   - Subscription toast: `ingestionEvents.onPush` triggers a background invalidate (`listThin`, `upcoming`, `stats`) + “New task synced” toast
 
@@ -48,7 +49,16 @@
 ## Core tables (current)
 
 - `caregivers`: app user record (maps to Clerk user via email).
+- `care_recipient_memberships`: links caregivers to exactly one CareHub (role is `owner` or `viewer`).
 - `sources`: connected provider accounts (currently `gmail`), refresh tokens, watch metadata, status.
 - `tasks`: primary UI entity; both manual tasks and ingested tasks live here (ingested tasks also carry `senderDomain` + `ingestionDebug` for diagnosis).
 - `ingestion_events`: small log of sync runs and counts (drives “recent ingestion” UI and push events).
 - `sender_suppressions`: per-caregiver sender-domain suppression (used to auto-ignore repeat junk sources before model classification).
+
+## CareHub model (collaboration)
+
+- A CareHub is one care recipient + a care team (caregivers).
+- Roles:
+  - `owner`: can invite caregivers and manage the hub’s Primary inbox.
+  - `viewer`: read-only for hub configuration (can still connect their own inbox, but it will not become Primary).
+- Invitation flow: the owner generates an invite code in Profile → CareHub; other caregivers join via Setup.

@@ -48,6 +48,7 @@ Base URL tips:
 
 - Lint: `pnpm lint`
 - Format: `pnpm format`
+- Tests: `pnpm test` (runs both Node/API tests in `tests/` and app/UI tests in `tests/app/`)
 - Reset deps (slow): `pnpm reset:deps`
 
 ## Troubleshooting
@@ -56,4 +57,3 @@ Base URL tips:
 - tRPC client error “Unexpected API response”: your `EXPO_PUBLIC_API_BASE_URL` likely points at the wrong host/port.
 - API crashes on boot mentioning `GOOGLE_STATE_SECRET`: it’s required and must be set in `.env`.
 - Google connect returns no refresh token: ensure the OAuth flow uses `prompt=consent` + `access_type=offline` (the API requests this), and you’re not reusing a previously-consented account without forcing consent.
-

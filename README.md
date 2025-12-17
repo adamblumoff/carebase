@@ -15,6 +15,8 @@ Carebase is a caregiver-first mobile app that pulls every stream of care informa
 ## Key ideas
 
 - Single source of truth for a care team’s daily tasks, notes, and documents.
+- One CareHub per caregiver (single care recipient) with multi-caregiver collaboration via invite codes.
+- Simple permissions: one `owner` who can manage the hub and invites; `viewer`s can participate but can’t change hub settings.
 - Clear, timely updates that reduce phone/email back-and-forth.
 - Built for multi-platform access (iOS, Android, web) via Expo Router.
 - Gmail-driven task ingestion that classifies appointments, bills, and medications via Vertex Gemini; drops very low-confidence items, flags medium confidence for review, and auto-approves only when signals are strong; ignored tasks are soft-deleted so they never resurrect on re-sync.
