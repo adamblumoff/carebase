@@ -36,9 +36,15 @@ export async function requireCareRecipientMembership(
   if (!membership) {
     throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Care recipient not set up' });
   }
-  if (membership.caregiverId !== caregiverId) {
-    throw new TRPCError({ code: 'FORBIDDEN' });
+export async function requireCareRecipientMembership(
+  ctx: Context
+): Promise<CareRecipientMembership> {
+  const { caregiverId, membership } = await getCareRecipientMembership(ctx);
+  if (!membership) {
+    throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Care recipient not set up' });
   }
+  return membership as CareRecipientMembership;
+}
   return membership as CareRecipientMembership;
 }
 
