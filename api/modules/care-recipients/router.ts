@@ -3,7 +3,13 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
 import { z } from 'zod';
 
-import { careInvitations, careRecipientMemberships, careRecipients, tasks } from '../../db/schema';
+import {
+  careInvitations,
+  careRecipientMemberships,
+  careRecipients,
+  caregivers,
+  tasks,
+} from '../../db/schema';
 import { ensureCaregiver } from '../../lib/caregiver';
 import {
   INVITE_TOKEN_BYTES,
@@ -16,6 +22,7 @@ import { authedProcedure, router } from '../../trpc/trpc';
 
 const createInput = z.object({
   name: z.string().min(1).max(120),
+  caregiverName: z.string().min(1).max(80).optional(),
 });
 
 const inviteInput = z.object({
@@ -24,6 +31,7 @@ const inviteInput = z.object({
 
 const acceptInviteInput = z.object({
   token: z.string().min(8).max(64),
+  caregiverName: z.string().min(1).max(80).optional(),
 });
 
 export const careRecipientsRouter = router({
@@ -62,6 +70,13 @@ export const careRecipientsRouter = router({
     }
 
     const now = new Date();
+    if (input.caregiverName) {
+      await ctx.db
+        .update(caregivers)
+        .set({ name: input.caregiverName.trim() })
+        .where(eq(caregivers.id, caregiverId));
+    }
+
     const [recipient] = await ctx.db
       .insert(careRecipients)
       .values({ name: input.name.trim(), createdAt: now })
@@ -150,6 +165,12 @@ export const careRecipientsRouter = router({
     });
 
     const now = new Date();
+    if (input.caregiverName) {
+      await ctx.db
+        .update(caregivers)
+        .set({ name: input.caregiverName.trim() })
+        .where(eq(caregivers.id, caregiverId));
+    }
 
     await ctx.db.insert(careRecipientMemberships).values({
       careRecipientId: invite.careRecipientId,

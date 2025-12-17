@@ -5,13 +5,31 @@ import { useColorScheme } from 'nativewind';
 import { Ionicons } from '@expo/vector-icons';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useUser } from '@clerk/clerk-expo';
 
 import { trpc } from '@/lib/trpc/client';
 
 export default function SetupScreen() {
   useColorScheme();
   const router = useRouter();
+  const { user } = useUser();
 
+  const initialName = useMemo(() => {
+    const fullName =
+      user?.fullName ??
+      [user?.firstName, user?.lastName].filter(Boolean).join(' ') ??
+      user?.username ??
+      '';
+    return fullName;
+  }, [user?.firstName, user?.fullName, user?.lastName, user?.username]);
+
+  const [caregiverName, setCaregiverName] = useState(() => initialName);
+
+  // If Clerk loads after initial render, hydrate once.
+  React.useEffect(() => {
+    if (!initialName) return;
+    setCaregiverName((current) => (current ? current : initialName));
+  }, [initialName]);
   const [recipientName, setRecipientName] = useState('');
   const [inviteToken, setInviteToken] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -33,19 +51,25 @@ export default function SetupScreen() {
 
   const isBusy = create.isLoading || acceptInvite.isLoading;
 
-  const canCreate = useMemo(() => recipientName.trim().length > 0, [recipientName]);
-  const canJoin = useMemo(() => inviteToken.trim().length >= 8, [inviteToken]);
+  const canCreate = useMemo(
+    () => caregiverName.trim().length > 0 && recipientName.trim().length > 0,
+    [caregiverName, recipientName]
+  );
+  const canJoin = useMemo(
+    () => caregiverName.trim().length > 0 && inviteToken.trim().length >= 8,
+    [caregiverName, inviteToken]
+  );
 
   const submitCreate = () => {
     setError(null);
     if (!canCreate) return;
-    create.mutate({ name: recipientName.trim() });
+    create.mutate({ name: recipientName.trim(), caregiverName: caregiverName.trim() });
   };
 
   const submitJoin = () => {
     setError(null);
     if (!canJoin) return;
-    acceptInvite.mutate({ token: inviteToken.trim() });
+    acceptInvite.mutate({ token: inviteToken.trim(), caregiverName: caregiverName.trim() });
   };
 
   return (
@@ -66,6 +90,19 @@ export default function SetupScreen() {
             <Text className="text-base leading-5 text-text-muted dark:text-text-muted-dark">
               Start with one person you’re caring for. You can invite family caregivers later.
             </Text>
+          </View>
+
+          <View className="mt-5 gap-2">
+            <Text className="text-sm font-semibold text-text dark:text-text-dark">Your name</Text>
+            <TextInput
+              value={caregiverName}
+              onChangeText={setCaregiverName}
+              editable={!isBusy}
+              placeholder="e.g., Adam"
+              placeholderTextColor="#9CA3AF"
+              className="rounded-xl border border-border bg-white px-4 py-3 text-[16px] leading-[20px] dark:border-border-dark dark:bg-surface-dark dark:text-text-dark"
+              returnKeyType="next"
+            />
           </View>
 
           {error ? (

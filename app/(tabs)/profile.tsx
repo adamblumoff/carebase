@@ -69,7 +69,7 @@ export default function ProfileScreen() {
 
         <View className="mt-6 w-full gap-4 rounded-xl border border-border bg-white p-4 dark:border-border-dark dark:bg-surface-card-dark">
           <View className="gap-1">
-            <Text className="text-base font-semibold text-text dark:text-text-dark">Care hub</Text>
+            <Text className="text-base font-semibold text-text dark:text-text-dark">CareHub</Text>
             <Text className="text-sm text-text-muted dark:text-text-muted-dark">
               {hubName ? `Recipient: ${hubName}` : 'Loading…'}
             </Text>
