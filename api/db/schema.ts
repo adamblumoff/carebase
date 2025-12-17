@@ -182,6 +182,7 @@ export const sources = pgTable(
     cursor: text('cursor'),
     lastSyncAt: timestamp('last_sync_at', { withTimezone: true }),
     status: sourceStatus('status').default('active').notNull(),
+    isPrimary: boolean('is_primary').default(false).notNull(),
     errorMessage: text('error_message'),
     watchId: text('watch_id'),
     watchExpiration: timestamp('watch_expiration', { withTimezone: true }),

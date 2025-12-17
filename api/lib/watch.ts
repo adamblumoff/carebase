@@ -105,11 +105,13 @@ export const registerCalendarWatch = async (
 const nowPlus = (ms: number) => new Date(Date.now() + ms);
 
 export const needsRenewal = (source: typeof sources.$inferSelect) => {
+  if (!source.isPrimary) return false;
   if (!source.watchExpiration) return true;
   return source.watchExpiration < nowPlus(24 * 60 * 60 * 1000);
 };
 
 export const renewSource = async (source: typeof sources.$inferSelect) => {
+  if (!source.isPrimary) return;
   try {
     const { gmail, auth } = createGmailClient(source.refreshToken);
     const gmailWatch = await registerGmailWatch(gmail);
@@ -149,6 +151,7 @@ export const renewSource = async (source: typeof sources.$inferSelect) => {
 };
 
 export const fallbackPoll = async (source: typeof sources.$inferSelect) => {
+  if (!source.isPrimary) return;
   // simple debounce to avoid overlap
   debounceRun(`poll-${source.id}`, 0, async () => {
     try {

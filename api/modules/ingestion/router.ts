@@ -1,5 +1,5 @@
 import { TRPCError } from '@trpc/server';
-import { and, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { google } from 'googleapis';
 import { z } from 'zod';
 
@@ -10,7 +10,6 @@ import {
   sources,
   tasks,
 } from '../../db/schema';
-import { ensureCaregiver } from '../../lib/caregiver';
 import { createGmailClient, gmailQuery, isInvalidGrantError } from '../../lib/google';
 import { parseMessage } from '../../lib/emailParser';
 import { shouldTombstoneMessage } from '../../lib/ingestionHeuristics';
@@ -20,6 +19,7 @@ import { authedProcedure, router } from '../../trpc/trpc';
 import { withSourceLock } from '../../lib/sourceLock';
 import { IngestionCtx } from '../../lib/ingestionTypes';
 import { ingestionEventBus } from '../../lib/eventBus';
+import { requireOwnerRole } from '../../lib/careRecipient';
 
 type FetchedMessages = {
   messageIds: string[];
@@ -221,6 +221,18 @@ export async function syncSource({
 
     if (source.status === 'disconnected') {
       throw new TRPCError({ code: 'BAD_REQUEST', message: 'Source is disconnected' });
+    }
+
+    if (!source.isPrimary) {
+      ctx.req?.log?.info?.({ sourceId: source.id }, 'skip sync: non-primary source');
+      return {
+        created: 0,
+        updated: 0,
+        skipped: 0,
+        errors: 0,
+        historyId: source.historyId,
+        messageCount: 0,
+      };
     }
 
     const { gmail } = createGmailClient(source.refreshToken);
@@ -438,11 +450,32 @@ export const ingestionRouter = router({
   syncNow: authedProcedure
     .input(z.object({ sourceId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      const caregiverId = await ensureCaregiver(ctx);
+      const membership = await requireOwnerRole(ctx);
+
+      const memberRows = await ctx.db
+        .select({ caregiverId: careRecipientMemberships.caregiverId })
+        .from(careRecipientMemberships)
+        .where(eq(careRecipientMemberships.careRecipientId, membership.careRecipientId));
+      const caregiverIds = memberRows.map((m) => m.caregiverId);
+
+      const [source] = await ctx.db
+        .select()
+        .from(sources)
+        .where(and(eq(sources.id, input.sourceId), inArray(sources.caregiverId, caregiverIds)))
+        .limit(1);
+
+      if (!source) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Source not found' });
+      }
+
+      if (!source.isPrimary) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only the Primary inbox can sync' });
+      }
+
       return syncSource({
         ctx,
         sourceId: input.sourceId,
-        caregiverIdOverride: caregiverId,
+        caregiverIdOverride: source.caregiverId,
         reason: 'manual',
       });
     }),

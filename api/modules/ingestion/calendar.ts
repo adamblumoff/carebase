@@ -70,6 +70,10 @@ export async function syncCalendarSource({
       throw new TRPCError({ code: 'BAD_REQUEST', message: 'Source is disconnected' });
     }
 
+    if (!source.isPrimary) {
+      return { created: 0, updated: 0, items: 0, nextSyncToken: source.calendarSyncToken ?? null };
+    }
+
     const [membership] = await ctx.db
       .select({ careRecipientId: careRecipientMemberships.careRecipientId })
       .from(careRecipientMemberships)

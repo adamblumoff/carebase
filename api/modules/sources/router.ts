@@ -1,5 +1,5 @@
 import { TRPCError } from '@trpc/server';
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import {
   createOAuthClient,
@@ -10,13 +10,39 @@ import {
   setOAuthRedirectUri,
 } from '../../lib/google';
 import { ensureCaregiver } from '../../lib/caregiver';
-import { sources } from '../../db/schema';
+import { careRecipientMemberships, caregivers, sources } from '../../db/schema';
+import { requireCareRecipientMembership, requireOwnerRole } from '../../lib/careRecipient';
 import { authedProcedure, router } from '../../trpc/trpc';
 
 export const sourcesRouter = router({
   list: authedProcedure.query(async ({ ctx }) => {
-    const caregiverId = await ensureCaregiver(ctx);
-    return ctx.db.select().from(sources).where(eq(sources.caregiverId, caregiverId));
+    const membership = await requireCareRecipientMembership(ctx);
+
+    const memberRows = await ctx.db
+      .select({ caregiverId: careRecipientMemberships.caregiverId })
+      .from(careRecipientMemberships)
+      .where(eq(careRecipientMemberships.careRecipientId, membership.careRecipientId));
+
+    const caregiverIds = memberRows.map((m) => m.caregiverId);
+    if (caregiverIds.length === 0) return [];
+
+    return ctx.db
+      .select({
+        id: sources.id,
+        caregiverId: sources.caregiverId,
+        caregiverName: caregivers.name,
+        provider: sources.provider,
+        accountEmail: sources.accountEmail,
+        status: sources.status,
+        isPrimary: sources.isPrimary,
+        lastSyncAt: sources.lastSyncAt,
+        errorMessage: sources.errorMessage,
+        watchExpiration: sources.watchExpiration,
+        lastPushAt: sources.lastPushAt,
+      })
+      .from(sources)
+      .innerJoin(caregivers, eq(caregivers.id, sources.caregiverId))
+      .where(inArray(sources.caregiverId, caregiverIds));
   }),
 
   authorizeUrl: authedProcedure
@@ -64,6 +90,7 @@ export const sourcesRouter = router({
       }
 
       const caregiverId = await ensureCaregiver(ctx);
+      const membership = await requireCareRecipientMembership(ctx);
       const parsedState = verifyState(input.state);
       if (parsedState.caregiverId !== caregiverId) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'State does not match caregiver' });
@@ -90,6 +117,28 @@ export const sourcesRouter = router({
       }
       const accountEmail = tokenInfo.email;
 
+      const memberRows = await ctx.db
+        .select({ caregiverId: careRecipientMemberships.caregiverId })
+        .from(careRecipientMemberships)
+        .where(eq(careRecipientMemberships.careRecipientId, membership.careRecipientId));
+      const caregiverIds = memberRows.map((m) => m.caregiverId);
+
+      const [primary] = caregiverIds.length
+        ? await ctx.db
+            .select({ id: sources.id })
+            .from(sources)
+            .where(
+              and(
+                inArray(sources.caregiverId, caregiverIds),
+                eq(sources.provider, 'gmail'),
+                eq(sources.isPrimary, true)
+              )
+            )
+            .limit(1)
+        : [];
+
+      const shouldBecomePrimary = membership.role === 'owner' && !primary;
+
       const [row] = await ctx.db
         .insert(sources)
         .values({
@@ -99,6 +148,7 @@ export const sourcesRouter = router({
           refreshToken: tokens.refresh_token,
           scopes: googleScope,
           status: 'active',
+          isPrimary: shouldBecomePrimary,
         })
         .onConflictDoUpdate({
           target: [sources.caregiverId, sources.provider, sources.accountEmail],
@@ -106,6 +156,7 @@ export const sourcesRouter = router({
             refreshToken: tokens.refresh_token,
             scopes: googleScope,
             status: 'active',
+            isPrimary: shouldBecomePrimary ? true : sources.isPrimary,
             updatedAt: new Date(),
           },
         })
@@ -114,20 +165,80 @@ export const sourcesRouter = router({
       return row;
     }),
 
+  setPrimary: authedProcedure
+    .input(z.object({ sourceId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const membership = await requireOwnerRole(ctx);
+
+      const memberRows = await ctx.db
+        .select({ caregiverId: careRecipientMemberships.caregiverId })
+        .from(careRecipientMemberships)
+        .where(eq(careRecipientMemberships.careRecipientId, membership.careRecipientId));
+      const caregiverIds = memberRows.map((m) => m.caregiverId);
+      if (caregiverIds.length === 0) {
+        throw new TRPCError({ code: 'FAILED_PRECONDITION', message: 'No care team members found' });
+      }
+
+      const [source] = await ctx.db
+        .select()
+        .from(sources)
+        .where(and(eq(sources.id, input.sourceId), inArray(sources.caregiverId, caregiverIds)))
+        .limit(1);
+
+      if (!source) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Source not found' });
+      }
+
+      const now = new Date();
+
+      await ctx.db
+        .update(sources)
+        .set({ isPrimary: false, updatedAt: now })
+        .where(
+          and(eq(sources.provider, source.provider), inArray(sources.caregiverId, caregiverIds))
+        );
+
+      const [updated] = await ctx.db
+        .update(sources)
+        .set({ isPrimary: true, updatedAt: now })
+        .where(eq(sources.id, source.id))
+        .returning();
+
+      return updated;
+    }),
+
   disconnect: authedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const caregiverId = await ensureCaregiver(ctx);
+      const membership = await requireCareRecipientMembership(ctx);
+
+      const memberRows = await ctx.db
+        .select({ caregiverId: careRecipientMemberships.caregiverId })
+        .from(careRecipientMemberships)
+        .where(eq(careRecipientMemberships.careRecipientId, membership.careRecipientId));
+      const caregiverIds = memberRows.map((m) => m.caregiverId);
+
+      const [source] = await ctx.db
+        .select()
+        .from(sources)
+        .where(and(eq(sources.id, input.id), inArray(sources.caregiverId, caregiverIds)))
+        .limit(1);
+
+      if (!source) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Source not found' });
+      }
+
+      const canDisconnect = membership.role === 'owner' || source.caregiverId === caregiverId;
+      if (!canDisconnect) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
 
       const [updated] = await ctx.db
         .update(sources)
-        .set({ status: 'disconnected', updatedAt: new Date() })
+        .set({ status: 'disconnected', isPrimary: false, updatedAt: new Date() })
         .where(eq(sources.id, input.id))
         .returning();
-
-      if (!updated || updated.caregiverId !== caregiverId) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Source not found' });
-      }
 
       return updated;
     }),

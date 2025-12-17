@@ -78,6 +78,13 @@
       "when": 1765995632779,
       "tag": "0010_far_cloak",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1765995910289,
+      "tag": "0011_peaceful_quasimodo",
+      "breakpoints": true
     }
   ]
 }

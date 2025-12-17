@@ -15,7 +15,7 @@ import {
   signWebhookToken,
   setOAuthRedirectUri,
 } from './lib/google';
-import { sources } from './db/schema';
+import { careRecipientMemberships, sources } from './db/schema';
 import { syncSource } from './modules/ingestion/router';
 import { syncCalendarSource } from './modules/ingestion/calendar';
 import { debounceRun, verifyPubsubJwt } from './lib/pubsub';
@@ -84,6 +84,39 @@ const registerPlugins = async () => {
         const tokenInfo = await client.getTokenInfo(tokens.access_token ?? '');
         const accountEmail = tokenInfo.email ?? 'unknown';
 
+        const [membership] = await db
+          .select({
+            careRecipientId: careRecipientMemberships.careRecipientId,
+            role: careRecipientMemberships.role,
+          })
+          .from(careRecipientMemberships)
+          .where(eq(careRecipientMemberships.caregiverId, caregiverId))
+          .limit(1);
+
+        const shouldBecomePrimary = await (async () => {
+          if (membership?.careRecipientId && membership?.role === 'owner') {
+            const [existingPrimary] = await db
+              .select({ id: sources.id })
+              .from(sources)
+              .innerJoin(
+                careRecipientMemberships,
+                eq(careRecipientMemberships.caregiverId, sources.caregiverId)
+              )
+              .where(
+                sql`${careRecipientMemberships.careRecipientId} = ${membership.careRecipientId} AND ${sources.provider} = 'gmail' AND ${sources.isPrimary} = true`
+              )
+              .limit(1);
+            return !existingPrimary;
+          }
+
+          const [anyForCaregiver] = await db
+            .select({ id: sources.id })
+            .from(sources)
+            .where(sql`${sources.caregiverId} = ${caregiverId} AND ${sources.provider} = 'gmail'`)
+            .limit(1);
+          return !anyForCaregiver;
+        })();
+
         await db
           .insert(sources)
           .values({
@@ -93,6 +126,7 @@ const registerPlugins = async () => {
             refreshToken: tokens.refresh_token,
             scopes: googleScope,
             status: 'active',
+            isPrimary: shouldBecomePrimary,
           })
           .onConflictDoUpdate({
             target: [sources.caregiverId, sources.provider, sources.accountEmail],
@@ -100,6 +134,7 @@ const registerPlugins = async () => {
               refreshToken: tokens.refresh_token,
               scopes: googleScope,
               status: 'active',
+              isPrimary: shouldBecomePrimary ? true : sources.isPrimary,
               updatedAt: new Date(),
             },
           });
@@ -182,6 +217,13 @@ const registerPlugins = async () => {
     if (!source) {
       if (process.env.DEBUG_PUSH_LOGS === 'true') {
         request.log.debug({ channelId }, 'no source for channel');
+      }
+      return reply.status(202).send({ ok: true });
+    }
+
+    if (!source.isPrimary) {
+      if (process.env.DEBUG_PUSH_LOGS === 'true') {
+        request.log.debug({ sourceId: source.id }, 'skip push: non-primary source');
       }
       return reply.status(202).send({ ok: true });
     }
