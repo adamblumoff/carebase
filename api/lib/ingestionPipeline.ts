@@ -84,7 +84,8 @@ export const processGmailMessageToTask = async ({
   message,
   accountEmail,
   caregiverId,
-  ignoredSourceIds,
+  careRecipientId,
+  ignoredExternalIds,
   suppressedSenderDomains,
   classify,
   parse,
@@ -93,17 +94,14 @@ export const processGmailMessageToTask = async ({
   message: MessageLike;
   accountEmail: string;
   caregiverId: string;
-  ignoredSourceIds: Set<string>;
+  careRecipientId: string;
+  ignoredExternalIds: Set<string>;
   suppressedSenderDomains?: Set<string>;
   classify: ClassifierFn;
   parse: ParserFn;
   now?: Date;
 }): Promise<PipelineResult> => {
   const messageId = message.id ?? 'unknown';
-
-  if (message.id && ignoredSourceIds.has(message.id)) {
-    return { action: 'skipped_ignored', id: messageId };
-  }
 
   const labels = message.labelIds ?? [];
   const isInbox = labels.includes('INBOX');
@@ -123,10 +121,16 @@ export const processGmailMessageToTask = async ({
   const fromHeader = rawFromHeader ? decodeRfc2047HeaderValue(rawFromHeader) : undefined;
   const snippet = message.snippet ?? '';
   const bulkSignals = hasBulkHeaderSignals(headerMap);
+  const messageIdHeader = getHeader(headerMap, 'message-id')?.trim() ?? null;
+  const externalId = messageIdHeader || message.id || null;
   const senderDomain =
     fromHeader?.match(/@([^>\s]+)/)?.[1]?.toLowerCase() ??
     fromHeader?.match(/<([^>\s]+)>/)?.[1]?.toLowerCase() ??
     null;
+
+  if (externalId && ignoredExternalIds.has(externalId)) {
+    return { action: 'skipped_ignored', id: messageId };
+  }
 
   if (senderDomain && suppressedSenderDomains?.has(senderDomain)) {
     const payload = {
@@ -135,6 +139,7 @@ export const processGmailMessageToTask = async ({
       status: 'done' as const,
       reviewState: 'ignored' as const,
       provider: 'gmail' as const,
+      externalId: externalId ?? undefined,
       sourceId: message.id ?? undefined,
       sourceLink: message.id ? gmailMessageLink(accountEmail, message.id) : undefined,
       sender: fromHeader ?? undefined,
@@ -143,6 +148,7 @@ export const processGmailMessageToTask = async ({
       description: snippet,
       confidence: 1,
       syncedAt: now,
+      careRecipientId,
       ingestionDebug: {
         reason: 'sender_suppressed',
         senderDomain,
@@ -165,6 +171,7 @@ export const processGmailMessageToTask = async ({
       status: 'done' as const,
       reviewState: 'ignored' as const,
       provider: 'gmail' as const,
+      externalId: externalId ?? undefined,
       sourceId: message.id ?? undefined,
       sourceLink: message.id ? gmailMessageLink(accountEmail, message.id) : undefined,
       sender: fromHeader ?? undefined,
@@ -173,6 +180,7 @@ export const processGmailMessageToTask = async ({
       description: snippet,
       confidence: 1,
       syncedAt: now,
+      careRecipientId,
       ingestionDebug: {
         reason: 'category_tombstone',
         signals: {
@@ -204,6 +212,7 @@ export const processGmailMessageToTask = async ({
       status: 'done' as const,
       reviewState: 'ignored' as const,
       provider: 'gmail' as const,
+      externalId: externalId ?? undefined,
       sourceId: message.id ?? undefined,
       sourceLink: message.id ? gmailMessageLink(accountEmail, message.id) : undefined,
       sender: fromHeader ?? undefined,
@@ -212,6 +221,7 @@ export const processGmailMessageToTask = async ({
       description: parsed.description ?? snippet,
       confidence: 1,
       syncedAt: now,
+      careRecipientId,
       ingestionDebug: {
         reason: heuristicTombstone.reason,
         signals: {
@@ -298,6 +308,7 @@ export const processGmailMessageToTask = async ({
     status: decision.taskType === 'appointment' ? ('scheduled' as const) : ('todo' as const),
     reviewState: decision.reviewState,
     provider: 'gmail' as const,
+    externalId: externalId ?? undefined,
     sourceId: message.id ?? undefined,
     sourceLink: message.id ? gmailMessageLink(accountEmail, message.id) : undefined,
     sender: fromHeader ?? undefined,
@@ -306,6 +317,7 @@ export const processGmailMessageToTask = async ({
     description,
     confidence: Number(decision.confidence.toFixed(2)),
     syncedAt: now,
+    careRecipientId,
     ingestionId: undefined,
     ingestionDebug: {
       classification:

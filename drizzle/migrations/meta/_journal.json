@@ -71,6 +71,13 @@
       "when": 1765995161633,
       "tag": "0009_careless_carmella_unuscione",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1765995632779,
+      "tag": "0010_far_cloak",
+      "breakpoints": true
     }
   ]
 }

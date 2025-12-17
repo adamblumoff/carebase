@@ -1,8 +1,8 @@
 import { google } from 'googleapis';
 import { TRPCError } from '@trpc/server';
-import { and, desc, eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
-import { sources, tasks } from '../../db/schema';
+import { careRecipientMemberships, sources, tasks } from '../../db/schema';
 import { isInvalidGrantError } from '../../lib/google';
 import { IngestionCtx } from '../../lib/ingestionTypes';
 import { withSourceLock } from '../../lib/sourceLock';
@@ -17,21 +17,32 @@ const ensureCalendarClient = (refreshToken: string) => {
   return google.calendar({ version: 'v3', auth: oauth });
 };
 
-const toTaskPayload = (event: any, caregiverId: string, source: typeof sources.$inferSelect) => {
+const toTaskPayload = ({
+  event,
+  caregiverId,
+  careRecipientId,
+}: {
+  event: any;
+  caregiverId: string;
+  careRecipientId: string;
+}) => {
   const start = event.start?.dateTime ?? event.start?.date ?? null;
   const end = event.end?.dateTime ?? event.end?.date ?? null;
+  const externalId = event.iCalUID ?? event.id ?? undefined;
   return {
     title: event.summary ?? 'Appointment',
     type: 'appointment' as const,
     status: 'scheduled' as const,
     reviewState: 'approved' as const,
     provider: 'gmail' as const,
+    externalId,
     sourceId: event.id ?? undefined,
     sourceLink: event.htmlLink ?? undefined,
     sender: event.organizer?.email ?? undefined,
     rawSnippet: event.description ?? undefined,
     confidence: 0.9,
     syncedAt: new Date(),
+    careRecipientId,
     createdById: caregiverId,
     startAt: start ? new Date(start) : null,
     endAt: end ? new Date(end) : null,
@@ -57,6 +68,16 @@ export async function syncCalendarSource({
     }
     if (source.status === 'disconnected') {
       throw new TRPCError({ code: 'BAD_REQUEST', message: 'Source is disconnected' });
+    }
+
+    const [membership] = await ctx.db
+      .select({ careRecipientId: careRecipientMemberships.careRecipientId })
+      .from(careRecipientMemberships)
+      .where(eq(careRecipientMemberships.caregiverId, caregiverId))
+      .limit(1);
+
+    if (!membership?.careRecipientId) {
+      throw new TRPCError({ code: 'FAILED_PRECONDITION', message: 'Care recipient not set up' });
     }
 
     const calendar = ensureCalendarClient(source.refreshToken);
@@ -98,22 +119,23 @@ export async function syncCalendarSource({
 
     for (const ev of items) {
       if (!ev.id) continue;
-      const payload = toTaskPayload(ev, caregiverId, source);
+      const payload = toTaskPayload({
+        event: ev,
+        caregiverId,
+        careRecipientId: membership.careRecipientId,
+      });
 
-      const existing = await ctx.db
-        .select()
-        .from(tasks)
-        .where(and(eq(tasks.createdById, caregiverId), eq(tasks.sourceId, ev.id)))
-        .orderBy(desc(tasks.createdAt))
-        .limit(1);
+      const [row] = await ctx.db
+        .insert(tasks)
+        .values({ ...payload, createdAt: new Date() })
+        .onConflictDoUpdate({
+          target: [tasks.careRecipientId, tasks.provider, tasks.externalId],
+          set: { ...payload, updatedAt: new Date() },
+        })
+        .returning({ id: tasks.id, isNew: sql<boolean>`(xmax = 0)` });
 
-      if (existing.length > 0) {
-        await ctx.db.update(tasks).set(payload).where(eq(tasks.id, existing[0].id));
-        updated += 1;
-      } else {
-        await ctx.db.insert(tasks).values({ ...payload, createdAt: new Date() });
-        created += 1;
-      }
+      if (row?.isNew) created += 1;
+      else updated += 1;
     }
 
     await ctx.db

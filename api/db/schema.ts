@@ -104,6 +104,7 @@ export const tasks = pgTable(
     dueAt: timestamp('due_at', { withTimezone: true }),
     reviewState: reviewState('review_state').default('approved').notNull(),
     provider: sourceProvider('provider'),
+    externalId: text('external_id'),
     sourceId: text('source_id'),
     sourceLink: text('source_link'),
     sender: text('sender'),
@@ -139,9 +140,10 @@ export const tasks = pgTable(
       .notNull(),
   },
   (table) => ({
-    createdBySourceUnique: uniqueIndex('tasks_created_by_source_uidx').on(
-      table.createdById,
-      table.sourceId
+    externalUnique: uniqueIndex('tasks_care_recipient_provider_external_uidx').on(
+      table.careRecipientId,
+      table.provider,
+      table.externalId
     ),
   })
 );
