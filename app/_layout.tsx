@@ -4,7 +4,7 @@ import { tokenCache } from '@clerk/clerk-expo/token-cache';
 import { Slot, useRouter, useSegments } from 'expo-router';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Animated, Text } from 'react-native';
+import { Animated, Pressable, Text, View } from 'react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PostHogProvider } from 'posthog-react-native';
 import { useFonts } from 'expo-font';
@@ -177,6 +177,11 @@ function SetupGate({ children }: { children: React.ReactNode }) {
     refetchOnWindowFocus: false,
   });
 
+  const errorCode =
+    (membershipQuery.error as any)?.data?.code ?? (membershipQuery.error as any)?.code ?? null;
+
+  const shouldRouteToSetup = errorCode === 'FAILED_PRECONDITION' || errorCode === 'NOT_FOUND';
+
   useEffect(() => {
     if (!isLoaded) return;
     if (!isSignedIn) return;
@@ -189,8 +194,7 @@ function SetupGate({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const code = (membershipQuery.error as any)?.data?.code ?? (membershipQuery.error as any)?.code;
-    if (code === 'FAILED_PRECONDITION') {
+    if (shouldRouteToSetup) {
       if (!isInSetupGroup) {
         router.replace('/(setup)');
       }
@@ -200,10 +204,10 @@ function SetupGate({ children }: { children: React.ReactNode }) {
     isInSetupGroup,
     isLoaded,
     isSignedIn,
-    membershipQuery.error,
     membershipQuery.isLoading,
     membershipQuery.isSuccess,
     router,
+    shouldRouteToSetup,
   ]);
 
   if (!isSignedIn) return <>{children}</>;
@@ -217,12 +221,42 @@ function SetupGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const code = (membershipQuery.error as any)?.data?.code ?? (membershipQuery.error as any)?.code;
-  if (code === 'FAILED_PRECONDITION') {
+  if (shouldRouteToSetup) {
     return <>{children}</>;
   }
 
-  return null;
+  if (membershipQuery.isLoading) return null;
+
+  const message = membershipQuery.error?.message ?? 'Could not load your care hub.';
+  const hint =
+    typeof message === 'string' && message.toLowerCase().includes('relation')
+      ? 'Hint: run `pnpm db:migrate` on the API database, then restart `pnpm api:dev`.'
+      : 'Try refreshing. If this persists, the API may be down or missing migrations.';
+
+  return (
+    <View
+      style={{
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 20,
+      }}>
+      <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 8 }}>Something went wrong</Text>
+      <Text style={{ textAlign: 'center', opacity: 0.8, marginBottom: 12 }}>{message}</Text>
+      <Text style={{ textAlign: 'center', opacity: 0.7, marginBottom: 16 }}>{hint}</Text>
+      <Pressable
+        onPress={() => membershipQuery.refetch()}
+        style={({ pressed }) => ({
+          paddingVertical: 10,
+          paddingHorizontal: 16,
+          borderRadius: 9999,
+          backgroundColor: '#4A8F6A',
+          opacity: pressed ? 0.85 : 1,
+        })}>
+        <Text style={{ color: '#fff', fontWeight: '600' }}>Retry</Text>
+      </Pressable>
+    </View>
+  );
 }
 
 function PushToastLayer({ children }: { children: React.ReactNode }) {
