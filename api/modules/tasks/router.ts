@@ -1,7 +1,13 @@
 import { TRPCError } from '@trpc/server';
 import { and, desc, eq, gte, lte, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { caregivers, senderSuppressions, tasks } from '../../db/schema';
+import {
+  careRecipientMemberships,
+  caregivers,
+  senderSuppressions,
+  taskAssignments,
+  tasks,
+} from '../../db/schema';
 import { authedProcedure, router } from '../../trpc/trpc';
 import { ensureCaregiver } from '../../lib/caregiver';
 import { requireCareRecipientMembership, requireOwnerRole } from '../../lib/careRecipient';
@@ -28,6 +34,7 @@ const selectTaskThin = {
   type: tasks.type,
   status: tasks.status,
   reviewState: tasks.reviewState,
+  assigneeId: taskAssignments.caregiverId,
   confidence: tasks.confidence,
   provider: tasks.provider,
   sourceLink: tasks.sourceLink,
@@ -139,6 +146,7 @@ export const taskRouter = router({
     return ctx.db
       .select(selectTaskThin)
       .from(tasks)
+      .leftJoin(taskAssignments, eq(taskAssignments.taskId, tasks.id))
       .where(predicate)
       .orderBy(desc(tasks.createdAt));
   }),
@@ -147,8 +155,12 @@ export const taskRouter = router({
     const membership = await requireCareRecipientMembership(ctx);
 
     const [row] = await ctx.db
-      .select()
+      .select({
+        task: tasks,
+        assigneeId: taskAssignments.caregiverId,
+      })
       .from(tasks)
+      .leftJoin(taskAssignments, eq(taskAssignments.taskId, tasks.id))
       .where(and(eq(tasks.id, input.id), eq(tasks.careRecipientId, membership.careRecipientId)))
       .limit(1);
 
@@ -156,7 +168,7 @@ export const taskRouter = router({
       throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
     }
 
-    return row;
+    return { ...row.task, assigneeId: row.assigneeId ?? null };
   }),
 
   upcoming: authedProcedure
@@ -186,6 +198,7 @@ export const taskRouter = router({
       return ctx.db
         .select(selectTaskThin)
         .from(tasks)
+        .leftJoin(taskAssignments, eq(taskAssignments.taskId, tasks.id))
         .where(predicate)
         .orderBy(desc(tasks.createdAt));
     }),
@@ -302,6 +315,84 @@ export const taskRouter = router({
       const [inserted] = await ctx.db.insert(tasks).values(payload).returning();
 
       return inserted;
+    }),
+
+  assign: authedProcedure
+    .input(
+      z.object({
+        taskId: z.string().uuid(),
+        caregiverId: z.string().uuid().nullable(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const membership = await requireOwnerRole(ctx);
+      const now = new Date();
+
+      const [task] = await ctx.db
+        .select({ id: tasks.id })
+        .from(tasks)
+        .where(
+          and(eq(tasks.id, input.taskId), eq(tasks.careRecipientId, membership.careRecipientId))
+        )
+        .limit(1);
+
+      if (!task) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
+      }
+
+      if (input.caregiverId === null) {
+        await ctx.db.delete(taskAssignments).where(eq(taskAssignments.taskId, input.taskId));
+        return { taskId: input.taskId, assigneeId: null };
+      }
+
+      const [assigneeMembership] = await ctx.db
+        .select({ caregiverId: careRecipientMemberships.caregiverId })
+        .from(careRecipientMemberships)
+        .where(
+          and(
+            eq(careRecipientMemberships.careRecipientId, membership.careRecipientId),
+            eq(careRecipientMemberships.caregiverId, input.caregiverId)
+          )
+        )
+        .limit(1);
+
+      if (!assigneeMembership) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Assignee is not in this care hub' });
+      }
+
+      await ctx.db
+        .insert(taskAssignments)
+        .values({ taskId: input.taskId, caregiverId: input.caregiverId, createdAt: now })
+        .onConflictDoUpdate({
+          target: [taskAssignments.taskId],
+          set: { caregiverId: input.caregiverId },
+        });
+
+      return { taskId: input.taskId, assigneeId: input.caregiverId };
+    }),
+
+  snooze: authedProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        days: z.number().int().min(1).max(30),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const membership = await requireOwnerRole(ctx);
+      const until = new Date(Date.now() + input.days * 24 * 60 * 60 * 1000);
+
+      const [updated] = await ctx.db
+        .update(tasks)
+        .set({ status: 'snoozed', dueAt: until, updatedAt: new Date() })
+        .where(and(eq(tasks.id, input.id), eq(tasks.careRecipientId, membership.careRecipientId)))
+        .returning();
+
+      if (!updated) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
+      }
+
+      return updated;
     }),
 
   delete: authedProcedure

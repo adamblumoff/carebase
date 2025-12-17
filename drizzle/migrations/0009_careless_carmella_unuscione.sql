@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "task_assignments_task_uidx" ON "task_assignments" USING btree ("task_id");

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Linking, Modal, Pressable, Text, View, Platform } from 'react-native';
 
@@ -10,6 +10,7 @@ export type TaskLike = {
   provider?: string | null;
   reviewState?: string | null;
   status: string;
+  assigneeId?: string | null;
   confidence?: number | string | null;
   sender?: string | null;
   sourceLink?: string | null;
@@ -106,6 +107,9 @@ export const TaskDetailsSheet = ({
   task: TaskLike | null;
   onClose: () => void;
 }) => {
+  const [isAssignOpen, setIsAssignOpen] = useState(false);
+  const [isSnoozeOpen, setIsSnoozeOpen] = useState(false);
+
   const taskDetailsQuery = trpc.tasks.byId.useQuery(
     { id: task?.id ?? '00000000-0000-0000-0000-000000000000' },
     {
@@ -117,6 +121,37 @@ export const TaskDetailsSheet = ({
   );
 
   const resolvedTask = (taskDetailsQuery.data as any as TaskLike | null) ?? task;
+
+  const membershipQuery = trpc.careRecipients.my.useQuery(undefined, {
+    enabled: visible,
+    staleTime: 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+
+  const canEdit = membershipQuery.data?.membership?.role === 'owner';
+
+  const teamQuery = trpc.careRecipients.team.useQuery(undefined, {
+    enabled: visible && canEdit,
+    staleTime: 30 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
+
+  const assign = trpc.tasks.assign.useMutation({
+    onSuccess: () => {
+      void taskDetailsQuery.refetch();
+      setIsAssignOpen(false);
+    },
+  });
+
+  const snooze = trpc.tasks.snooze.useMutation({
+    onSuccess: () => {
+      void taskDetailsQuery.refetch();
+      setIsSnoozeOpen(false);
+    },
+  });
 
   const details = useMemo(() => {
     if (!resolvedTask) return [] as { label: string; value: string | null }[];
@@ -148,6 +183,11 @@ export const TaskDetailsSheet = ({
 
   const description = resolvedTask?.description ?? resolvedTask?.rawSnippet ?? null;
   const sender = resolvedTask?.sender ? `From ${resolvedTask.sender}` : null;
+  const assigneeLabel = useMemo(() => {
+    if (!resolvedTask?.assigneeId) return 'Unassigned';
+    const person = teamQuery.data?.find((m) => m.caregiverId === resolvedTask.assigneeId);
+    return person?.name ?? person?.email ?? 'Assigned';
+  }, [resolvedTask?.assigneeId, teamQuery.data]);
 
   const handleOpenEmail = async () => {
     if (!resolvedTask?.sourceLink) return;
@@ -305,6 +345,15 @@ export const TaskDetailsSheet = ({
                 </Text>
               ) : null}
 
+              <View className="flex-row gap-3">
+                <Text className="w-28 text-xs font-semibold uppercase tracking-wide text-text-muted dark:text-text-muted-dark">
+                  Assigned
+                </Text>
+                <Text className="flex-1 text-sm text-text dark:text-text-dark">
+                  {assigneeLabel}
+                </Text>
+              </View>
+
               {details.length ? (
                 <View className="gap-2">
                   {details.map((item) => (
@@ -335,6 +384,29 @@ export const TaskDetailsSheet = ({
                 <Text className="text-xs text-text-muted dark:text-text-muted-dark">{sender}</Text>
               ) : null}
 
+              {canEdit ? (
+                <View className="flex-row flex-wrap gap-3">
+                  <Pressable
+                    onPress={() => setIsAssignOpen(true)}
+                    disabled={assign.isLoading}
+                    className="items-center justify-center rounded-full border border-border px-3 py-2 dark:border-border-dark"
+                    style={({ pressed }) => ({
+                      opacity: assign.isLoading ? 0.6 : pressed ? 0.75 : 1,
+                    })}>
+                    <Text className="text-sm font-semibold text-primary">Assign</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setIsSnoozeOpen(true)}
+                    disabled={snooze.isLoading}
+                    className="items-center justify-center rounded-full border border-border px-3 py-2 dark:border-border-dark"
+                    style={({ pressed }) => ({
+                      opacity: snooze.isLoading ? 0.6 : pressed ? 0.75 : 1,
+                    })}>
+                    <Text className="text-sm font-semibold text-primary">Snooze</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+
               {resolvedTask.type === 'appointment' ? (
                 <View className="flex-row gap-3">
                   <Pressable
@@ -362,6 +434,109 @@ export const TaskDetailsSheet = ({
           )}
         </View>
       </View>
+
+      <Modal
+        visible={visible && isAssignOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsAssignOpen(false)}
+        statusBarTranslucent>
+        <Pressable
+          className="flex-1 items-center justify-center bg-black/40 px-6"
+          onPress={() => setIsAssignOpen(false)}>
+          <Pressable
+            onPress={() => {}}
+            className="w-full max-w-md rounded-2xl border border-border bg-white p-5 dark:border-border-dark dark:bg-surface-card-dark">
+            <View className="mb-3 flex-row items-center justify-between">
+              <Text className="text-base font-semibold text-text dark:text-text-dark">
+                Assign task
+              </Text>
+              <Pressable
+                onPress={() => setIsAssignOpen(false)}
+                style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
+                <Ionicons name="close" size={20} color="#9CA3AF" />
+              </Pressable>
+            </View>
+
+            <Pressable
+              onPress={() =>
+                resolvedTask && assign.mutate({ taskId: resolvedTask.id, caregiverId: null })
+              }
+              disabled={!resolvedTask || assign.isLoading}
+              className="mb-2 rounded-2xl border border-border px-4 py-3 dark:border-border-dark"
+              style={({ pressed }) => ({ opacity: assign.isLoading ? 0.6 : pressed ? 0.85 : 1 })}>
+              <Text className="text-sm font-semibold text-text dark:text-text-dark">
+                Unassigned
+              </Text>
+            </Pressable>
+
+            {(teamQuery.data ?? []).map((member) => {
+              const isActive = resolvedTask?.assigneeId === member.caregiverId;
+              return (
+                <Pressable
+                  key={member.caregiverId}
+                  onPress={() =>
+                    resolvedTask &&
+                    assign.mutate({ taskId: resolvedTask.id, caregiverId: member.caregiverId })
+                  }
+                  disabled={!resolvedTask || assign.isLoading}
+                  className={`mb-2 rounded-2xl border px-4 py-3 ${
+                    isActive
+                      ? 'border-primary bg-primary/10'
+                      : 'border-border dark:border-border-dark'
+                  }`}
+                  style={({ pressed }) => ({
+                    opacity: assign.isLoading ? 0.6 : pressed ? 0.85 : 1,
+                  })}>
+                  <Text
+                    className={`text-sm font-semibold ${
+                      isActive ? 'text-primary' : 'text-text dark:text-text-dark'
+                    }`}>
+                    {member.name ?? member.email}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={visible && isSnoozeOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsSnoozeOpen(false)}
+        statusBarTranslucent>
+        <Pressable
+          className="flex-1 items-center justify-center bg-black/40 px-6"
+          onPress={() => setIsSnoozeOpen(false)}>
+          <Pressable
+            onPress={() => {}}
+            className="w-full max-w-md rounded-2xl border border-border bg-white p-5 dark:border-border-dark dark:bg-surface-card-dark">
+            <View className="mb-3 flex-row items-center justify-between">
+              <Text className="text-base font-semibold text-text dark:text-text-dark">Snooze</Text>
+              <Pressable
+                onPress={() => setIsSnoozeOpen(false)}
+                style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
+                <Ionicons name="close" size={20} color="#9CA3AF" />
+              </Pressable>
+            </View>
+
+            {[1, 3, 7].map((days) => (
+              <Pressable
+                key={days}
+                onPress={() => resolvedTask && snooze.mutate({ id: resolvedTask.id, days })}
+                disabled={!resolvedTask || snooze.isLoading}
+                className="mb-2 rounded-2xl border border-border px-4 py-3 dark:border-border-dark"
+                style={({ pressed }) => ({ opacity: snooze.isLoading ? 0.6 : pressed ? 0.85 : 1 })}>
+                <Text className="text-sm font-semibold text-text dark:text-text-dark">
+                  Snooze {days} day{days === 1 ? '' : 's'}
+                </Text>
+              </Pressable>
+            ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </Modal>
   );
 };

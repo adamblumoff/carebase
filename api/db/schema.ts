@@ -146,18 +146,24 @@ export const tasks = pgTable(
   })
 );
 
-export const taskAssignments = pgTable('task_assignments', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  taskId: uuid('task_id')
-    .notNull()
-    .references(() => tasks.id),
-  caregiverId: uuid('caregiver_id')
-    .notNull()
-    .references(() => caregivers.id),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .default(sql`now()`)
-    .notNull(),
-});
+export const taskAssignments = pgTable(
+  'task_assignments',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id),
+    caregiverId: uuid('caregiver_id')
+      .notNull()
+      .references(() => caregivers.id),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .default(sql`now()`)
+      .notNull(),
+  },
+  (table) => ({
+    taskUnique: uniqueIndex('task_assignments_task_uidx').on(table.taskId),
+  })
+);
 
 export const sources = pgTable(
   'sources',
