@@ -281,6 +281,66 @@ const selectType = (subject: string, snippet: string, body: string | null) => {
   return 'general' as const;
 };
 
+const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
+
+const computeParserConfidence = ({
+  type,
+  hasIcs,
+  details,
+  bodyText,
+}: {
+  type: ParsedDetails['type'];
+  hasIcs: boolean;
+  details: Omit<ParsedDetails, 'confidence'>;
+  bodyText: string;
+}) => {
+  const hasDateToken = Boolean(parseDateTokens(bodyText));
+
+  let confidence =
+    type === 'appointment' ? 0.72 : type === 'bill' ? 0.62 : type === 'medication' ? 0.58 : 0.35;
+
+  if (type === 'appointment') {
+    if (hasIcs) confidence += 0.16;
+    if (details.startAt) confidence += 0.1;
+    if (details.location || details.organizer) confidence += 0.08;
+    if (!hasIcs && !details.startAt && !details.location && !details.organizer && !hasDateToken) {
+      confidence -= 0.25;
+    }
+  }
+
+  if (type === 'bill') {
+    if (typeof details.amount === 'number') confidence += 0.14;
+    if (details.dueAt) confidence += 0.12;
+    if (details.referenceNumber) confidence += 0.08;
+    if (details.vendor) confidence += 0.06;
+    if (
+      typeof details.amount !== 'number' &&
+      !details.dueAt &&
+      !details.referenceNumber &&
+      !details.vendor
+    ) {
+      confidence -= 0.22;
+    }
+  }
+
+  if (type === 'medication') {
+    if (details.dosage) confidence += 0.12;
+    if (details.frequency) confidence += 0.1;
+    if (details.prescribingProvider) confidence += 0.08;
+    if (!details.dosage && !details.frequency && !details.prescribingProvider) {
+      confidence -= 0.2;
+    }
+  }
+
+  if (type === 'general') {
+    if (hasDateToken) confidence += 0.08;
+    if (/\b(action required|please|follow up|confirm)\b/i.test(bodyText)) confidence += 0.07;
+    if (/\b(unsubscribe|sale|discount|promo|offer)\b/i.test(bodyText)) confidence -= 0.12;
+  }
+
+  return clamp01(Math.min(0.95, Math.max(0.05, confidence)));
+};
+
 export const parseMessage = ({
   message,
   subject,
@@ -301,14 +361,9 @@ export const parseMessage = ({
 
   const ics = extractIcsDetails(parts);
 
-  const baseConfidence =
-    type === 'appointment' ? 0.9 : type === 'bill' ? 0.82 : type === 'medication' ? 0.78 : 0.5;
-  const confidence = Math.min(0.95, ics ? baseConfidence + 0.05 : baseConfidence);
-
-  const result: ParsedDetails = {
+  const resultWithoutConfidence: Omit<ParsedDetails, 'confidence'> = {
     title: subject.trim() || 'Task',
     type,
-    confidence,
     description,
     startAt: ics?.startAt ?? null,
     endAt: ics?.endAt ?? null,
@@ -332,34 +387,41 @@ export const parseMessage = ({
   if (type === 'bill') {
     const amt = parseAmount(bodyText);
     if (amt) {
-      result.amount = amt.amount;
-      result.currency = amt.currency;
+      resultWithoutConfidence.amount = amt.amount;
+      resultWithoutConfidence.currency = amt.currency;
     }
-    result.dueAt = parseDueAt(bodyText);
-    result.vendor = parseVendor(sender, bodyText);
-    result.statementPeriod = parseStatementPeriod(bodyText);
-    result.referenceNumber = parseReferenceNumber(bodyText);
+    resultWithoutConfidence.dueAt = parseDueAt(bodyText);
+    resultWithoutConfidence.vendor = parseVendor(sender, bodyText);
+    resultWithoutConfidence.statementPeriod = parseStatementPeriod(bodyText);
+    resultWithoutConfidence.referenceNumber = parseReferenceNumber(bodyText);
   }
 
   if (type === 'appointment') {
-    if (!result.location) {
+    if (!resultWithoutConfidence.location) {
       const loc = bodyText.match(/location[:\s]+([^\n]+)/i);
-      if (loc) result.location = normalizeWhitespace(loc[1]);
+      if (loc) resultWithoutConfidence.location = normalizeWhitespace(loc[1]);
     }
-    if (!result.startAt) {
+    if (!resultWithoutConfidence.startAt) {
       const date = parseDateTokens(bodyText);
-      if (date) result.startAt = date;
+      if (date) resultWithoutConfidence.startAt = date;
     }
   }
 
   if (type === 'medication') {
     const medDetails = parseMedicationDetails(bodyText, subject);
-    result.medicationName = medDetails.medicationName ?? subject;
-    result.dosage = medDetails.dosage;
-    result.frequency = medDetails.frequency;
-    result.route = medDetails.route;
-    result.prescribingProvider = medDetails.prescribingProvider;
+    resultWithoutConfidence.medicationName = medDetails.medicationName ?? subject;
+    resultWithoutConfidence.dosage = medDetails.dosage;
+    resultWithoutConfidence.frequency = medDetails.frequency;
+    resultWithoutConfidence.route = medDetails.route;
+    resultWithoutConfidence.prescribingProvider = medDetails.prescribingProvider;
   }
 
-  return result;
+  const confidence = computeParserConfidence({
+    type,
+    hasIcs: Boolean(ics),
+    details: resultWithoutConfidence,
+    bodyText,
+  });
+
+  return { ...resultWithoutConfidence, confidence };
 };

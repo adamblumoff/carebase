@@ -69,6 +69,75 @@ export const looksMarketing = (subject: string, snippet: string) => {
   return marketingKeywords.test(`${subject} ${snippet}`);
 };
 
+export const hasHardEvidenceSignals = (parsed: ParsedDetailsLike) => {
+  return Boolean(
+    parsed.startAt ||
+      parsed.endAt ||
+      parsed.location ||
+      parsed.organizer ||
+      parsed.amount ||
+      parsed.dueAt ||
+      parsed.referenceNumber ||
+      parsed.statementPeriod ||
+      parsed.vendor ||
+      parsed.dosage ||
+      parsed.frequency ||
+      parsed.route ||
+      parsed.prescribingProvider
+  );
+};
+
+export const shouldTombstoneNonActionableMessage = ({
+  subject,
+  snippet,
+  headerMap,
+  bulkSignals,
+  parsed,
+}: {
+  subject: string;
+  snippet: string;
+  headerMap: Record<string, string | undefined>;
+  bulkSignals: boolean;
+  parsed: ParsedDetailsLike;
+}) => {
+  const marketing = looksMarketing(subject, snippet);
+  const hasHardEvidence = hasHardEvidenceSignals(parsed);
+
+  const listUnsubscribe = Boolean(getHeader(headerMap, 'list-unsubscribe'));
+  const listId = Boolean(getHeader(headerMap, 'list-id'));
+  const precedence = (getHeader(headerMap, 'precedence') ?? '').toLowerCase();
+  const autoSubmitted = (getHeader(headerMap, 'auto-submitted') ?? '').toLowerCase();
+  const xAutoResponseSuppress = Boolean(getHeader(headerMap, 'x-auto-response-suppress'));
+
+  const isAutoReply =
+    autoSubmitted.includes('auto-') ||
+    autoSubmitted.includes('auto-replied') ||
+    autoSubmitted.includes('auto-generated') ||
+    xAutoResponseSuppress;
+
+  const receiptOrShipping =
+    /\b(receipt|order (confirmed|confirmation)|shipped|delivered|tracking (number|#)|your order)\b/i.test(
+      `${subject} ${snippet}`
+    );
+
+  if (
+    !hasHardEvidence &&
+    (isAutoReply || precedence.includes('bulk') || precedence.includes('list'))
+  ) {
+    return { shouldTombstone: true, reason: 'auto_or_bulk_headers_without_evidence' as const };
+  }
+
+  if (!hasHardEvidence && (bulkSignals || listUnsubscribe || listId) && marketing) {
+    return { shouldTombstone: true, reason: 'marketing_bulk_without_evidence' as const };
+  }
+
+  if (!hasHardEvidence && receiptOrShipping && (bulkSignals || listUnsubscribe || listId)) {
+    return { shouldTombstone: true, reason: 'receipt_or_shipping_bulk_without_evidence' as const };
+  }
+
+  return { shouldTombstone: false, reason: null as const };
+};
+
 export const hasEvidenceForType = ({
   taskType,
   parsed,

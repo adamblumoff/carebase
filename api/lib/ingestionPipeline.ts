@@ -3,6 +3,7 @@ import {
   getHeader,
   hasBulkHeaderSignals,
   looksMarketing,
+  shouldTombstoneNonActionableMessage,
   shouldTombstoneMessage,
   toHeaderMap,
   type ClassificationBucket,
@@ -10,6 +11,7 @@ import {
   type ParsedDetailsLike,
 } from './ingestionHeuristics';
 import type { ClassificationResult } from './vertexClassifier';
+import { decodeRfc2047HeaderValue } from './rfc2047';
 
 export type MessageLike = {
   id?: string | null;
@@ -115,8 +117,10 @@ export const processGmailMessageToTask = async ({
   }
 
   const headerMap = toHeaderMap(message.payload?.headers);
-  const subject = getHeader(headerMap, 'subject') ?? 'Task';
-  const fromHeader = getHeader(headerMap, 'from');
+  const rawSubject = getHeader(headerMap, 'subject') ?? 'Task';
+  const subject = decodeRfc2047HeaderValue(rawSubject);
+  const rawFromHeader = getHeader(headerMap, 'from');
+  const fromHeader = rawFromHeader ? decodeRfc2047HeaderValue(rawFromHeader) : undefined;
   const snippet = message.snippet ?? '';
   const bulkSignals = hasBulkHeaderSignals(headerMap);
   const senderDomain =
@@ -185,10 +189,73 @@ export const processGmailMessageToTask = async ({
 
   const parsed = parse({ message, subject, sender: fromHeader, snippet });
 
+  const heuristicTombstone = shouldTombstoneNonActionableMessage({
+    subject,
+    snippet,
+    headerMap,
+    bulkSignals,
+    parsed,
+  });
+
+  if (heuristicTombstone.shouldTombstone) {
+    const payload = {
+      title: subject.trim() || 'Task',
+      type: 'general' as const,
+      status: 'done' as const,
+      reviewState: 'ignored' as const,
+      provider: 'gmail' as const,
+      sourceId: message.id ?? undefined,
+      sourceLink: message.id ? gmailMessageLink(accountEmail, message.id) : undefined,
+      sender: fromHeader ?? undefined,
+      senderDomain,
+      rawSnippet: snippet,
+      description: parsed.description ?? snippet,
+      confidence: 1,
+      syncedAt: now,
+      ingestionDebug: {
+        reason: heuristicTombstone.reason,
+        signals: {
+          labelIds: labels,
+          bulkSignals,
+          marketing: looksMarketing(subject, snippet),
+        },
+      },
+      createdById: caregiverId,
+      updatedAt: now,
+    };
+    return { action: 'tombstoned', id: messageId, payload };
+  }
+
+  const extractedSignalLines = [
+    parsed.startAt ? `startAt: ${parsed.startAt.toISOString()}` : null,
+    parsed.endAt ? `endAt: ${parsed.endAt.toISOString()}` : null,
+    parsed.location ? `location: ${parsed.location}` : null,
+    parsed.organizer ? `organizer: ${parsed.organizer}` : null,
+    typeof (parsed as any).amount === 'number' ? `amount: ${(parsed as any).amount}` : null,
+    (parsed as any).currency ? `currency: ${(parsed as any).currency}` : null,
+    parsed.dueAt ? `dueAt: ${parsed.dueAt.toISOString()}` : null,
+    (parsed as any).referenceNumber ? `referenceNumber: ${(parsed as any).referenceNumber}` : null,
+    (parsed as any).statementPeriod ? `statementPeriod: ${(parsed as any).statementPeriod}` : null,
+    (parsed as any).vendor ? `vendor: ${(parsed as any).vendor}` : null,
+    (parsed as any).dosage ? `dosage: ${(parsed as any).dosage}` : null,
+    (parsed as any).frequency ? `frequency: ${(parsed as any).frequency}` : null,
+    (parsed as any).route ? `route: ${(parsed as any).route}` : null,
+    (parsed as any).prescribingProvider
+      ? `prescribingProvider: ${(parsed as any).prescribingProvider}`
+      : null,
+  ].filter(Boolean);
+
   const classification = await classify({
     subject,
     snippet,
-    body: parsed.description ?? snippet,
+    body: [
+      extractedSignalLines.length > 0
+        ? `Extracted signals:\n${extractedSignalLines.join('\n')}`
+        : null,
+      `Body:\n${parsed.description ?? snippet}`,
+    ]
+      .filter(Boolean)
+      .join('\n\n'),
     sender: fromHeader ?? null,
     labelIds: labels,
     headers: {

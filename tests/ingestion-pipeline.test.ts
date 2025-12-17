@@ -1,4 +1,5 @@
 import { processGmailMessageToTask } from '../api/lib/ingestionPipeline';
+import { shouldTombstoneNonActionableMessage, toHeaderMap } from '../api/lib/ingestionHeuristics';
 
 import { classificationFixtures } from './fixtures/classification-fixtures';
 
@@ -66,6 +67,94 @@ describe('ingestion pipeline', () => {
     expect((result as any).payload?.senderDomain).toBe('news.example.com');
   });
 
+  test('tombstones bulk marketing without evidence before calling classifier', async () => {
+    const classify = jest.fn(async () => ({ label: 'needs_review', confidence: 0.5 }) as any);
+    const parse = jest.fn(() => ({
+      title: 'Appointment specials',
+      type: 'general' as const,
+      confidence: 0.35,
+      description: 'Limited time offer. Save 25% off.',
+      startAt: null,
+      location: null,
+      organizer: null,
+      amount: null,
+      dueAt: null,
+      dosage: null,
+      frequency: null,
+      prescribingProvider: null,
+    }));
+
+    const result = await processGmailMessageToTask({
+      message: {
+        id: 'm3',
+        labelIds: ['INBOX'],
+        snippet: 'Limited time offer. Save 25% off.',
+        payload: {
+          headers: [
+            { name: 'Subject', value: 'Appointment specials — 25% off this week' },
+            { name: 'From', value: 'Deals <deals@example.com>' },
+            { name: 'List-Unsubscribe', value: '<mailto:unsubscribe@example.com>' },
+          ],
+        },
+      },
+      accountEmail: 'user@example.com',
+      caregiverId: 'caregiver-1',
+      ignoredSourceIds: new Set(),
+      classify,
+      parse,
+      now: new Date('2026-01-01T00:00:00Z'),
+    });
+
+    expect(result.action).toBe('tombstoned');
+    expect(classify).not.toHaveBeenCalled();
+    expect((result as any).payload?.reviewState).toBe('ignored');
+  });
+
+  test('does not tombstone bulk email when there is hard evidence', async () => {
+    const classify = jest.fn(async () => ({ label: 'appointments', confidence: 0.9 }) as any);
+    const parse = jest.fn(() => ({
+      title: 'Appointment confirmed',
+      type: 'appointment' as const,
+      confidence: 0.9,
+      description: 'Your appointment is confirmed for Jan 21 at 2:30 PM at 123 Main St.',
+      startAt: new Date('2026-01-21T14:30:00Z'),
+      location: '123 Main St',
+      organizer: 'Example Health',
+      amount: null,
+      dueAt: null,
+      dosage: null,
+      frequency: null,
+      prescribingProvider: null,
+    }));
+
+    const result = await processGmailMessageToTask({
+      message: {
+        id: 'm4',
+        labelIds: ['INBOX'],
+        snippet: 'Your appointment is confirmed for Jan 21 at 2:30 PM at 123 Main St.',
+        payload: {
+          headers: [
+            {
+              name: 'Subject',
+              value: 'Appointment confirmed: Dr. Patel — Tue Jan 21, 2026 2:30 PM',
+            },
+            { name: 'From', value: 'Example Health <no-reply@examplehealth.com>' },
+            { name: 'List-Unsubscribe', value: '<mailto:unsubscribe@example.com>' },
+          ],
+        },
+      },
+      accountEmail: 'user@example.com',
+      caregiverId: 'caregiver-1',
+      ignoredSourceIds: new Set(),
+      classify,
+      parse,
+      now: new Date('2026-01-01T00:00:00Z'),
+    });
+
+    expect(result.action).toBe('upsert');
+    expect(classify).toHaveBeenCalled();
+  });
+
   test.each(classificationFixtures)('$kind $case: $name', async (fixture) => {
     const classify = jest.fn(async () => {
       if (fixture.classificationFailed) {
@@ -84,6 +173,15 @@ describe('ingestion pipeline', () => {
       headers.push({ name: 'List-Unsubscribe', value: '<mailto:unsubscribe@example.com>' });
     }
 
+    const shouldTombstone =
+      shouldTombstoneNonActionableMessage({
+        subject: fixture.subject,
+        snippet: fixture.snippet,
+        headerMap: toHeaderMap(headers),
+        bulkSignals: fixture.bulkSignals,
+        parsed: fixture.parsed as any,
+      }).shouldTombstone === true;
+
     const result = await processGmailMessageToTask({
       message: {
         id: `msg-${fixture.kind}-${fixture.case}`,
@@ -97,6 +195,12 @@ describe('ingestion pipeline', () => {
       classify,
       parse,
     });
+
+    if (shouldTombstone) {
+      expect(result.action).toBe('tombstoned');
+      expect(classify).not.toHaveBeenCalled();
+      return;
+    }
 
     if (fixture.expected.shouldDrop) {
       expect(result.action).toBe('skipped_low_confidence');

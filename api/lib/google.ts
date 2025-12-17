@@ -27,7 +27,8 @@ export const createGmailClient = (refreshToken: string) => {
   return { gmail, auth: oauth };
 };
 
-export const gmailQuery = 'subject:(appointment OR medication OR bill)';
+export const gmailQuery =
+  'subject:(appointment OR appt OR visit OR medication OR rx OR refill OR bill OR invoice OR statement OR payment due) -category:promotions -category:social -category:forums';
 
 export const googleScope = [
   'https://www.googleapis.com/auth/gmail.readonly',

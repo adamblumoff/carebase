@@ -99,6 +99,8 @@ export const classifyEmailWithVertex = async (
             text: [
               'You are an email-to-task filter for a caregiver app.',
               'Goal: only create tasks for actionable care items. Everything else should be ignore or needs_review.',
+              'Important: keywords like "appointment", "bill", "medication" often appear in marketing. Do NOT treat keywords alone as actionable.',
+              'Prefer ignore when the email is clearly promotional/bulk (unsubscribe/list headers) AND lacks concrete evidence.',
               '',
               'Actionable examples (create task):',
               '- Appointment confirmations or changes (often has date/time, location, calendar invite/ICS, provider name).',
@@ -111,6 +113,7 @@ export const classifyEmailWithVertex = async (
               '- Shipping updates and receipts that do not require action.',
               '',
               'If uncertain, choose needs_review with lower confidence.',
+              'If there are bulk signals (List-Unsubscribe/List-Id/Precedence: bulk/list) and no concrete evidence (date/time, amount due, due date, Rx details), choose ignore with higher confidence.',
               'Return ONLY JSON matching this schema: {"label": "...", "confidence": 0.0-1.0, "reason": "..."}',
               `Subject: ${truncate(input.subject, 500)}`,
               `From: ${truncate(input.sender ?? '', 200)}`,
@@ -123,25 +126,12 @@ export const classifyEmailWithVertex = async (
         ],
       },
     ],
-    // Vertex GenerateContent has multiple client surfaces/docs that show either camelCase or snake_case
-    // request fields. To be resilient, send both shapes.
+    // Vertex GenerateContent rejects duplicate oneof fields; use the camelCase shape only.
     generationConfig: {
       temperature: 0,
       maxOutputTokens: 128,
       responseMimeType: 'application/json',
       responseSchema,
-      response_mime_type: 'application/json',
-      response_schema: responseSchema,
-      max_output_tokens: 128,
-    },
-    generation_config: {
-      temperature: 0,
-      max_output_tokens: 128,
-      response_mime_type: 'application/json',
-      response_schema: responseSchema,
-      responseMimeType: 'application/json',
-      responseSchema,
-      maxOutputTokens: 128,
     },
   };
 
