@@ -7,6 +7,7 @@ This documentation is written for people actively developing Carebase. It’s in
 - Setup + run app/API locally: `docs/development.md`
 - System overview (what lives where, how it talks): `docs/architecture.md`
 - API, database, and ingestion details: `docs/api.md`
+- Product roadmap (what to build next): `docs/roadmap.md`
 - Infra + deploy (Railway, Postgres, GCP Pub/Sub): `docs/infra.md`
 - Common workflows (routes, UI, tRPC, migrations): `docs/workflows.md`
 - Builds/releases (EAS profiles): `docs/release.md`
