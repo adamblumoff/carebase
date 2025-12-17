@@ -22,6 +22,10 @@ export const watchRouter = router({
           .where(eq(careRecipientMemberships.careRecipientId, membership.careRecipientId));
         const caregiverIds = memberRows.map((m) => m.caregiverId);
 
+        if (caregiverIds.length === 0) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Source not found' });
+        }
+
         const [source] = await ctx.db
           .select()
           .from(sources)
