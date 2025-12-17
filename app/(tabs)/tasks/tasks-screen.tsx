@@ -768,6 +768,15 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
           pendingReviewCount={statsQuery.data?.pendingReviewCount}
           upcomingCount={statsQuery.data?.upcomingCount}
         />
+        {canEdit ? (
+          <Pressable
+            accessibilityLabel="Add task"
+            onPress={() => setIsCreateModalOpen(true)}
+            className="h-11 w-11 items-center justify-center rounded-full border border-border bg-surface-strong dark:border-border-dark dark:bg-surface-card-dark"
+            style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
+            <Ionicons name="add" size={22} color="#4A8F6A" />
+          </Pressable>
+        ) : null}
         <Pressable
           accessibilityLabel="Filter tasks"
           onPress={() => setIsFilterModalOpen(true)}
