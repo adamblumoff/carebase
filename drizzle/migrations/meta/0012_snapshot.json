@@ -94,12 +94,8 @@
           "name": "care_invitations_care_recipient_id_care_recipients_id_fk",
           "tableFrom": "care_invitations",
           "tableTo": "care_recipients",
-          "columnsFrom": [
-            "care_recipient_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["care_recipient_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -107,12 +103,8 @@
           "name": "care_invitations_invited_by_caregiver_id_caregivers_id_fk",
           "tableFrom": "care_invitations",
           "tableTo": "caregivers",
-          "columnsFrom": [
-            "invited_by_caregiver_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["invited_by_caregiver_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -120,12 +112,8 @@
           "name": "care_invitations_used_by_caregiver_id_caregivers_id_fk",
           "tableFrom": "care_invitations",
           "tableTo": "caregivers",
-          "columnsFrom": [
-            "used_by_caregiver_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["used_by_caregiver_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -217,12 +205,8 @@
           "name": "care_recipient_memberships_care_recipient_id_care_recipients_id_fk",
           "tableFrom": "care_recipient_memberships",
           "tableTo": "care_recipients",
-          "columnsFrom": [
-            "care_recipient_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["care_recipient_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -230,12 +214,8 @@
           "name": "care_recipient_memberships_caregiver_id_caregivers_id_fk",
           "tableFrom": "care_recipient_memberships",
           "tableTo": "caregivers",
-          "columnsFrom": [
-            "caregiver_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["caregiver_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -339,9 +319,7 @@
         "caregivers_email_unique": {
           "name": "caregivers_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         }
       },
       "policies": {},
@@ -426,12 +404,8 @@
           "name": "handoff_notes_care_recipient_id_care_recipients_id_fk",
           "tableFrom": "handoff_notes",
           "tableTo": "care_recipients",
-          "columnsFrom": [
-            "care_recipient_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["care_recipient_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -439,12 +413,8 @@
           "name": "handoff_notes_updated_by_caregiver_id_caregivers_id_fk",
           "tableFrom": "handoff_notes",
           "tableTo": "caregivers",
-          "columnsFrom": [
-            "updated_by_caregiver_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["updated_by_caregiver_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -564,12 +534,8 @@
           "name": "ingestion_events_source_id_sources_id_fk",
           "tableFrom": "ingestion_events",
           "tableTo": "sources",
-          "columnsFrom": [
-            "source_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["source_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -577,12 +543,8 @@
           "name": "ingestion_events_caregiver_id_caregivers_id_fk",
           "tableFrom": "ingestion_events",
           "tableTo": "caregivers",
-          "columnsFrom": [
-            "caregiver_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["caregiver_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -665,12 +627,8 @@
           "name": "notification_deliveries_caregiver_id_caregivers_id_fk",
           "tableFrom": "notification_deliveries",
           "tableTo": "caregivers",
-          "columnsFrom": [
-            "caregiver_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["caregiver_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -782,12 +740,8 @@
           "name": "push_tokens_caregiver_id_caregivers_id_fk",
           "tableFrom": "push_tokens",
           "tableTo": "caregivers",
-          "columnsFrom": [
-            "caregiver_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["caregiver_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -897,12 +851,8 @@
           "name": "sender_suppressions_caregiver_id_caregivers_id_fk",
           "tableFrom": "sender_suppressions",
           "tableTo": "caregivers",
-          "columnsFrom": [
-            "caregiver_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["caregiver_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1079,12 +1029,8 @@
           "name": "sources_caregiver_id_caregivers_id_fk",
           "tableFrom": "sources",
           "tableTo": "caregivers",
-          "columnsFrom": [
-            "caregiver_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["caregiver_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1148,12 +1094,8 @@
           "name": "task_assignments_task_id_tasks_id_fk",
           "tableFrom": "task_assignments",
           "tableTo": "tasks",
-          "columnsFrom": [
-            "task_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["task_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1161,12 +1103,8 @@
           "name": "task_assignments_caregiver_id_caregivers_id_fk",
           "tableFrom": "task_assignments",
           "tableTo": "caregivers",
-          "columnsFrom": [
-            "caregiver_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["caregiver_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1255,12 +1193,8 @@
           "name": "task_events_task_id_tasks_id_fk",
           "tableFrom": "task_events",
           "tableTo": "tasks",
-          "columnsFrom": [
-            "task_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["task_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1268,12 +1202,8 @@
           "name": "task_events_care_recipient_id_care_recipients_id_fk",
           "tableFrom": "task_events",
           "tableTo": "care_recipients",
-          "columnsFrom": [
-            "care_recipient_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["care_recipient_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1281,12 +1211,8 @@
           "name": "task_events_actor_caregiver_id_caregivers_id_fk",
           "tableFrom": "task_events",
           "tableTo": "caregivers",
-          "columnsFrom": [
-            "actor_caregiver_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["actor_caregiver_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1574,12 +1500,8 @@
           "name": "tasks_care_recipient_id_care_recipients_id_fk",
           "tableFrom": "tasks",
           "tableTo": "care_recipients",
-          "columnsFrom": [
-            "care_recipient_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["care_recipient_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1587,12 +1509,8 @@
           "name": "tasks_created_by_id_caregivers_id_fk",
           "tableFrom": "tasks",
           "tableTo": "caregivers",
-          "columnsFrom": [
-            "created_by_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1608,94 +1526,52 @@
     "public.care_recipient_role": {
       "name": "care_recipient_role",
       "schema": "public",
-      "values": [
-        "owner",
-        "viewer"
-      ]
+      "values": ["owner", "viewer"]
     },
     "public.notification_type": {
       "name": "notification_type",
       "schema": "public",
-      "values": [
-        "task_assigned",
-        "review_digest",
-        "appointment_today"
-      ]
+      "values": ["task_assigned", "review_digest", "appointment_today"]
     },
     "public.push_platform": {
       "name": "push_platform",
       "schema": "public",
-      "values": [
-        "ios",
-        "android",
-        "web"
-      ]
+      "values": ["ios", "android", "web"]
     },
     "public.review_state": {
       "name": "review_state",
       "schema": "public",
-      "values": [
-        "pending",
-        "approved",
-        "ignored"
-      ]
+      "values": ["pending", "approved", "ignored"]
     },
     "public.source_provider": {
       "name": "source_provider",
       "schema": "public",
-      "values": [
-        "gmail"
-      ]
+      "values": ["gmail"]
     },
     "public.source_status": {
       "name": "source_status",
       "schema": "public",
-      "values": [
-        "active",
-        "errored",
-        "disconnected"
-      ]
+      "values": ["active", "errored", "disconnected"]
     },
     "public.task_event_type": {
       "name": "task_event_type",
       "schema": "public",
-      "values": [
-        "created",
-        "reviewed",
-        "status_toggled",
-        "assigned",
-        "snoozed",
-        "updated_details"
-      ]
+      "values": ["created", "reviewed", "status_toggled", "assigned", "snoozed", "updated_details"]
     },
     "public.task_status": {
       "name": "task_status",
       "schema": "public",
-      "values": [
-        "todo",
-        "in_progress",
-        "scheduled",
-        "snoozed",
-        "done"
-      ]
+      "values": ["todo", "in_progress", "scheduled", "snoozed", "done"]
     },
     "public.task_type": {
       "name": "task_type",
       "schema": "public",
-      "values": [
-        "appointment",
-        "bill",
-        "medication",
-        "general"
-      ]
+      "values": ["appointment", "bill", "medication", "general"]
     },
     "public.theme_preference": {
       "name": "theme_preference",
       "schema": "public",
-      "values": [
-        "light",
-        "dark"
-      ]
+      "values": ["light", "dark"]
     }
   },
   "schemas": {},

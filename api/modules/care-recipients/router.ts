@@ -11,6 +11,7 @@ import {
   tasks,
 } from '../../db/schema';
 import { ensureCaregiver } from '../../lib/caregiver';
+import { isValidIanaTimeZone } from '../../lib/timezone';
 import {
   INVITE_TOKEN_BYTES,
   listCareTeam,
@@ -23,6 +24,7 @@ import { authedProcedure, router } from '../../trpc/trpc';
 const createInput = z.object({
   name: z.string().min(1).max(120),
   caregiverName: z.string().min(1).max(80).optional(),
+  timezone: z.string().min(1).max(64).optional(),
 });
 
 const inviteInput = z.object({
@@ -32,13 +34,18 @@ const inviteInput = z.object({
 const acceptInviteInput = z.object({
   token: z.string().min(8).max(64),
   caregiverName: z.string().min(1).max(80).optional(),
+  timezone: z.string().min(1).max(64).optional(),
 });
 
 export const careRecipientsRouter = router({
   my: authedProcedure.query(async ({ ctx }) => {
     const membership = await requireCareRecipientMembership(ctx);
     const [recipient] = await ctx.db
-      .select({ id: careRecipients.id, name: careRecipients.name })
+      .select({
+        id: careRecipients.id,
+        name: careRecipients.name,
+        timezone: careRecipients.timezone,
+      })
       .from(careRecipients)
       .where(eq(careRecipients.id, membership.careRecipientId))
       .limit(1);
@@ -77,10 +84,35 @@ export const careRecipientsRouter = router({
         .where(eq(caregivers.id, caregiverId));
     }
 
+    if (input.timezone) {
+      if (!isValidIanaTimeZone(input.timezone)) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Invalid timezone' });
+      }
+      await ctx.db
+        .update(caregivers)
+        .set({ timezone: input.timezone })
+        .where(eq(caregivers.id, caregiverId));
+    }
+
+    const timezone =
+      input.timezone ??
+      (
+        await ctx.db
+          .select({ timezone: caregivers.timezone })
+          .from(caregivers)
+          .where(eq(caregivers.id, caregiverId))
+          .limit(1)
+      )[0]?.timezone ??
+      'UTC';
+
     const [recipient] = await ctx.db
       .insert(careRecipients)
-      .values({ name: input.name.trim(), createdAt: now })
-      .returning({ id: careRecipients.id, name: careRecipients.name });
+      .values({ name: input.name.trim(), timezone, createdAt: now })
+      .returning({
+        id: careRecipients.id,
+        name: careRecipients.name,
+        timezone: careRecipients.timezone,
+      });
 
     await ctx.db.insert(careRecipientMemberships).values({
       careRecipientId: recipient.id,
@@ -172,6 +204,16 @@ export const careRecipientsRouter = router({
         .where(eq(caregivers.id, caregiverId));
     }
 
+    if (input.timezone) {
+      if (!isValidIanaTimeZone(input.timezone)) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Invalid timezone' });
+      }
+      await ctx.db
+        .update(caregivers)
+        .set({ timezone: input.timezone })
+        .where(eq(caregivers.id, caregiverId));
+    }
+
     await ctx.db.insert(careRecipientMemberships).values({
       careRecipientId: invite.careRecipientId,
       caregiverId,
@@ -191,7 +233,11 @@ export const careRecipientsRouter = router({
       .where(and(eq(careInvitations.id, invite.id), isNull(careInvitations.usedAt)));
 
     const [recipient] = await ctx.db
-      .select({ id: careRecipients.id, name: careRecipients.name })
+      .select({
+        id: careRecipients.id,
+        name: careRecipients.name,
+        timezone: careRecipients.timezone,
+      })
       .from(careRecipients)
       .where(eq(careRecipients.id, invite.careRecipientId))
       .limit(1);
