@@ -9,16 +9,16 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const getS3Config = () => {
-  const bucket = process.env.S3_BUCKET;
+  const bucket = process.env.AWS_S3_BUCKET_NAME;
   if (!bucket) {
-    throw new Error('S3_BUCKET is required');
+    throw new Error('AWS_S3_BUCKET_NAME is required');
   }
 
   return {
     bucket,
-    region: process.env.S3_REGION ?? 'us-east-1',
-    endpoint: process.env.S3_ENDPOINT,
-    forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
+    region: process.env.AWS_DEFAULT_REGION ?? 'us-east-1',
+    endpoint: process.env.AWS_ENDPOINT_URL,
+    forcePathStyle: process.env.AWS_S3_FORCE_PATH_STYLE === 'true',
   };
 };
 
