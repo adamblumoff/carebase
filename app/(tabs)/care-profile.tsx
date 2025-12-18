@@ -536,6 +536,7 @@ export default function CareProfileScreen() {
               <TextInput
                 value={basicsDraft.fullName}
                 onChangeText={(text) => setBasicsDraft((prev) => ({ ...prev, fullName: text }))}
+                onFocus={() => setShowDobPicker(false)}
                 placeholder="Full name"
                 className="rounded-xl border border-border bg-white px-3 py-2 text-sm dark:border-border-dark dark:bg-surface-dark dark:text-text-dark"
               />
@@ -577,6 +578,7 @@ export default function CareProfileScreen() {
               <TextInput
                 value={basicsDraft.notes}
                 onChangeText={(text) => setBasicsDraft((prev) => ({ ...prev, notes: text }))}
+                onFocus={() => setShowDobPicker(false)}
                 placeholder="Notes"
                 multiline
                 numberOfLines={4}
