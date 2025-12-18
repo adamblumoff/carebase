@@ -3,16 +3,13 @@ import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
 import { tokenCache } from '@clerk/clerk-expo/token-cache';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Animated, Platform, Text } from 'react-native';
+import { Animated, Text } from 'react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PostHogProvider } from 'posthog-react-native';
 import { useFonts } from 'expo-font';
 import { Roboto_500Medium } from '@expo-google-fonts/roboto';
 import { useColorScheme } from 'nativewind';
-import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
-import Constants from 'expo-constants';
-import { getDeviceTimeZone } from '@/lib/device-timezone';
+import { DeviceRegistration } from '@/components/DeviceRegistration';
 
 import { createQueryClientAndPersister, createTrpcClient, trpc } from '@/lib/trpc/client';
 import { useUserTheme } from '@/app/(hooks)/useUserTheme';
@@ -229,87 +226,4 @@ function PushToastLayer({ children }: { children: React.ReactNode }) {
       ) : null}
     </>
   );
-}
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: false,
-    shouldSetBadge: false,
-  }),
-});
-
-async function registerForPushNotificationsAsync() {
-  if (Platform.OS === 'web') return null;
-  if (!Device.isDevice) return null;
-
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('default', {
-      name: 'default',
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#4A8F6A',
-    });
-  }
-
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-  if (finalStatus !== 'granted') return null;
-
-  const projectId =
-    (Constants.expoConfig as any)?.extra?.eas?.projectId ??
-    (Constants as any)?.easConfig?.projectId ??
-    null;
-
-  const token = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
-  return token.data;
-}
-
-function DeviceRegistration() {
-  const { isSignedIn } = useAuth();
-  const { mutate: mutateTimezone } = trpc.caregivers.setTimezone.useMutation();
-  const { mutate: mutatePushToken } = trpc.pushTokens.register.useMutation();
-  const didSyncTimezoneRef = useRef(false);
-  const didRegisterPushRef = useRef(false);
-
-  useEffect(() => {
-    if (!isSignedIn) {
-      didSyncTimezoneRef.current = false;
-      return;
-    }
-    if (didSyncTimezoneRef.current) return;
-    const tz = getDeviceTimeZone();
-    if (!tz) return;
-    didSyncTimezoneRef.current = true;
-    mutateTimezone({ timezone: tz });
-  }, [isSignedIn, mutateTimezone]);
-
-  useEffect(() => {
-    if (!isSignedIn) {
-      didRegisterPushRef.current = false;
-      return;
-    }
-    if (didRegisterPushRef.current) return;
-    didRegisterPushRef.current = true;
-
-    let cancelled = false;
-    void (async () => {
-      const token = await registerForPushNotificationsAsync();
-      if (cancelled) return;
-      if (!token) return;
-      const platform =
-        Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web';
-      mutatePushToken({ token, platform });
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isSignedIn, mutatePushToken]);
-
-  return null;
 }
