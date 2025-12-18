@@ -735,37 +735,44 @@ export const taskRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const membership = await requireOwnerRole(ctx);
       const identifier = input.id;
 
-      if (identifier) {
-        const [updated] = await ctx.db
-          .update(caregivers)
-          .set({ name: input.name, email: input.email })
-          .where(eq(caregivers.id, identifier))
-          .returning();
-
-        if (!updated) {
-          throw new TRPCError({
-            code: 'NOT_FOUND',
-            message: `Caregiver not found for id ${identifier}`,
-          });
-        }
-
-        return updated;
+      if (!identifier) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Caregiver id is required',
+        });
       }
 
-      const [upserted] = await ctx.db
-        .insert(caregivers)
-        .values({ email: input.email, name: input.name })
-        .onConflictDoUpdate({
-          target: caregivers.email,
-          set: {
-            name: input.name,
-            email: input.email,
-          },
-        })
+      const [targetMembership] = await ctx.db
+        .select({ caregiverId: careRecipientMemberships.caregiverId })
+        .from(careRecipientMemberships)
+        .where(
+          and(
+            eq(careRecipientMemberships.careRecipientId, membership.careRecipientId),
+            eq(careRecipientMemberships.caregiverId, identifier)
+          )
+        )
+        .limit(1);
+
+      if (!targetMembership) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Caregiver not in this care hub' });
+      }
+
+      const [updated] = await ctx.db
+        .update(caregivers)
+        .set({ name: input.name, email: input.email })
+        .where(eq(caregivers.id, identifier))
         .returning();
 
-      return upserted;
+      if (!updated) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: `Caregiver not found for id ${identifier}`,
+        });
+      }
+
+      return updated;
     }),
 });

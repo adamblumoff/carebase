@@ -3,6 +3,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Linking, Modal, Pressable, Text, View, Platform } from 'react-native';
 
 import { trpc } from '@/lib/trpc/client';
+import { buildCalshowUrl } from '@/lib/calendar-links';
+import { isUuid } from '@/lib/uuid';
 export type TaskLike = {
   id: string;
   title: string;
@@ -110,10 +112,11 @@ export const TaskDetailsSheet = ({
   const [isAssignOpen, setIsAssignOpen] = useState(false);
   const [isSnoozeOpen, setIsSnoozeOpen] = useState(false);
 
+  const canFetchDetails = Boolean(visible && task?.id && isUuid(task.id));
   const taskDetailsQuery = trpc.tasks.byId.useQuery(
     { id: task?.id ?? '00000000-0000-0000-0000-000000000000' },
     {
-      enabled: visible && !!task?.id,
+      enabled: canFetchDetails,
       staleTime: 60 * 1000,
       refetchOnMount: false,
       refetchOnWindowFocus: false,
@@ -123,10 +126,11 @@ export const TaskDetailsSheet = ({
   const resolvedTask = (taskDetailsQuery.data as any as TaskLike | null) ?? task;
   const taskId = resolvedTask?.id ?? task?.id ?? null;
 
+  const canFetchEvents = Boolean(visible && taskId && isUuid(taskId));
   const taskEventsQuery = trpc.taskEvents.list.useQuery(
     { taskId: taskId ?? '00000000-0000-0000-0000-000000000000', limit: 30 },
     {
-      enabled: visible && !!taskId,
+      enabled: canFetchEvents,
       staleTime: 30 * 1000,
       refetchOnMount: false,
       refetchOnWindowFocus: false,
@@ -276,8 +280,7 @@ export const TaskDetailsSheet = ({
       // Fall back to default iOS Calendar if Google Calendar isn't available.
       if (resolvedTask?.startAt) {
         const date = new Date(resolvedTask.startAt);
-        const seconds = Math.floor(date.getTime() / 1000);
-        const calUrl = `calshow:${seconds}`;
+        const calUrl = buildCalshowUrl(date);
         try {
           const canOpen = await Linking.canOpenURL(calUrl);
           if (canOpen) {

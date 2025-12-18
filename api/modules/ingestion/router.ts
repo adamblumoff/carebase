@@ -31,25 +31,48 @@ type FetchedMessages = {
   };
 };
 
-const fetchMessages = async (
+export const fetchMessages = async (
   gmail: ReturnType<typeof google.gmail>,
   accountEmail: string,
   historyId?: string | null
 ): Promise<FetchedMessages> => {
   if (historyId) {
-    const history = await gmail.users.history.list({
-      userId: 'me',
-      startHistoryId: historyId,
-      // Include label changes because some messages only surface via label events.
-      historyTypes: ['messageAdded', 'labelAdded'],
-      maxResults: 50,
-    });
+    let history;
+    try {
+      history = await gmail.users.history.list({
+        userId: 'me',
+        startHistoryId: historyId,
+        // Include label changes because some messages only surface via label events.
+        historyTypes: ['messageAdded', 'labelAdded'],
+        maxResults: 50,
+      });
+    } catch (err: any) {
+      const code = err?.code ?? err?.response?.status ?? err?.response?.data?.error?.code;
+      if (code === 404 || code === 410) {
+        const list = await gmail.users.messages.list({
+          userId: 'me',
+          q: gmailQuery,
+          maxResults: 20,
+        });
+        return {
+          messageIds: list.data.messages?.map((m) => m.id!).filter(Boolean) ?? [],
+          nextHistoryId: list.data.historyId ?? null,
+          stats: {
+            historyCount: 0,
+            historyAddedCount: 0,
+            fallbackListCount: list.data.messages?.length ?? 0,
+          },
+        };
+      }
+      throw err;
+    }
 
     const added = history.data.history?.flatMap((h) => h.messagesAdded ?? []) ?? [];
+    const labelAdded = history.data.history?.flatMap((h) => h.labelsAdded ?? []) ?? [];
 
     // Fallback: occasionally Gmail history returns no messageAdded for new mail; do a direct query pass.
     let fallbackListIds: string[] = [];
-    if (added.length === 0) {
+    if (added.length === 0 && labelAdded.length === 0) {
       const list = await gmail.users.messages.list({
         userId: 'me',
         q: gmailQuery,
@@ -60,9 +83,11 @@ const fetchMessages = async (
 
     const uniqueIds = Array.from(
       new Set(
-        [...added.map((m) => m.message?.id).filter(Boolean), ...fallbackListIds].filter(
-          Boolean
-        ) as string[]
+        [
+          ...added.map((m) => m.message?.id).filter(Boolean),
+          ...labelAdded.map((m) => m.message?.id).filter(Boolean),
+          ...fallbackListIds,
+        ].filter(Boolean) as string[]
       )
     );
 

@@ -1,11 +1,12 @@
 import { google } from 'googleapis';
 import { TRPCError } from '@trpc/server';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 
 import { careRecipientMemberships, sources, tasks } from '../../db/schema';
 import { isInvalidGrantError } from '../../lib/google';
 import { IngestionCtx } from '../../lib/ingestionTypes';
 import { withSourceLock } from '../../lib/sourceLock';
+import { calendarEventToTaskPayload, listCalendarEvents } from '../../lib/calendarSync';
 
 const ensureCalendarClient = (refreshToken: string) => {
   const oauth = new google.auth.OAuth2(
@@ -15,40 +16,6 @@ const ensureCalendarClient = (refreshToken: string) => {
   );
   oauth.setCredentials({ refresh_token: refreshToken });
   return google.calendar({ version: 'v3', auth: oauth });
-};
-
-const toTaskPayload = ({
-  event,
-  caregiverId,
-  careRecipientId,
-}: {
-  event: any;
-  caregiverId: string;
-  careRecipientId: string;
-}) => {
-  const start = event.start?.dateTime ?? event.start?.date ?? null;
-  const end = event.end?.dateTime ?? event.end?.date ?? null;
-  const externalId = event.iCalUID ?? event.id ?? undefined;
-  return {
-    title: event.summary ?? 'Appointment',
-    type: 'appointment' as const,
-    status: 'scheduled' as const,
-    reviewState: 'approved' as const,
-    provider: 'gmail' as const,
-    externalId,
-    sourceId: event.id ?? undefined,
-    sourceLink: event.htmlLink ?? undefined,
-    sender: event.organizer?.email ?? undefined,
-    rawSnippet: event.description ?? undefined,
-    confidence: 0.9,
-    syncedAt: new Date(),
-    careRecipientId,
-    createdById: caregiverId,
-    startAt: start ? new Date(start) : null,
-    endAt: end ? new Date(end) : null,
-    location: event.location ?? null,
-    updatedAt: new Date(),
-  } satisfies Partial<typeof tasks.$inferInsert>;
 };
 
 export async function syncCalendarSource({
@@ -93,16 +60,9 @@ export async function syncCalendarSource({
         .where(eq(sources.id, source.id));
     };
 
-    const eventsRes = await (async () => {
+    const { items, nextSyncToken } = await (async () => {
       try {
-        return await calendar.events.list({
-          calendarId: 'primary',
-          syncToken: source.calendarSyncToken ?? undefined,
-          maxResults: 20,
-          singleEvents: true,
-          showDeleted: false,
-          orderBy: 'updated',
-        });
+        return await listCalendarEvents({ calendar, syncToken: source.calendarSyncToken });
       } catch (err) {
         if (isInvalidGrantError(err)) {
           await markErrored('Google calendar access expired; please reconnect');
@@ -115,19 +75,30 @@ export async function syncCalendarSource({
       }
     })();
 
-    const nextSyncToken = eventsRes.data.nextSyncToken ?? source.calendarSyncToken ?? null;
-    const items = eventsRes.data.items ?? [];
-
     let created = 0;
     let updated = 0;
 
     for (const ev of items) {
-      if (!ev.id) continue;
-      const payload = toTaskPayload({
+      const { payload, externalId, isCancelled } = calendarEventToTaskPayload({
         event: ev,
         caregiverId,
         careRecipientId: membership.careRecipientId,
       });
+
+      if (isCancelled && externalId) {
+        await ctx.db
+          .update(tasks)
+          .set({ status: 'done', reviewState: 'ignored', updatedAt: new Date() })
+          .where(
+            and(
+              eq(tasks.careRecipientId, membership.careRecipientId),
+              eq(tasks.externalId, externalId)
+            )
+          );
+        continue;
+      }
+
+      if (!externalId) continue;
 
       const [row] = await ctx.db
         .insert(tasks)

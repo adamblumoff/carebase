@@ -22,6 +22,7 @@ import { debounceRun, verifyPubsubJwt } from './lib/pubsub';
 import { renewSource, fallbackPoll } from './lib/watch';
 import { Ticker } from './lib/scheduler';
 import { runNotificationTick } from './lib/notifications';
+import { getPushSyncTarget } from './lib/pushWebhook';
 import { WebSocketServer } from 'ws';
 import { applyWSSHandler } from '@trpc/server/adapters/ws';
 
@@ -249,7 +250,12 @@ const registerPlugins = async () => {
     }
 
     debounceRun(source.id, 100, () => {
-      const runner = source.calendarChannelId === channelId ? syncCalendarSource : syncSource;
+      const target = getPushSyncTarget({
+        isPubsubPush,
+        channelId,
+        calendarChannelId: source.calendarChannelId ?? null,
+      });
+      const runner = target === 'calendar' ? syncCalendarSource : syncSource;
       runner({
         ctx: { db, req: request },
         sourceId: source.id,
