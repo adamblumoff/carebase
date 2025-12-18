@@ -52,6 +52,15 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="care-profile"
+        options={{
+          title: 'Care',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="medkit-outline" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="tasks/review"
         options={{
           href: null,
