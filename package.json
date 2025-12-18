@@ -18,6 +18,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "test": "jest",
+    "coverage": "jest --coverage && rimraf coverage/",
     "reset:deps": "rm -rf node_modules .expo .pnpm-store && pnpm install",
     "lines": "git ls-files \"\": ':(exclude)*.json' \"\": ':(exclude)*.md' \"\": ':(exclude)*.yaml' \"\": ':(exclude)*.yml' | xargs wc -l"
   },
