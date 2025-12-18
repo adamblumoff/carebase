@@ -1,3 +1,4 @@
+import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { eq, and, sql } from 'drizzle-orm';
 
@@ -19,7 +20,7 @@ export const pushTokensRouter = router({
       const caregiverId = await ensureCaregiver(ctx);
       const now = new Date();
 
-      const [row] = await ctx.db
+      const [inserted] = await ctx.db
         .insert(pushTokens)
         .values({
           caregiverId,
@@ -30,16 +31,7 @@ export const pushTokensRouter = router({
           createdAt: now,
           updatedAt: now,
         })
-        .onConflictDoUpdate({
-          target: [pushTokens.token],
-          set: {
-            caregiverId,
-            platform: input.platform,
-            disabledAt: null,
-            lastSeenAt: now,
-            updatedAt: now,
-          },
-        })
+        .onConflictDoNothing()
         .returning({
           id: pushTokens.id,
           token: pushTokens.token,
@@ -48,7 +40,54 @@ export const pushTokensRouter = router({
           lastSeenAt: pushTokens.lastSeenAt,
         });
 
-      return row;
+      if (inserted) return inserted;
+
+      const [existing] = await ctx.db
+        .select({
+          id: pushTokens.id,
+          caregiverId: pushTokens.caregiverId,
+          token: pushTokens.token,
+          platform: pushTokens.platform,
+          disabledAt: pushTokens.disabledAt,
+          lastSeenAt: pushTokens.lastSeenAt,
+        })
+        .from(pushTokens)
+        .where(eq(pushTokens.token, input.token))
+        .limit(1);
+
+      if (!existing) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Push token not found' });
+      }
+
+      if (existing.caregiverId !== caregiverId) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Push token belongs to another user' });
+      }
+
+      const [updated] = await ctx.db
+        .update(pushTokens)
+        .set({
+          platform: input.platform,
+          disabledAt: null,
+          lastSeenAt: now,
+          updatedAt: now,
+        })
+        .where(eq(pushTokens.id, existing.id))
+        .returning({
+          id: pushTokens.id,
+          token: pushTokens.token,
+          platform: pushTokens.platform,
+          disabledAt: pushTokens.disabledAt,
+          lastSeenAt: pushTokens.lastSeenAt,
+        });
+
+      if (!updated) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Could not save push token',
+        });
+      }
+
+      return updated;
     }),
 
   unregister: authedProcedure

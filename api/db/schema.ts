@@ -206,10 +206,6 @@ export const pushTokens = pgTable(
   },
   (table) => ({
     tokenUnique: uniqueIndex('push_tokens_token_uidx').on(table.token),
-    caregiverTokenUnique: uniqueIndex('push_tokens_caregiver_token_uidx').on(
-      table.caregiverId,
-      table.token
-    ),
   })
 );
 

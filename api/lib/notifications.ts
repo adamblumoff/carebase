@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import {
   careRecipientMemberships,
@@ -34,94 +34,139 @@ export const runNotificationTick = async ({ db, log }: { db: any; log?: any }) =
     .innerJoin(careRecipients, eq(careRecipients.id, careRecipientMemberships.careRecipientId));
 
   // Review digest (hub timezone): owner-only, only if pending review exists.
-  const owners = memberships.filter((m: any) => m.role === 'owner');
-  for (const owner of owners) {
-    const dt = DateTime.fromJSDate(now, { zone: owner.hubTimezone ?? 'UTC' });
-    if (!withinDigestWindow(dt)) continue;
-    const localDate = dt.toISODate();
-    if (!localDate) continue;
+  const ownersDue = (memberships as any[])
+    .filter((m) => m.role === 'owner')
+    .map((owner) => {
+      const dt = DateTime.fromJSDate(now, { zone: owner.hubTimezone ?? 'UTC' });
+      if (!withinDigestWindow(dt)) return null;
+      const localDate = dt.toISODate();
+      if (!localDate) return null;
+      return {
+        caregiverId: owner.caregiverId as string,
+        careRecipientId: owner.careRecipientId as string,
+        localDate,
+      };
+    })
+    .filter(Boolean) as { caregiverId: string; careRecipientId: string; localDate: string }[];
 
-    const [pending] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(tasks)
-      .where(
-        and(
-          eq(tasks.careRecipientId, owner.careRecipientId),
-          eq(tasks.reviewState, 'pending'),
-          sql`${tasks.reviewState} != 'ignored'`
-        )
-      );
+  if (ownersDue.length) {
+    const hubIds = Array.from(new Set(ownersDue.map((o) => o.careRecipientId)));
 
-    const pendingCount = pending?.count ?? 0;
-    if (pendingCount <= 0) continue;
-
-    const [delivery] = await db
-      .insert(notificationDeliveries)
-      .values({
-        caregiverId: owner.caregiverId,
-        type: 'review_digest',
-        key: localDate,
-        sentAt: now,
+    const pendingRows = await db
+      .select({
+        careRecipientId: tasks.careRecipientId,
+        count: sql<number>`count(*)::int`,
       })
-      .onConflictDoNothing()
-      .returning({ id: notificationDeliveries.id });
+      .from(tasks)
+      .where(and(inArray(tasks.careRecipientId, hubIds), eq(tasks.reviewState, 'pending')))
+      .groupBy(tasks.careRecipientId);
 
-    if (!delivery) continue;
+    const pendingByHub = new Map<string, number>(
+      pendingRows.map((row: any) => [row.careRecipientId, row.count ?? 0])
+    );
 
-    await sendPushToCaregiver({
-      db,
-      caregiverId: owner.caregiverId,
-      title: 'Needs review',
-      body: `${pendingCount} task${pendingCount === 1 ? '' : 's'} need review`,
-      data: { type: 'review_digest', careRecipientId: owner.careRecipientId },
-      log,
-    });
+    for (const owner of ownersDue) {
+      const pendingCount = pendingByHub.get(owner.careRecipientId) ?? 0;
+      if (pendingCount <= 0) continue;
+
+      const key = `${owner.localDate}:${owner.careRecipientId}`;
+      const [delivery] = await db
+        .insert(notificationDeliveries)
+        .values({
+          caregiverId: owner.caregiverId,
+          type: 'review_digest',
+          key,
+          sentAt: now,
+        })
+        .onConflictDoNothing()
+        .returning({ id: notificationDeliveries.id });
+
+      if (!delivery) continue;
+
+      await sendPushToCaregiver({
+        db,
+        caregiverId: owner.caregiverId,
+        title: 'Needs review',
+        body: `${pendingCount} task${pendingCount === 1 ? '' : 's'} need review`,
+        data: { type: 'review_digest', careRecipientId: owner.careRecipientId },
+        log,
+      });
+    }
   }
 
   // Appointment today (caregiver timezone): all caregivers, only if appointments exist today.
-  for (const member of memberships) {
+  const membersDueByTimezone = new Map<
+    string,
+    { caregiverId: string; careRecipientId: string; localDate: string }[]
+  >();
+  for (const member of memberships as any[]) {
     const tz = member.caregiverTimezone ?? 'UTC';
     const dt = DateTime.fromJSDate(now, { zone: tz });
     if (!withinDigestWindow(dt)) continue;
     const localDate = dt.toISODate();
     if (!localDate) continue;
 
+    const entry = {
+      caregiverId: member.caregiverId as string,
+      careRecipientId: member.careRecipientId as string,
+      localDate,
+    };
+    const list = membersDueByTimezone.get(tz) ?? [];
+    list.push(entry);
+    membersDueByTimezone.set(tz, list);
+  }
+
+  for (const [tz, membersDue] of membersDueByTimezone.entries()) {
     const { startUtc, endUtc } = dayBoundsUtc({ timeZone: tz, now });
-    const [countRow] = await db
-      .select({ count: sql<number>`count(*)::int` })
+    const hubIds = Array.from(new Set(membersDue.map((m) => m.careRecipientId)));
+
+    const countRows = await db
+      .select({
+        careRecipientId: tasks.careRecipientId,
+        count: sql<number>`count(*)::int`,
+      })
       .from(tasks)
       .where(
         and(
-          eq(tasks.careRecipientId, member.careRecipientId),
+          inArray(tasks.careRecipientId, hubIds),
           eq(tasks.type, 'appointment'),
           sql`${tasks.reviewState} != 'ignored'`,
           sql`${tasks.status} != 'done'`,
           sql`${tasks.startAt} >= ${startUtc} AND ${tasks.startAt} < ${endUtc}`
         )
-      );
-    const apptCount = countRow?.count ?? 0;
-    if (apptCount <= 0) continue;
+      )
+      .groupBy(tasks.careRecipientId);
 
-    const [delivery] = await db
-      .insert(notificationDeliveries)
-      .values({
+    const apptsByHub = new Map<string, number>(
+      countRows.map((row: any) => [row.careRecipientId, row.count ?? 0])
+    );
+
+    for (const member of membersDue) {
+      const apptCount = apptsByHub.get(member.careRecipientId) ?? 0;
+      if (apptCount <= 0) continue;
+
+      const key = `${member.localDate}:${member.careRecipientId}`;
+      const [delivery] = await db
+        .insert(notificationDeliveries)
+        .values({
+          caregiverId: member.caregiverId,
+          type: 'appointment_today',
+          key,
+          sentAt: now,
+        })
+        .onConflictDoNothing()
+        .returning({ id: notificationDeliveries.id });
+
+      if (!delivery) continue;
+
+      await sendPushToCaregiver({
+        db,
         caregiverId: member.caregiverId,
-        type: 'appointment_today',
-        key: localDate,
-        sentAt: now,
-      })
-      .onConflictDoNothing()
-      .returning({ id: notificationDeliveries.id });
-
-    if (!delivery) continue;
-
-    await sendPushToCaregiver({
-      db,
-      caregiverId: member.caregiverId,
-      title: 'Appointment today',
-      body: `${apptCount} appointment${apptCount === 1 ? '' : 's'} today`,
-      data: { type: 'appointment_today', careRecipientId: member.careRecipientId },
-      log,
-    });
+        title: 'Appointment today',
+        body: `${apptCount} appointment${apptCount === 1 ? '' : 's'} today`,
+        data: { type: 'appointment_today', careRecipientId: member.careRecipientId },
+        log,
+      });
+    }
   }
 };

@@ -73,7 +73,22 @@ export const sendPushToCaregiver = async ({
       },
       body: JSON.stringify(messages),
     });
-    responseJson = await res.json().catch(() => null);
+
+    const raw = await res.text().catch(() => '');
+    responseJson = raw ? JSON.parse(raw) : null;
+
+    if (!res.ok) {
+      log?.error?.(
+        { status: res.status, caregiverId, body: raw.slice(0, 500) },
+        'push send failed (non-2xx)'
+      );
+      return { ok: false as const, sent: 0 };
+    }
+
+    if (!responseJson || !responseJson.data) {
+      log?.error?.({ caregiverId, body: raw.slice(0, 500) }, 'push send failed (bad response)');
+      return { ok: false as const, sent: 0 };
+    }
   } catch (err) {
     log?.error?.({ err, caregiverId }, 'push send failed');
     return { ok: false as const, sent: 0 };
