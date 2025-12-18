@@ -34,11 +34,7 @@ const shouldDisableTokenFromReceipt = (receipt: any) => {
   if (receipt.status !== 'error') return false;
   const details = receipt.details ?? {};
   const error = details.error ?? receipt.message ?? '';
-  return (
-    error === 'DeviceNotRegistered' ||
-    String(error).includes('DeviceNotRegistered') ||
-    String(error).includes('InvalidCredentials')
-  );
+  return error === 'DeviceNotRegistered' || String(error).includes('DeviceNotRegistered');
 };
 
 export const sendPushToCaregiver = async ({
