@@ -12,6 +12,7 @@ import { authedProcedure, router } from '../../trpc/trpc';
 import { ensureCaregiver } from '../../lib/caregiver';
 import { requireCareRecipientMembership, requireOwnerRole } from '../../lib/careRecipient';
 import { recordTaskEvent } from '../../lib/taskEvents';
+import { sendPushToCaregiver } from '../../lib/push';
 import {
   parseSenderDomain,
   SENDER_SUPPRESSION_IGNORE_THRESHOLD,
@@ -343,7 +344,7 @@ export const taskRouter = router({
       const now = new Date();
 
       const [task] = await ctx.db
-        .select({ id: tasks.id })
+        .select({ id: tasks.id, title: tasks.title })
         .from(tasks)
         .where(
           and(eq(tasks.id, input.taskId), eq(tasks.careRecipientId, membership.careRecipientId))
@@ -408,6 +409,15 @@ export const taskRouter = router({
           actorCaregiverId: membership.caregiverId,
           type: 'assigned',
           payload: { fromAssigneeId, toAssigneeId: input.caregiverId },
+        });
+
+        await sendPushToCaregiver({
+          db: ctx.db,
+          caregiverId: input.caregiverId,
+          title: 'Task assigned to you',
+          body: task.title,
+          data: { type: 'task_assigned', taskId: input.taskId },
+          log: ctx.req?.log,
         });
       }
 
