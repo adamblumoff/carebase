@@ -110,10 +110,7 @@ function TrpcProvider({ children }: { children: React.ReactNode }) {
   return (
     <PersistQueryClientProvider client={queryClient} persistOptions={{ persister }}>
       <trpc.Provider client={trpcClient} queryClient={queryClient}>
-        <ThemeGate>
-          <PreloadTasks />
-          {children}
-        </ThemeGate>
+        <ThemeGate>{children}</ThemeGate>
       </trpc.Provider>
     </PersistQueryClientProvider>
   );
