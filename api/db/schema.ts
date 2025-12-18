@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   boolean,
+  date,
   integer,
   jsonb,
   numeric,
@@ -47,6 +48,12 @@ export const taskEventTypeValues = [
   'updated_details',
 ] as const;
 export const taskEventType = pgEnum('task_event_type', taskEventTypeValues);
+export const documentStatus = pgEnum('document_status', [
+  'uploaded',
+  'processing',
+  'ready',
+  'error',
+]);
 
 export const caregivers = pgTable('caregivers', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -68,6 +75,63 @@ export const careRecipients = pgTable('care_recipients', {
     .default(sql`now()`)
     .notNull(),
 });
+
+export const careProfileBasics = pgTable(
+  'care_profile_basics',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    careRecipientId: uuid('care_recipient_id')
+      .notNull()
+      .references(() => careRecipients.id),
+    fullName: text('full_name').notNull(),
+    dob: date('dob'),
+    notes: text('notes'),
+    updatedByCaregiverId: uuid('updated_by_caregiver_id')
+      .notNull()
+      .references(() => caregivers.id),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .default(sql`now()`)
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .default(sql`now()`)
+      .notNull(),
+  },
+  (table) => ({
+    careRecipientUnique: uniqueIndex('care_profile_basics_care_recipient_uidx').on(
+      table.careRecipientId
+    ),
+  })
+);
+
+export const careProfileContacts = pgTable(
+  'care_profile_contacts',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    careRecipientId: uuid('care_recipient_id')
+      .notNull()
+      .references(() => careRecipients.id),
+    name: text('name').notNull(),
+    relationship: text('relationship'),
+    phone: text('phone'),
+    email: varchar('email', { length: 255 }),
+    address: text('address'),
+    isEmergency: boolean('is_emergency').default(false).notNull(),
+    updatedByCaregiverId: uuid('updated_by_caregiver_id')
+      .notNull()
+      .references(() => caregivers.id),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .default(sql`now()`)
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .default(sql`now()`)
+      .notNull(),
+  },
+  (table) => ({
+    careRecipientIdx: index('care_profile_contacts_care_recipient_idx').on(
+      table.careRecipientId
+    ),
+  })
+);
 
 export const careRecipientMemberships = pgTable(
   'care_recipient_memberships',
@@ -288,6 +352,60 @@ export const handoffNotes = pgTable(
       table.careRecipientId,
       table.localDate
     ),
+  })
+);
+
+export const documents = pgTable(
+  'documents',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    careRecipientId: uuid('care_recipient_id')
+      .notNull()
+      .references(() => careRecipients.id),
+    uploadedByCaregiverId: uuid('uploaded_by_caregiver_id')
+      .notNull()
+      .references(() => caregivers.id),
+    filename: text('filename').notNull(),
+    mimeType: varchar('mime_type', { length: 128 }).notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    storageKey: text('storage_key').notNull(),
+    pageCount: integer('page_count'),
+    status: documentStatus('status').default('uploaded').notNull(),
+    errorMessage: text('error_message'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .default(sql`now()`)
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .default(sql`now()`)
+      .notNull(),
+  },
+  (table) => ({
+    careRecipientIdx: index('documents_care_recipient_idx').on(table.careRecipientId),
+    storageKeyUnique: uniqueIndex('documents_storage_key_uidx').on(table.storageKey),
+    statusIdx: index('documents_status_idx').on(table.status),
+  })
+);
+
+export const documentTasks = pgTable(
+  'document_tasks',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => documents.id),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .default(sql`now()`)
+      .notNull(),
+  },
+  (table) => ({
+    documentTaskUnique: uniqueIndex('document_tasks_document_task_uidx').on(
+      table.documentId,
+      table.taskId
+    ),
+    documentIdx: index('document_tasks_document_idx').on(table.documentId),
   })
 );
 
