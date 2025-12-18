@@ -19,9 +19,8 @@ import { Container } from '@/components/Container';
 import { TaskDetailsSheet } from '@/components/TaskDetailsSheet';
 import { EditTaskSheet } from '@/components/EditTaskSheet';
 import { TasksTopNav } from '@/components/TasksTopNav';
+import { filterOptions, useTaskFilters } from './task-filters';
 
-const filterOptions = ['all', 'appointment', 'bill', 'medication', 'general'] as const;
-type TaskTypeFilter = (typeof filterOptions)[number];
 const createTypeOptions = ['general', 'appointment', 'bill', 'medication'] as const;
 type CreateTaskType = (typeof createTypeOptions)[number];
 
@@ -97,7 +96,7 @@ export const TasksScreen = ({ view }: { view: TasksView }) => {
   const [newTaskType, setNewTaskType] = useState<CreateTaskType>('general');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
-  const [selectedType, setSelectedType] = useState<TaskTypeFilter>('all');
+  const { selectedType, setSelectedType } = useTaskFilters();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const [editTask, setEditTask] = useState<Task | null>(null);
