@@ -1,8 +1,18 @@
 import { Stack } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, Text, TextInput, View } from 'react-native';
+import {
+    ActivityIndicator,
+    Alert,
+    Linking,
+    Modal,
+    Pressable,
+    Text,
+    TextInput,
+    View,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Container } from '@/components/Container';
@@ -23,6 +33,7 @@ export default function CareProfileScreen() {
     const [isBasicsOpen, setIsBasicsOpen] = useState(false);
     const [isContactOpen, setIsContactOpen] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
     const [basicsDraft, setBasicsDraft] = useState({
         fullName: '',
         dob: '',
@@ -98,6 +109,10 @@ export default function CareProfileScreen() {
         onSuccess: () => {
             void utils.documents.list.invalidate();
         },
+    });
+
+    const exportQuery = trpc.exports.weeklySummary.useQuery(undefined, {
+        enabled: false,
     });
 
     const openNewContact = () => {
@@ -183,6 +198,32 @@ export default function CareProfileScreen() {
             Alert.alert('Upload failed', error?.message ?? 'Please try again.');
         } finally {
             setIsUploading(false);
+        }
+    };
+
+    const exportWeeklySummary = async () => {
+        try {
+            setIsExporting(true);
+            const result = await exportQuery.refetch();
+            const url = result.data?.url;
+            if (!url) {
+                Alert.alert('Export failed', 'No file was generated.');
+                return;
+            }
+
+            const filename = `weekly-summary-${Date.now()}.pdf`;
+            const downloadPath = `${FileSystem.cacheDirectory}${filename}`;
+            const download = await FileSystem.downloadAsync(url, downloadPath);
+            const canShare = await Sharing.isAvailableAsync();
+            if (canShare) {
+                await Sharing.shareAsync(download.uri);
+            } else {
+                await Linking.openURL(url);
+            }
+        } catch (error: any) {
+            Alert.alert('Export failed', error?.message ?? 'Please try again.');
+        } finally {
+            setIsExporting(false);
         }
     };
 
@@ -386,6 +427,32 @@ export default function CareProfileScreen() {
                             No documents yet.
                         </Text>
                     )}
+                </View>
+
+                <View className="mb-6 gap-3 rounded-2xl border border-border bg-white p-4 dark:border-border-dark dark:bg-surface-card-dark">
+                    <View className="flex-row items-start justify-between">
+                        <View className="flex-1">
+                            <Text className="text-base font-semibold text-text dark:text-text-dark">
+                                Weekly summary
+                            </Text>
+                            <Text className="mt-1 text-xs text-text-muted dark:text-text-muted-dark">
+                                Export the last 7 days of updates.
+                            </Text>
+                        </View>
+                        <Pressable
+                            onPress={exportWeeklySummary}
+                            disabled={isExporting}
+                            className="rounded-full bg-primary px-4 py-2 dark:bg-primary-deep"
+                            style={({ pressed }) => ({
+                                opacity: isExporting ? 0.6 : pressed ? 0.85 : 1,
+                            })}>
+                            {isExporting ? (
+                                <ActivityIndicator color="#fff" />
+                            ) : (
+                                <Text className="text-sm font-semibold text-white">Share</Text>
+                            )}
+                        </Pressable>
+                    </View>
                 </View>
 
                 <View className="gap-3">
