@@ -15,7 +15,7 @@
 - `pnpm api:dev` — start Fastify+tRPC API (required for data screens; ensure `EXPO_PUBLIC_API_BASE_URL` points to it).  
 - `pnpm prebuild` — create native projects when custom modules are needed.  
 - `pnpm lint` — ESLint + Prettier check; `pnpm format` to fix.  
-- Add `pnpm test` after wiring Jest + React Native Testing Library.  
+- `pnpm test` — runs both app/UI tests and Node/API tests.  
 - CI should reuse these scripts.
 
 ## Mobile Tech Stack (created via `pnpm create expo-stack . --expo-router --nativewind --types`, Nov 21, 2025)
@@ -35,6 +35,12 @@
 - Files use `kebab-case.tsx`; components/classes `PascalCase`, functions/vars `camelCase`.  
 - Co-locate routes, styles, and tests; keep modules small.  
 - Run `pnpm format` before commits and PRs; lint/type-check enforced in CI.
+
+## Client-Side Network Hygiene (avoid self-DOS)
+- Avoid putting `useMutation()` return objects in `useEffect` dependency arrays; they are not stable and can cause repeated `mutate()` loops.
+  - Prefer destructuring: `const { mutate } = trpc.foo.useMutation()` and depend on `mutate`.
+  - Guard “run once per sign-in/session” effects with `useRef` booleans (see `components/DeviceRegistration.tsx`).
+- Keep tRPC HTTP batching enabled (don’t set `maxBatchSize: 1` unless debugging).
 
 ## Commit & Pull Request Guidelines
 - Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`); one logical change per commit.  

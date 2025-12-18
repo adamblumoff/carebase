@@ -102,6 +102,7 @@ Key procedures used by the app:
   - `ignore` sets `reviewState = ignored` and `status = done`, and increments sender suppression stats when applicable.
 - `trpc.tasks.toggleStatus({ id })`: toggles `status` between `todo` and `done`.
 - `trpc.tasks.updateDetails({ id, title?, description?, type? })`: used by the edit sheet.
+- Task audit trail: core task mutations record rows in `task_events` (see `trpc.taskEvents.list` below).
 
 Review/ignore semantics:
 
@@ -125,3 +126,32 @@ Core procedures:
 - `trpc.careRecipients.team()`: list care team members.
 - `trpc.caregivers.me()`: current caregiver profile (name/email).
 - `trpc.caregivers.setName({ name })`: update caregiver display name.
+- `trpc.caregivers.setTimezone({ timezone })`: set caregiver IANA timezone (used for Today bucketing + notification schedules).
+
+## Today (tRPC)
+
+- `trpc.today.feed({ limit? })`: pre-aggregated Today feed sections + Daily note:
+  - needs review, due today, upcoming (7 days), assigned to me, recently completed (24h)
+  - also returns `hubLocalDate` / `hubTimezone` used for Daily note day boundaries
+
+## Daily note (tRPC)
+
+- `trpc.handoff.today()`: fetch the Daily note for the hub’s current local date.
+- `trpc.handoff.upsertToday({ body })`: owner-only; upserts the Daily note for the hub’s current local date.
+
+## Task history (tRPC)
+
+- `trpc.taskEvents.list({ taskId, limit? })`: list task history entries, scoped to the caller’s CareHub.
+
+## Push notifications (tRPC + background tick)
+
+App → API:
+
+- `trpc.pushTokens.register({ token, platform })`: register an Expo push token.
+- `trpc.pushTokens.unregister({ token })`: disable a token.
+- `trpc.pushTokens.active()`: list active tokens for the caregiver (useful for debugging).
+
+Server sending:
+
+- Assignment pushes are sent from `trpc.tasks.assign` (to the assignee).
+- Daily digests are sent by a background ticker in `api/index.ts` (review digest + appointment today) and deduped via `notification_deliveries`.

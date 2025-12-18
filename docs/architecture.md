@@ -15,8 +15,19 @@
   - TanStack Query persistence to AsyncStorage + tRPC provider (`lib/trpc/client.ts`)
   - `AuthGate` to keep unauth users in `app/(auth)` (implemented in `components/gates.tsx`)
   - `SetupGate` to route signed-in users without a CareHub to `/setup` (implemented in `components/gates.tsx`)
-  - Task prefetch on sign-in (`tasks.listThin`, `tasks.upcoming`, `tasks.stats`) + recent ingestion events
+  - Device registration: timezone sync + Expo push token registration (`components/DeviceRegistration.tsx`)
   - Subscription toast: `ingestionEvents.onPush` triggers a background invalidate (`listThin`, `upcoming`, `stats`) + “New task synced” toast
+
+## Today UI (routing)
+
+- Bottom tab default: `/` (route: `app/(tabs)/index.tsx`) is the **Today** screen.
+- Today pulls a pre-aggregated feed via `trpc.today.feed`:
+  - Needs review
+  - Due today
+  - Upcoming (7 days)
+  - Assigned to me
+  - Recently completed (24h)
+- Today includes a pinned **Daily note** (shared note for the care team) and uses the CareHub timezone for day boundaries.
 
 ## Tasks UI (routing)
 
@@ -49,11 +60,16 @@
 ## Core tables (current)
 
 - `caregivers`: app user record (maps to Clerk user via email).
+  - includes `caregivers.timezone` (IANA string, set from the app)
 - `care_recipient_memberships`: links caregivers to exactly one CareHub (role is `owner` or `viewer`).
 - `sources`: connected provider accounts (currently `gmail`), refresh tokens, watch metadata, status.
 - `tasks`: primary UI entity; both manual tasks and ingested tasks live here (ingested tasks also carry `senderDomain` + `ingestionDebug` for diagnosis).
+- `handoff_notes`: daily note keyed by `(careRecipientId, localDate)` using the CareHub timezone.
+- `task_events`: audit trail of task changes (what changed, by who).
 - `ingestion_events`: small log of sync runs and counts (drives “recent ingestion” UI and push events).
 - `sender_suppressions`: per-caregiver sender-domain suppression (used to auto-ignore repeat junk sources before model classification).
+- `push_tokens`: Expo push tokens registered by caregivers (used for OS push notifications).
+- `notification_deliveries`: de-dupe log for digests (prevents repeat sends).
 
 ## CareHub model (collaboration)
 
