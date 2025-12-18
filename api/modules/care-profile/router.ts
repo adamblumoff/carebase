@@ -11,12 +11,6 @@ const dobSchema = z
   .regex(/^\d{4}-\d{2}-\d{2}$/)
   .optional();
 
-const toDate = (value?: string) => {
-  if (!value) return null;
-  const parsed = new Date(`${value}T00:00:00Z`);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-
 const serializeDob = (value?: Date | string | null) => {
   if (!value) return null;
   if (value instanceof Date) return value.toISOString().slice(0, 10);
@@ -85,7 +79,7 @@ export const careProfileRouter = router({
     .mutation(async ({ ctx, input }) => {
       const membership = await requireOwnerRole(ctx);
       const now = new Date();
-      const dob = toDate(input.dob);
+      const dob = input.dob ?? null;
 
       const [saved] = await ctx.db
         .insert(careProfileBasics)
