@@ -140,7 +140,7 @@ export const runNotificationTick = async ({ db, log }: { db: any; log?: any }) =
 
       if (!delivery) continue;
 
-      await sendPushToCaregiver({
+      const result = await sendPushToCaregiver({
         db,
         caregiverId: owner.caregiverId,
         title: 'Needs review',
@@ -148,6 +148,10 @@ export const runNotificationTick = async ({ db, log }: { db: any; log?: any }) =
         data: { type: 'review_digest', careRecipientId: owner.careRecipientId },
         log,
       });
+
+      if (result.sent <= 0) {
+        await db.delete(notificationDeliveries).where(eq(notificationDeliveries.id, delivery.id));
+      }
     }
   }
 
@@ -216,7 +220,7 @@ export const runNotificationTick = async ({ db, log }: { db: any; log?: any }) =
 
       if (!delivery) continue;
 
-      await sendPushToCaregiver({
+      const result = await sendPushToCaregiver({
         db,
         caregiverId: member.caregiverId,
         title: 'Appointment today',
@@ -224,6 +228,10 @@ export const runNotificationTick = async ({ db, log }: { db: any; log?: any }) =
         data: { type: 'appointment_today', careRecipientId: member.careRecipientId },
         log,
       });
+
+      if (result.sent <= 0) {
+        await db.delete(notificationDeliveries).where(eq(notificationDeliveries.id, delivery.id));
+      }
     }
   }
 };
