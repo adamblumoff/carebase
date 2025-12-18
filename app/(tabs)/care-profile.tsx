@@ -80,9 +80,13 @@ export default function CareProfileScreen() {
       dob: profileQuery.data.basics.dob ?? '',
       notes: profileQuery.data.basics.notes ?? '',
     });
-    const nextDob = profileQuery.data.basics.dob
-      ? new Date(`${profileQuery.data.basics.dob}T00:00:00Z`)
-      : null;
+    const nextDob = (() => {
+      if (!profileQuery.data.basics.dob) return null;
+      const [year, month, day] = profileQuery.data.basics.dob.split('-').map(Number);
+      if (!year || !month || !day) return null;
+      const localDate = new Date(year, month - 1, day);
+      return Number.isNaN(localDate.getTime()) ? null : localDate;
+    })();
     setDobDate(nextDob && !Number.isNaN(nextDob.getTime()) ? nextDob : null);
   }, [profileQuery.data?.basics]);
 
@@ -262,9 +266,9 @@ export default function CareProfileScreen() {
 
   const formatDob = (date: Date | null) => {
     if (!date) return '';
-    const year = date.getUTCFullYear();
-    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(date.getUTCDate()).padStart(2, '0');
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
 
@@ -275,11 +279,9 @@ export default function CareProfileScreen() {
       return;
     }
     if (selected) {
-      const normalized = new Date(
-        Date.UTC(selected.getFullYear(), selected.getMonth(), selected.getDate())
-      );
-      setDobDate(normalized);
-      setBasicsDraft((prev) => ({ ...prev, dob: formatDob(normalized) }));
+      const localDate = new Date(selected.getFullYear(), selected.getMonth(), selected.getDate());
+      setDobDate(localDate);
+      setBasicsDraft((prev) => ({ ...prev, dob: formatDob(localDate) }));
     }
     if (Platform.OS !== 'ios') {
       setShowDobPicker(false);
