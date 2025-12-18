@@ -1,3 +1,4 @@
+import type { DbClient } from '../db/client';
 import { taskEventTypeValues, taskEvents } from '../db/schema';
 
 export type TaskEventType = (typeof taskEventTypeValues)[number];
@@ -10,7 +11,7 @@ export const recordTaskEvent = async ({
   type,
   payload,
 }: {
-  db: any;
+  db: DbClient;
   taskId: string;
   careRecipientId: string;
   actorCaregiverId: string;

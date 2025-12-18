@@ -1,5 +1,6 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 
+import type { DbClient } from '../db/client';
 import { pushTokens } from '../db/schema';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
@@ -48,7 +49,7 @@ export const sendPushToCaregiver = async ({
   data,
   log,
 }: {
-  db: any;
+  db: DbClient;
   caregiverId: string;
   title: string;
   body: string;

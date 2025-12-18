@@ -52,5 +52,5 @@ ALTER TABLE "task_events" ADD CONSTRAINT "task_events_actor_caregiver_id_caregiv
 CREATE UNIQUE INDEX "handoff_notes_care_recipient_local_date_uidx" ON "handoff_notes" USING btree ("care_recipient_id","local_date");--> statement-breakpoint
 CREATE UNIQUE INDEX "notification_deliveries_caregiver_type_key_uidx" ON "notification_deliveries" USING btree ("caregiver_id","type","key");--> statement-breakpoint
 CREATE UNIQUE INDEX "push_tokens_token_uidx" ON "push_tokens" USING btree ("token");--> statement-breakpoint
-CREATE UNIQUE INDEX "push_tokens_caregiver_token_uidx" ON "push_tokens" USING btree ("caregiver_id","token");--> statement-breakpoint
+CREATE INDEX "push_tokens_caregiver_disabled_at_idx" ON "push_tokens" USING btree ("caregiver_id","disabled_at");--> statement-breakpoint
 CREATE INDEX "task_events_task_id_created_at_idx" ON "task_events" USING btree ("task_id","created_at");
