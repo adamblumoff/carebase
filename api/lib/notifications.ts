@@ -33,21 +33,22 @@ export const runNotificationTick = async ({ db, log }: { db: any; log?: any }) =
   const caregiverTimezoneRows = await db
     .selectDistinct({ tz: caregivers.timezone })
     .from(caregivers);
-  const hubTimezoneRows = await db
+  const hubTimezoneReadyRows = await db
     .selectDistinct({ tz: careRecipients.timezone })
-    .from(careRecipients);
+    .from(careRecipients)
+    .where(sql`${careRecipients.timezoneSource} != 'unset'`);
 
   const caregiverTimezonesInWindow = caregiverTimezoneRows
     .map((row: any) => row.tz as string)
     .filter(Boolean)
     .filter((tz: string) => timezoneIsInDigestWindow(tz, now));
 
-  const hubTimezonesInWindow = hubTimezoneRows
+  const hubTimezonesReadyInWindow = hubTimezoneReadyRows
     .map((row: any) => row.tz as string)
     .filter(Boolean)
     .filter((tz: string) => timezoneIsInDigestWindow(tz, now));
 
-  if (!caregiverTimezonesInWindow.length && !hubTimezonesInWindow.length) {
+  if (!caregiverTimezonesInWindow.length && !hubTimezonesReadyInWindow.length) {
     return;
   }
 
@@ -60,7 +61,7 @@ export const runNotificationTick = async ({ db, log }: { db: any; log?: any }) =
   };
 
   const [ownerMemberships, caregiverMemberships] = await Promise.all([
-    hubTimezonesInWindow.length
+    hubTimezonesReadyInWindow.length
       ? db
           .select(membershipSelect)
           .from(careRecipientMemberships)
@@ -72,7 +73,8 @@ export const runNotificationTick = async ({ db, log }: { db: any; log?: any }) =
           .where(
             and(
               eq(careRecipientMemberships.role, 'owner'),
-              inArray(careRecipients.timezone, hubTimezonesInWindow)
+              sql`${careRecipients.timezoneSource} != 'unset'`,
+              inArray(careRecipients.timezone, hubTimezonesReadyInWindow)
             )
           )
       : Promise.resolve([]),
