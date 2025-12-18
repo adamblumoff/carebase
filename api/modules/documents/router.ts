@@ -1,8 +1,8 @@
 import { TRPCError } from '@trpc/server';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 
-import { documentTasks, documents } from '../../db/schema';
+import { documentTasks, documents, tasks } from '../../db/schema';
 import { enqueueBackgroundTask } from '../../lib/asyncTasks';
 import { requireCareRecipientMembership, requireOwnerRole } from '../../lib/careRecipient';
 import { processDocument } from '../../lib/documentProcessing';
@@ -126,13 +126,36 @@ export const documentsRouter = router({
 
       await deleteObject({ key: doc.storageKey });
 
-      await ctx.db.delete(documentTasks).where(eq(documentTasks.documentId, doc.id));
+      await ctx.db.transaction(async (tx) => {
+        const linkedTasks = await tx
+          .select({ taskId: documentTasks.taskId })
+          .from(documentTasks)
+          .where(eq(documentTasks.documentId, doc.id));
 
-      await ctx.db
-        .delete(documents)
-        .where(
-          and(eq(documents.id, input.id), eq(documents.careRecipientId, membership.careRecipientId))
-        );
+        const taskIds = linkedTasks.map((row) => row.taskId);
+
+        if (taskIds.length) {
+          await tx
+            .delete(tasks)
+            .where(
+              and(
+                eq(tasks.careRecipientId, membership.careRecipientId),
+                inArray(tasks.id, taskIds)
+              )
+            );
+        }
+
+        await tx.delete(documentTasks).where(eq(documentTasks.documentId, doc.id));
+
+        await tx
+          .delete(documents)
+          .where(
+            and(
+              eq(documents.id, input.id),
+              eq(documents.careRecipientId, membership.careRecipientId)
+            )
+          );
+      });
 
       return { id: doc.id };
     }),
