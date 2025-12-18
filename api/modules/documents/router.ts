@@ -12,7 +12,11 @@ import { authedProcedure, router } from '../../trpc/trpc';
 const uploadInput = z.object({
   filename: z.string().min(1).max(200),
   mimeType: z.string().min(1).max(128),
-  sizeBytes: z.number().int().min(1).max(50 * 1024 * 1024),
+  sizeBytes: z
+    .number()
+    .int()
+    .min(1)
+    .max(50 * 1024 * 1024),
 });
 
 export const documentsRouter = router({
@@ -56,8 +60,9 @@ export const documentsRouter = router({
     };
   }),
 
-  confirmUpload: authedProcedure.input(uploadInput.extend({ storageKey: z.string().min(1) })).mutation(
-    async ({ ctx, input }) => {
+  confirmUpload: authedProcedure
+    .input(uploadInput.extend({ storageKey: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
       const membership = await requireOwnerRole(ctx);
       const now = new Date();
 
@@ -97,8 +102,7 @@ export const documentsRouter = router({
       });
 
       return created;
-    }
-  ),
+    }),
 
   delete: authedProcedure
     .input(z.object({ id: z.string().uuid() }))

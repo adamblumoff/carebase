@@ -127,9 +127,7 @@ export const careProfileContacts = pgTable(
       .notNull(),
   },
   (table) => ({
-    careRecipientIdx: index('care_profile_contacts_care_recipient_idx').on(
-      table.careRecipientId
-    ),
+    careRecipientIdx: index('care_profile_contacts_care_recipient_idx').on(table.careRecipientId),
   })
 );
 

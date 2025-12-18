@@ -1,5 +1,5 @@
 import { GoogleAuth } from 'google-auth-library';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 import type { DbClient } from '../db/client';
 import { documentTasks, documents, tasks } from '../db/schema';
@@ -31,19 +31,11 @@ const extractTextWithVision = async (buffer: Buffer) => {
   const annotation = response.data.responses?.[0];
   if (!annotation) return null;
   return (
-    annotation.fullTextAnnotation?.text ??
-    annotation.textAnnotations?.[0]?.description ??
-    null
+    annotation.fullTextAnnotation?.text ?? annotation.textAnnotations?.[0]?.description ?? null
   );
 };
 
-const classifyDocumentText = ({
-  text,
-  filename,
-}: {
-  text: string | null;
-  filename: string;
-}) => {
+const classifyDocumentText = ({ text, filename }: { text: string | null; filename: string }) => {
   if (!text) {
     return {
       type: 'general' as const,
@@ -76,13 +68,7 @@ const classifyDocumentText = ({
   return { type, title, description };
 };
 
-export const processDocument = async ({
-  db,
-  documentId,
-}: {
-  db: DbClient;
-  documentId: string;
-}) => {
+export const processDocument = async ({ db, documentId }: { db: DbClient; documentId: string }) => {
   const [doc] = await db
     .select({
       id: documents.id,

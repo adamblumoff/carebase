@@ -39,11 +39,13 @@ const buildWeeklySummaryPdf = async ({
   doc.fontSize(20).text('Weekly Summary', { underline: true });
   doc.moveDown(0.5);
   doc.fontSize(12).text(`Care recipient: ${careRecipientName}`);
-  doc.fontSize(12).text(
-    `Generated: ${DateTime.fromJSDate(generatedAt, { zone: hubTimezone }).toFormat(
-      'LLL d, yyyy t ZZZZ'
-    )}`
-  );
+  doc
+    .fontSize(12)
+    .text(
+      `Generated: ${DateTime.fromJSDate(generatedAt, { zone: hubTimezone }).toFormat(
+        'LLL d, yyyy t ZZZZ'
+      )}`
+    );
   doc.moveDown();
 
   doc.fontSize(14).text('Daily Notes', { underline: true });
@@ -68,9 +70,7 @@ const buildWeeklySummaryPdf = async ({
       const updatedLabel = DateTime.fromJSDate(task.updatedAt, { zone: hubTimezone }).toFormat(
         'LLL d, yyyy t'
       );
-      doc
-        .fontSize(11)
-        .text(`• ${task.title} (${task.type}, ${task.status})`, { continued: false });
+      doc.fontSize(11).text(`• ${task.title} (${task.type}, ${task.status})`, { continued: false });
       doc.fontSize(10).text(`Updated: ${updatedLabel}`, { indent: 12 });
     });
   }
@@ -80,91 +80,89 @@ const buildWeeklySummaryPdf = async ({
 };
 
 export const exportsRouter = router({
-  weeklySummary: authedProcedure
-    .input(z.object({}).optional())
-    .query(async ({ ctx }) => {
-      const membership = await requireCareRecipientMembership(ctx);
-      const now = new Date();
-      const since = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  weeklySummary: authedProcedure.input(z.object({}).optional()).query(async ({ ctx }) => {
+    const membership = await requireCareRecipientMembership(ctx);
+    const now = new Date();
+    const since = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-      const [recipient] = await ctx.db
-        .select({
-          name: careRecipients.name,
-          timezone: careRecipients.timezone,
-        })
-        .from(careRecipients)
-        .where(eq(careRecipients.id, membership.careRecipientId))
-        .limit(1);
+    const [recipient] = await ctx.db
+      .select({
+        name: careRecipients.name,
+        timezone: careRecipients.timezone,
+      })
+      .from(careRecipients)
+      .where(eq(careRecipients.id, membership.careRecipientId))
+      .limit(1);
 
-      const hubTimezone = recipient?.timezone ?? 'UTC';
-      const careRecipientName = recipient?.name ?? 'Care Recipient';
+    const hubTimezone = recipient?.timezone ?? 'UTC';
+    const careRecipientName = recipient?.name ?? 'Care Recipient';
 
-      const taskRows = await ctx.db
-        .select({
-          title: tasks.title,
-          type: tasks.type,
-          status: tasks.status,
-          updatedAt: tasks.updatedAt,
-        })
-        .from(tasks)
-        .where(
-          and(
-            eq(tasks.careRecipientId, membership.careRecipientId),
-            gte(tasks.updatedAt, since),
-            sql`${tasks.reviewState} != 'ignored'`
-          )
+    const taskRows = await ctx.db
+      .select({
+        title: tasks.title,
+        type: tasks.type,
+        status: tasks.status,
+        updatedAt: tasks.updatedAt,
+      })
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.careRecipientId, membership.careRecipientId),
+          gte(tasks.updatedAt, since),
+          sql`${tasks.reviewState} != 'ignored'`
         )
-        .orderBy(desc(tasks.updatedAt));
+      )
+      .orderBy(desc(tasks.updatedAt));
 
-      const startLocal = DateTime.fromJSDate(now, { zone: hubTimezone })
-        .startOf('day')
-        .minus({ days: 6 });
-      const dates = Array.from({ length: 7 }, (_, index) =>
-        startLocal.plus({ days: index }).toISODate()
-      ).filter(Boolean) as string[];
+    const startLocal = DateTime.fromJSDate(now, { zone: hubTimezone })
+      .startOf('day')
+      .minus({ days: 6 });
+    const dates = Array.from({ length: 7 }, (_, index) =>
+      startLocal.plus({ days: index }).toISODate()
+    ).filter(Boolean) as string[];
 
-      const notes = dates.length
-        ? await ctx.db
-            .select({
-              localDate: handoffNotes.localDate,
-              body: handoffNotes.body,
-            })
-            .from(handoffNotes)
-            .where(
-              and(
-                eq(handoffNotes.careRecipientId, membership.careRecipientId),
-                inArray(handoffNotes.localDate, dates)
-              )
+    const notes = dates.length
+      ? await ctx.db
+          .select({
+            localDate: handoffNotes.localDate,
+            body: handoffNotes.body,
+          })
+          .from(handoffNotes)
+          .where(
+            and(
+              eq(handoffNotes.careRecipientId, membership.careRecipientId),
+              inArray(handoffNotes.localDate, dates)
             )
-            .orderBy(handoffNotes.localDate)
-        : [];
+          )
+          .orderBy(handoffNotes.localDate)
+      : [];
 
-      const pdfBuffer = await buildWeeklySummaryPdf({
-        careRecipientName,
-        hubTimezone,
-        tasks: taskRows,
-        notes,
-        generatedAt: now,
-      });
+    const pdfBuffer = await buildWeeklySummaryPdf({
+      careRecipientName,
+      hubTimezone,
+      tasks: taskRows,
+      notes,
+      generatedAt: now,
+    });
 
-      const storageKey = `exports/${membership.careRecipientId}/weekly-summary-${DateTime.fromJSDate(
-        now,
-        { zone: hubTimezone }
-      ).toFormat('yyyyLLdd')}-${randomUUID()}.pdf`;
+    const storageKey = `exports/${membership.careRecipientId}/weekly-summary-${DateTime.fromJSDate(
+      now,
+      { zone: hubTimezone }
+    ).toFormat('yyyyLLdd')}-${randomUUID()}.pdf`;
 
-      await uploadBuffer({
-        key: storageKey,
-        body: pdfBuffer,
-        contentType: 'application/pdf',
-      });
+    await uploadBuffer({
+      key: storageKey,
+      body: pdfBuffer,
+      contentType: 'application/pdf',
+    });
 
-      const { url } = await getSignedDownloadUrl({ key: storageKey, expiresInSeconds: 3600 });
+    const { url } = await getSignedDownloadUrl({ key: storageKey, expiresInSeconds: 3600 });
 
-      return {
-        url,
-        storageKey,
-        expiresInSeconds: 3600,
-        taskCount: taskRows.length,
-      };
-    }),
+    return {
+      url,
+      storageKey,
+      expiresInSeconds: 3600,
+      taskCount: taskRows.length,
+    };
+  }),
 });
