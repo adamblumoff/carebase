@@ -12,6 +12,9 @@ import { pushTokensRouter } from '../modules/push-tokens/router';
 import { todayRouter } from '../modules/today/router';
 import { handoffRouter } from '../modules/handoff/router';
 import { taskEventsRouter } from '../modules/task-events/router';
+import { careProfileRouter } from '../modules/care-profile/router';
+import { documentsRouter } from '../modules/documents/router';
+import { exportsRouter } from '../modules/exports/router';
 
 export const appRouter = router({
   tasks: taskRouter,
@@ -27,6 +30,9 @@ export const appRouter = router({
   today: todayRouter,
   handoff: handoffRouter,
   taskEvents: taskEventsRouter,
+  careProfile: careProfileRouter,
+  documents: documentsRouter,
+  exports: exportsRouter,
 });
 
 export type AppRouter = typeof appRouter;

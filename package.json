@@ -23,6 +23,8 @@
     "lines": "git ls-files \"\": ':(exclude)*.json' \"\": ':(exclude)*.md' \"\": ':(exclude)*.yaml' \"\": ':(exclude)*.yml' | xargs wc -l"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.954.0",
+    "@aws-sdk/s3-request-presigner": "^3.954.0",
     "@clerk/backend": "^2.23.2",
     "@clerk/clerk-expo": "^2.19.4",
     "@expo-google-fonts/roboto": "^0.4.1",
@@ -63,6 +65,7 @@
     "googleapis": "^166.0.0",
     "luxon": "^3.7.2",
     "nativewind": "latest",
+    "pdfkit": "^0.17.2",
     "pg": "^8.13.1",
     "posthog-node": "^4.1.0",
     "posthog-react-native": "^4.12.4",
@@ -88,6 +91,7 @@
     "@testing-library/react-native": "^13.3.3",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.10.2",
+    "@types/pdfkit": "^0.17.4",
     "@types/pg": "^8.15.6",
     "@types/react": "~19.1.10",
     "drizzle-kit": "^0.30.6",
