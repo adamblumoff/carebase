@@ -14,6 +14,7 @@ import {
     View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
 import { Container } from '@/components/Container';
 import { trpc } from '@/lib/trpc/client';
@@ -34,11 +35,13 @@ export default function CareProfileScreen() {
     const [isContactOpen, setIsContactOpen] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
+    const [showDobPicker, setShowDobPicker] = useState(false);
     const [basicsDraft, setBasicsDraft] = useState({
         fullName: '',
         dob: '',
         notes: '',
     });
+    const [dobDate, setDobDate] = useState<Date | null>(null);
     const [contactDraft, setContactDraft] = useState<ContactDraft>({
         name: '',
         relationship: '',
@@ -76,12 +79,19 @@ export default function CareProfileScreen() {
             dob: profileQuery.data.basics.dob ?? '',
             notes: profileQuery.data.basics.notes ?? '',
         });
+        const nextDob = profileQuery.data.basics.dob
+            ? new Date(`${profileQuery.data.basics.dob}T00:00:00Z`)
+            : null;
+        setDobDate(nextDob && !Number.isNaN(nextDob.getTime()) ? nextDob : null);
     }, [profileQuery.data?.basics]);
 
     const upsertBasics = trpc.careProfile.upsertBasics.useMutation({
         onSuccess: () => {
             void utils.careProfile.get.invalidate();
             setIsBasicsOpen(false);
+        },
+        onError: (error) => {
+            Alert.alert('Could not save basics', error.message);
         },
     });
 
@@ -90,11 +100,17 @@ export default function CareProfileScreen() {
             void utils.careProfile.get.invalidate();
             setIsContactOpen(false);
         },
+        onError: (error) => {
+            Alert.alert('Could not save contact', error.message);
+        },
     });
 
     const deleteContact = trpc.careProfile.deleteContact.useMutation({
         onSuccess: () => {
             void utils.careProfile.get.invalidate();
+        },
+        onError: (error) => {
+            Alert.alert('Could not delete contact', error.message);
         },
     });
 
@@ -236,6 +252,25 @@ export default function CareProfileScreen() {
                 onPress: () => deleteDocument.mutate({ id: documentId }),
             },
         ]);
+    };
+
+    const formatDob = (date: Date | null) => {
+        if (!date) return '';
+        const year = date.getUTCFullYear();
+        const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(date.getUTCDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    const handleDobChange = (_event: DateTimePickerEvent, selected?: Date) => {
+        if (selected) {
+            const normalized = new Date(
+                Date.UTC(selected.getFullYear(), selected.getMonth(), selected.getDate())
+            );
+            setDobDate(normalized);
+            setBasicsDraft((prev) => ({ ...prev, dob: formatDob(normalized) }));
+        }
+        setShowDobPicker(false);
     };
 
     const contacts = profileQuery.data?.contacts ?? [];
@@ -502,12 +537,18 @@ export default function CareProfileScreen() {
                             />
                             <TextInput
                                 value={basicsDraft.dob}
-                                onChangeText={(text) =>
-                                    setBasicsDraft((prev) => ({ ...prev, dob: text }))
-                                }
-                                placeholder="DOB (YYYY-MM-DD)"
-                                className="rounded-xl border border-border bg-white px-3 py-2 text-sm dark:border-border-dark dark:bg-surface-dark dark:text-text-dark"
+                                editable={false}
+                                placeholder="DOB"
+                                className="rounded-xl border border-border bg-white px-3 py-2 text-sm text-text-muted dark:border-border-dark dark:bg-surface-dark dark:text-text-muted-dark"
                             />
+                            <Pressable
+                                onPress={() => setShowDobPicker(true)}
+                                className="self-start rounded-full border border-border px-3 py-2 dark:border-border-dark"
+                                style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}>
+                                <Text className="text-sm font-semibold text-primary">
+                                    {dobDate ? 'Change date' : 'Select date'}
+                                </Text>
+                            </Pressable>
                             <TextInput
                                 value={basicsDraft.notes}
                                 onChangeText={(text) =>
@@ -677,6 +718,16 @@ export default function CareProfileScreen() {
                     </Pressable>
                 </Pressable>
             </Modal>
+
+            {showDobPicker ? (
+                <DateTimePicker
+                    value={dobDate ?? new Date()}
+                    mode="date"
+                    display="spinner"
+                    onChange={handleDobChange}
+                    maximumDate={new Date()}
+                />
+            ) : null}
         </View>
     );
 }
