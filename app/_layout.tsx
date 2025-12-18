@@ -3,12 +3,16 @@ import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
 import { tokenCache } from '@clerk/clerk-expo/token-cache';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Animated, Text } from 'react-native';
+import { Animated, Platform, Text } from 'react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PostHogProvider } from 'posthog-react-native';
 import { useFonts } from 'expo-font';
 import { Roboto_500Medium } from '@expo-google-fonts/roboto';
 import { useColorScheme } from 'nativewind';
+import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
+import Constants from 'expo-constants';
+import * as Localization from 'expo-localization';
 
 import { createQueryClientAndPersister, createTrpcClient, trpc } from '@/lib/trpc/client';
 import { useUserTheme } from '@/app/(hooks)/useUserTheme';
@@ -122,6 +126,7 @@ function ThemeGate({ children }: { children: React.ReactNode }) {
   if (!themeReady) return <FullScreenLoading title="Loading…" colorScheme={colorScheme} />;
   return (
     <PushToastLayer>
+      <DeviceRegistration />
       <SetupGate preload={<PreloadTasks />}>{children}</SetupGate>
     </PushToastLayer>
   );
@@ -227,4 +232,75 @@ function PushToastLayer({ children }: { children: React.ReactNode }) {
       ) : null}
     </>
   );
+}
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+  }),
+});
+
+async function registerForPushNotificationsAsync() {
+  if (Platform.OS === 'web') return null;
+  if (!Device.isDevice) return null;
+
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('default', {
+      name: 'default',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#4A8F6A',
+    });
+  }
+
+  const { status: existingStatus } = await Notifications.getPermissionsAsync();
+  let finalStatus = existingStatus;
+  if (existingStatus !== 'granted') {
+    const { status } = await Notifications.requestPermissionsAsync();
+    finalStatus = status;
+  }
+  if (finalStatus !== 'granted') return null;
+
+  const projectId =
+    (Constants.expoConfig as any)?.extra?.eas?.projectId ??
+    (Constants as any)?.easConfig?.projectId ??
+    null;
+
+  const token = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
+  return token.data;
+}
+
+function DeviceRegistration() {
+  const { isSignedIn } = useAuth();
+  const setTimezone = trpc.caregivers.setTimezone.useMutation();
+  const registerPushToken = trpc.pushTokens.register.useMutation();
+
+  useEffect(() => {
+    if (!isSignedIn) return;
+    const tz = Localization.getCalendars()?.[0]?.timeZone ?? null;
+    if (!tz) return;
+    setTimezone.mutate({ timezone: tz });
+  }, [isSignedIn, setTimezone]);
+
+  useEffect(() => {
+    if (!isSignedIn) return;
+
+    let cancelled = false;
+    void (async () => {
+      const token = await registerForPushNotificationsAsync();
+      if (cancelled) return;
+      if (!token) return;
+      const platform =
+        Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web';
+      registerPushToken.mutate({ token, platform });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isSignedIn, registerPushToken]);
+
+  return null;
 }
