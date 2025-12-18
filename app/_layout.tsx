@@ -12,7 +12,7 @@ import { useColorScheme } from 'nativewind';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
-import * as Localization from 'expo-localization';
+import { getDeviceTimeZone } from '@/lib/device-timezone';
 
 import { createQueryClientAndPersister, createTrpcClient, trpc } from '@/lib/trpc/client';
 import { useUserTheme } from '@/app/(hooks)/useUserTheme';
@@ -271,18 +271,30 @@ async function registerForPushNotificationsAsync() {
 
 function DeviceRegistration() {
   const { isSignedIn } = useAuth();
-  const setTimezone = trpc.caregivers.setTimezone.useMutation();
-  const registerPushToken = trpc.pushTokens.register.useMutation();
+  const { mutate: mutateTimezone } = trpc.caregivers.setTimezone.useMutation();
+  const { mutate: mutatePushToken } = trpc.pushTokens.register.useMutation();
+  const didSyncTimezoneRef = useRef(false);
+  const didRegisterPushRef = useRef(false);
 
   useEffect(() => {
-    if (!isSignedIn) return;
-    const tz = Localization.getCalendars()?.[0]?.timeZone ?? null;
+    if (!isSignedIn) {
+      didSyncTimezoneRef.current = false;
+      return;
+    }
+    if (didSyncTimezoneRef.current) return;
+    const tz = getDeviceTimeZone();
     if (!tz) return;
-    setTimezone.mutate({ timezone: tz });
-  }, [isSignedIn, setTimezone]);
+    didSyncTimezoneRef.current = true;
+    mutateTimezone({ timezone: tz });
+  }, [isSignedIn, mutateTimezone]);
 
   useEffect(() => {
-    if (!isSignedIn) return;
+    if (!isSignedIn) {
+      didRegisterPushRef.current = false;
+      return;
+    }
+    if (didRegisterPushRef.current) return;
+    didRegisterPushRef.current = true;
 
     let cancelled = false;
     void (async () => {
@@ -291,13 +303,13 @@ function DeviceRegistration() {
       if (!token) return;
       const platform =
         Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web';
-      registerPushToken.mutate({ token, platform });
+      mutatePushToken({ token, platform });
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [isSignedIn, registerPushToken]);
+  }, [isSignedIn, mutatePushToken]);
 
   return null;
 }

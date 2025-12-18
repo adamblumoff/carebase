@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useUser } from '@clerk/clerk-expo';
-import * as Localization from 'expo-localization';
+import { getDeviceTimeZone } from '@/lib/device-timezone';
 
 import { trpc } from '@/lib/trpc/client';
 
@@ -63,7 +63,7 @@ export default function SetupScreen() {
   const submitCreate = () => {
     setError(null);
     if (!canCreate) return;
-    const timezone = Localization.getCalendars()?.[0]?.timeZone ?? undefined;
+    const timezone = getDeviceTimeZone() ?? undefined;
     create.mutate({
       name: recipientName.trim(),
       caregiverName: caregiverName.trim(),
@@ -74,7 +74,7 @@ export default function SetupScreen() {
   const submitJoin = () => {
     setError(null);
     if (!canJoin) return;
-    const timezone = Localization.getCalendars()?.[0]?.timeZone ?? undefined;
+    const timezone = getDeviceTimeZone() ?? undefined;
     acceptInvite.mutate({
       token: inviteToken.trim(),
       caregiverName: caregiverName.trim(),

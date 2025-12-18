@@ -248,7 +248,7 @@ export default function Home() {
               <View className="flex-row items-start justify-between gap-3">
                 <View className="flex-1">
                   <Text className="text-base font-semibold text-text dark:text-text-dark">
-                    Handoff
+                    Daily note
                   </Text>
                   <Text className="mt-1 text-xs text-text-muted dark:text-text-muted-dark">
                     {todayQuery.data.hubLocalDate} • {todayQuery.data.hubTimezone}
@@ -267,7 +267,7 @@ export default function Home() {
                 ) : null}
               </View>
               <Text className="mt-3 text-sm leading-5 text-text dark:text-text-dark">
-                {handoffBody ? handoffBody : 'No handoff note yet.'}
+                {handoffBody ? handoffBody : 'No note yet.'}
               </Text>
             </View>
 
@@ -313,7 +313,7 @@ export default function Home() {
               <View className="mb-4 flex-row items-center justify-between gap-3">
                 <View className="flex-1">
                   <Text className="text-base font-semibold text-text dark:text-text-dark">
-                    Edit handoff
+                    Edit daily note
                   </Text>
                   <Text className="mt-1 text-xs text-text-muted dark:text-text-muted-dark">
                     {todayQuery.data?.hubLocalDate}

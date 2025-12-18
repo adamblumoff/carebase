@@ -1,8 +1,8 @@
 import { TRPCError } from '@trpc/server';
-import { eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
-import { caregivers } from '../../db/schema';
+import { careRecipientMemberships, careRecipients, caregivers } from '../../db/schema';
 import { ensureCaregiver } from '../../lib/caregiver';
 import { isValidIanaTimeZone } from '../../lib/timezone';
 import { authedProcedure, router } from '../../trpc/trpc';
@@ -51,6 +51,33 @@ export const caregiversRouter = router({
       const caregiverId = await ensureCaregiver(ctx);
       if (!isValidIanaTimeZone(input.timezone)) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Invalid timezone' });
+      }
+
+      const [ownerMembership] = await ctx.db
+        .select({
+          careRecipientId: careRecipientMemberships.careRecipientId,
+        })
+        .from(careRecipientMemberships)
+        .where(
+          and(
+            eq(careRecipientMemberships.caregiverId, caregiverId),
+            eq(careRecipientMemberships.role, 'owner')
+          )
+        )
+        .limit(1);
+
+      // If the owner reports a non-UTC timezone and the hub is still UTC (common after adding this column),
+      // bump the hub to match so shared "Daily note" day-boundaries make sense.
+      if (ownerMembership && input.timezone !== 'UTC') {
+        await ctx.db
+          .update(careRecipients)
+          .set({ timezone: input.timezone })
+          .where(
+            and(
+              eq(careRecipients.id, ownerMembership.careRecipientId),
+              sql`${careRecipients.timezone} = 'UTC'`
+            )
+          );
       }
 
       const [updated] = await ctx.db
