@@ -2,7 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 
-import { documentTasks, documents, tasks } from '../../db/schema';
+import { documentTasks, documents, taskEvents, tasks } from '../../db/schema';
 import { enqueueBackgroundTask } from '../../lib/asyncTasks';
 import { requireCareRecipientMembership, requireOwnerRole } from '../../lib/careRecipient';
 import { processDocument } from '../../lib/documentProcessing';
@@ -137,6 +137,7 @@ export const documentsRouter = router({
         await tx.delete(documentTasks).where(eq(documentTasks.documentId, doc.id));
 
         if (taskIds.length) {
+          await tx.delete(taskEvents).where(inArray(taskEvents.taskId, taskIds));
           await tx
             .delete(tasks)
             .where(
