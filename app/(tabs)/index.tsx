@@ -4,13 +4,16 @@ import { useColorScheme } from 'nativewind';
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 
 import { trpc } from '@/lib/trpc/client';
 import { Container } from '@/components/Container';
@@ -35,6 +38,8 @@ export default function Home() {
   const canEdit = membershipQuery.data?.membership.role === 'owner';
 
   const [detailsTask, setDetailsTask] = useState<any | null>(null);
+  const [handoffOpen, setHandoffOpen] = useState(false);
+  const [handoffDraft, setHandoffDraft] = useState('');
 
   const closeDetails = useCallback(() => setDetailsTask(null), []);
 
@@ -62,6 +67,16 @@ export default function Home() {
     },
     onError: (err) => {
       Alert.alert('Could not review task', err.message);
+    },
+  });
+
+  const upsertHandoff = trpc.handoff.upsertToday.useMutation({
+    onSuccess: () => {
+      setHandoffOpen(false);
+      void invalidateAll();
+    },
+    onError: (err) => {
+      Alert.alert('Could not save handoff', err.message);
     },
   });
 
@@ -230,18 +245,30 @@ export default function Home() {
             refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
             contentContainerStyle={{ paddingBottom: 32 }}>
             <View className="mb-6 rounded-2xl border border-border bg-surface-strong p-4 dark:border-border-dark dark:bg-surface-card-dark">
-              <Text className="text-base font-semibold text-text dark:text-text-dark">Handoff</Text>
-              <Text className="mt-1 text-xs text-text-muted dark:text-text-muted-dark">
-                {todayQuery.data.hubLocalDate} • {todayQuery.data.hubTimezone}
-              </Text>
+              <View className="flex-row items-start justify-between gap-3">
+                <View className="flex-1">
+                  <Text className="text-base font-semibold text-text dark:text-text-dark">
+                    Handoff
+                  </Text>
+                  <Text className="mt-1 text-xs text-text-muted dark:text-text-muted-dark">
+                    {todayQuery.data.hubLocalDate} • {todayQuery.data.hubTimezone}
+                  </Text>
+                </View>
+                {canEdit ? (
+                  <Pressable
+                    onPress={() => {
+                      setHandoffDraft(handoffBody ?? '');
+                      setHandoffOpen(true);
+                    }}
+                    className="h-9 w-9 items-center justify-center rounded-full border border-border dark:border-border-dark"
+                    style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}>
+                    <Ionicons name="create-outline" size={18} color="#4A8F6A" />
+                  </Pressable>
+                ) : null}
+              </View>
               <Text className="mt-3 text-sm leading-5 text-text dark:text-text-dark">
                 {handoffBody ? handoffBody : 'No handoff note yet.'}
               </Text>
-              {canEdit ? (
-                <Text className="mt-3 text-xs text-text-muted dark:text-text-muted-dark">
-                  Edit coming next (P1).
-                </Text>
-              ) : null}
             </View>
 
             {sections?.map((section) => (
@@ -264,6 +291,70 @@ export default function Home() {
       </Container>
 
       <TaskDetailsSheet visible={!!detailsTask} task={detailsTask} onClose={closeDetails} />
+
+      <Modal
+        visible={handoffOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setHandoffOpen(false)}
+        statusBarTranslucent>
+        <KeyboardAwareScrollView
+          contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
+          enableOnAndroid
+          keyboardOpeningTime={0}
+          extraScrollHeight={70}
+          extraHeight={70}
+          keyboardShouldPersistTaps="handled"
+          enableAutomaticScroll
+          scrollEnabled>
+          <View className="flex-1 bg-transparent">
+            <Pressable className="flex-1" onPress={() => setHandoffOpen(false)} />
+            <View className="rounded-t-3xl border border-border bg-white px-5 pb-8 pt-5 dark:border-border-dark dark:bg-surface-card-dark">
+              <View className="mb-4 flex-row items-center justify-between gap-3">
+                <View className="flex-1">
+                  <Text className="text-base font-semibold text-text dark:text-text-dark">
+                    Edit handoff
+                  </Text>
+                  <Text className="mt-1 text-xs text-text-muted dark:text-text-muted-dark">
+                    {todayQuery.data?.hubLocalDate}
+                  </Text>
+                </View>
+                <View className="flex-row items-center gap-2">
+                  <Pressable
+                    onPress={() => setHandoffOpen(false)}
+                    disabled={upsertHandoff.isPending}
+                    style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
+                    <Text className="text-sm text-text-muted">Cancel</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => upsertHandoff.mutate({ body: handoffDraft })}
+                    disabled={upsertHandoff.isPending || !handoffDraft.trim()}
+                    className="rounded-full bg-primary px-4 py-2 dark:bg-primary-deep"
+                    style={({ pressed }) => ({
+                      opacity:
+                        upsertHandoff.isPending || !handoffDraft.trim() ? 0.5 : pressed ? 0.85 : 1,
+                    })}>
+                    <Text className="text-sm font-semibold text-white">
+                      {upsertHandoff.isPending ? 'Saving…' : 'Save'}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+
+              <TextInput
+                value={handoffDraft}
+                onChangeText={setHandoffDraft}
+                editable={!upsertHandoff.isPending}
+                multiline
+                numberOfLines={6}
+                className="rounded-2xl border border-border bg-white px-4 py-3 text-base dark:border-border-dark dark:bg-surface-dark dark:text-text-dark"
+                placeholder="Write a quick note for the care team…"
+                style={{ minHeight: 140, textAlignVertical: 'top' }}
+              />
+            </View>
+          </View>
+        </KeyboardAwareScrollView>
+      </Modal>
     </View>
   );
 }
