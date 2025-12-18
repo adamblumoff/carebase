@@ -1,10 +1,7 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useColorScheme } from 'nativewind';
-import { useAuth } from '@clerk/clerk-expo';
-
-import { trpc } from '@/lib/trpc/client';
 
 const headerLight = '#F5F7F6';
 const headerDark = '#1C2521';
@@ -17,15 +14,6 @@ const mutedDark = '#B6C7BC';
 export default function TabsLayout() {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
-  const { isSignedIn } = useAuth();
-  const utils = trpc.useUtils();
-
-  useEffect(() => {
-    if (!isSignedIn) return;
-    utils.tasks.listThin.prefetch().catch(() => {});
-    utils.tasks.stats.prefetch({ upcomingDays: 7 }).catch(() => {});
-    utils.tasks.upcoming.prefetch({ days: 7 }).catch(() => {});
-  }, [isSignedIn, utils.tasks.listThin, utils.tasks.stats, utils.tasks.upcoming]);
 
   return (
     <Tabs
@@ -48,7 +36,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
+          title: 'Today',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home-outline" color={color} size={size} />
           ),

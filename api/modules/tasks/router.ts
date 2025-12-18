@@ -11,6 +11,8 @@ import {
 import { authedProcedure, router } from '../../trpc/trpc';
 import { ensureCaregiver } from '../../lib/caregiver';
 import { requireCareRecipientMembership, requireOwnerRole } from '../../lib/careRecipient';
+import { recordTaskEvent } from '../../lib/taskEvents';
+import { sendPushToCaregiver } from '../../lib/push';
 import {
   parseSenderDomain,
   SENDER_SUPPRESSION_IGNORE_THRESHOLD,
@@ -314,6 +316,19 @@ export const taskRouter = router({
 
       const [inserted] = await ctx.db.insert(tasks).values(payload).returning();
 
+      await recordTaskEvent({
+        db: ctx.db,
+        taskId: inserted.id,
+        careRecipientId: membership.careRecipientId,
+        actorCaregiverId: caregiverId,
+        type: 'created',
+        payload: {
+          title: inserted.title,
+          type: inserted.type,
+          status: inserted.status,
+        },
+      });
+
       return inserted;
     }),
 
@@ -329,7 +344,7 @@ export const taskRouter = router({
       const now = new Date();
 
       const [task] = await ctx.db
-        .select({ id: tasks.id })
+        .select({ id: tasks.id, title: tasks.title })
         .from(tasks)
         .where(
           and(eq(tasks.id, input.taskId), eq(tasks.careRecipientId, membership.careRecipientId))
@@ -340,8 +355,26 @@ export const taskRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
       }
 
+      const [existingAssignment] = await ctx.db
+        .select({ caregiverId: taskAssignments.caregiverId })
+        .from(taskAssignments)
+        .where(eq(taskAssignments.taskId, input.taskId))
+        .limit(1);
+      const fromAssigneeId = existingAssignment?.caregiverId ?? null;
+
       if (input.caregiverId === null) {
         await ctx.db.delete(taskAssignments).where(eq(taskAssignments.taskId, input.taskId));
+
+        if (fromAssigneeId !== null) {
+          await recordTaskEvent({
+            db: ctx.db,
+            taskId: input.taskId,
+            careRecipientId: membership.careRecipientId,
+            actorCaregiverId: membership.caregiverId,
+            type: 'assigned',
+            payload: { fromAssigneeId, toAssigneeId: null },
+          });
+        }
         return { taskId: input.taskId, assigneeId: null };
       }
 
@@ -368,6 +401,26 @@ export const taskRouter = router({
           set: { caregiverId: input.caregiverId },
         });
 
+      if (fromAssigneeId !== input.caregiverId) {
+        await recordTaskEvent({
+          db: ctx.db,
+          taskId: input.taskId,
+          careRecipientId: membership.careRecipientId,
+          actorCaregiverId: membership.caregiverId,
+          type: 'assigned',
+          payload: { fromAssigneeId, toAssigneeId: input.caregiverId },
+        });
+
+        await sendPushToCaregiver({
+          db: ctx.db,
+          caregiverId: input.caregiverId,
+          title: 'Task assigned to you',
+          body: task.title,
+          data: { type: 'task_assigned', taskId: input.taskId },
+          log: ctx.req?.log,
+        });
+      }
+
       return { taskId: input.taskId, assigneeId: input.caregiverId };
     }),
 
@@ -382,6 +435,12 @@ export const taskRouter = router({
       const membership = await requireOwnerRole(ctx);
       const until = new Date(Date.now() + input.days * 24 * 60 * 60 * 1000);
 
+      const [before] = await ctx.db
+        .select({ status: tasks.status, dueAt: tasks.dueAt })
+        .from(tasks)
+        .where(and(eq(tasks.id, input.id), eq(tasks.careRecipientId, membership.careRecipientId)))
+        .limit(1);
+
       const [updated] = await ctx.db
         .update(tasks)
         .set({ status: 'snoozed', dueAt: until, updatedAt: new Date() })
@@ -391,6 +450,21 @@ export const taskRouter = router({
       if (!updated) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
       }
+
+      await recordTaskEvent({
+        db: ctx.db,
+        taskId: updated.id,
+        careRecipientId: membership.careRecipientId,
+        actorCaregiverId: membership.caregiverId,
+        type: 'snoozed',
+        payload: {
+          days: input.days,
+          fromStatus: before?.status ?? null,
+          toStatus: updated.status,
+          fromDueAt: before?.dueAt ?? null,
+          toDueAt: updated.dueAt,
+        },
+      });
 
       return updated;
     }),
@@ -420,6 +494,15 @@ export const taskRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
       }
 
+      await recordTaskEvent({
+        db: ctx.db,
+        taskId: updated.id,
+        careRecipientId: membership.careRecipientId,
+        actorCaregiverId: caregiverId,
+        type: 'reviewed',
+        payload: { action: 'ignored', via: 'delete' },
+      });
+
       await recordSenderSuppression({
         ctx,
         caregiverId,
@@ -441,6 +524,12 @@ export const taskRouter = router({
       const membership = await requireOwnerRole(ctx);
 
       try {
+        const [before] = await ctx.db
+          .select({ status: tasks.status })
+          .from(tasks)
+          .where(and(eq(tasks.id, input.id), eq(tasks.careRecipientId, membership.careRecipientId)))
+          .limit(1);
+
         const [updated] = await ctx.db
           .update(tasks)
           .set({
@@ -453,6 +542,15 @@ export const taskRouter = router({
         if (!updated) {
           throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
         }
+
+        await recordTaskEvent({
+          db: ctx.db,
+          taskId: updated.id,
+          careRecipientId: membership.careRecipientId,
+          actorCaregiverId: membership.caregiverId,
+          type: 'status_toggled',
+          payload: { fromStatus: before?.status ?? null, toStatus: updated.status },
+        });
 
         return updated;
       } catch (error) {
@@ -500,6 +598,12 @@ export const taskRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Nothing to update' });
       }
 
+      const [before] = await ctx.db
+        .select({ title: tasks.title, description: tasks.description, type: tasks.type })
+        .from(tasks)
+        .where(and(eq(tasks.id, input.id), eq(tasks.careRecipientId, membership.careRecipientId)))
+        .limit(1);
+
       const payload: Partial<typeof tasks.$inferInsert> = {
         updatedAt: new Date(),
       };
@@ -518,6 +622,18 @@ export const taskRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
       }
 
+      await recordTaskEvent({
+        db: ctx.db,
+        taskId: updated.id,
+        careRecipientId: membership.careRecipientId,
+        actorCaregiverId: membership.caregiverId,
+        type: 'updated_details',
+        payload: {
+          from: before ?? null,
+          to: { title: updated.title, description: updated.description, type: updated.type },
+        },
+      });
+
       return updated;
     }),
 
@@ -533,6 +649,12 @@ export const taskRouter = router({
       const caregiverId = membership.caregiverId;
 
       if (input.action === 'ignore') {
+        const [before] = await ctx.db
+          .select({ reviewState: tasks.reviewState, status: tasks.status })
+          .from(tasks)
+          .where(and(eq(tasks.id, input.id), eq(tasks.careRecipientId, membership.careRecipientId)))
+          .limit(1);
+
         const [ignored] = await ctx.db
           .update(tasks)
           .set({ reviewState: 'ignored', status: 'done', updatedAt: new Date() })
@@ -548,6 +670,19 @@ export const taskRouter = router({
           throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
         }
 
+        await recordTaskEvent({
+          db: ctx.db,
+          taskId: ignored.id,
+          careRecipientId: membership.careRecipientId,
+          actorCaregiverId: caregiverId,
+          type: 'reviewed',
+          payload: {
+            action: 'ignored',
+            from: before ?? null,
+            to: { reviewState: 'ignored', status: 'done' },
+          },
+        });
+
         await recordSenderSuppression({
           ctx,
           caregiverId,
@@ -559,6 +694,12 @@ export const taskRouter = router({
         return { id: ignored.id, action: 'ignored' as const };
       }
 
+      const [before] = await ctx.db
+        .select({ reviewState: tasks.reviewState })
+        .from(tasks)
+        .where(and(eq(tasks.id, input.id), eq(tasks.careRecipientId, membership.careRecipientId)))
+        .limit(1);
+
       const [updated] = await ctx.db
         .update(tasks)
         .set({ reviewState: 'approved', updatedAt: new Date() })
@@ -568,6 +709,19 @@ export const taskRouter = router({
       if (!updated) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
       }
+
+      await recordTaskEvent({
+        db: ctx.db,
+        taskId: updated.id,
+        careRecipientId: membership.careRecipientId,
+        actorCaregiverId: caregiverId,
+        type: 'reviewed',
+        payload: {
+          action: 'approved',
+          from: before ?? null,
+          to: { reviewState: 'approved' },
+        },
+      });
 
       return { ...updated, action: 'approved' as const };
     }),

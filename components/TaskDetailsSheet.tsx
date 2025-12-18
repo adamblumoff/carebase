@@ -121,6 +121,17 @@ export const TaskDetailsSheet = ({
   );
 
   const resolvedTask = (taskDetailsQuery.data as any as TaskLike | null) ?? task;
+  const taskId = resolvedTask?.id ?? task?.id ?? null;
+
+  const taskEventsQuery = trpc.taskEvents.list.useQuery(
+    { taskId: taskId ?? '00000000-0000-0000-0000-000000000000', limit: 30 },
+    {
+      enabled: visible && !!taskId,
+      staleTime: 30 * 1000,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+    }
+  );
 
   const membershipQuery = trpc.careRecipients.my.useQuery(undefined, {
     enabled: visible,
@@ -292,6 +303,42 @@ export const TaskDetailsSheet = ({
     await Linking.openURL(calendarUrl);
   };
 
+  const formatEvent = (event: any) => {
+    const actor = event?.actor?.name ?? event?.actor?.email ?? 'Someone';
+    const when = formatDateTime(event?.createdAt) ?? '';
+    const type = event?.type as string | undefined;
+    const payload = event?.payload as any;
+
+    const base = (() => {
+      if (type === 'created') return 'Created task';
+      if (type === 'reviewed') {
+        const action = payload?.action;
+        if (action === 'approved') return 'Approved task';
+        if (action === 'ignored') return 'Ignored task';
+        return 'Reviewed task';
+      }
+      if (type === 'status_toggled') {
+        const to = payload?.toStatus;
+        if (to === 'done') return 'Marked done';
+        if (to === 'todo') return 'Reopened';
+        return 'Updated status';
+      }
+      if (type === 'assigned') {
+        const to = payload?.toAssigneeId;
+        return to ? 'Assigned task' : 'Unassigned task';
+      }
+      if (type === 'snoozed') {
+        const days = payload?.days;
+        if (typeof days === 'number') return `Snoozed ${days} day${days === 1 ? '' : 's'}`;
+        return 'Snoozed';
+      }
+      if (type === 'updated_details') return 'Edited details';
+      return 'Updated task';
+    })();
+
+    return `${base} • ${actor}${when ? ` • ${when}` : ''}`;
+  };
+
   return (
     <Modal
       visible={visible}
@@ -383,6 +430,31 @@ export const TaskDetailsSheet = ({
               {sender ? (
                 <Text className="text-xs text-text-muted dark:text-text-muted-dark">{sender}</Text>
               ) : null}
+
+              <View className="gap-1">
+                <Text className="text-xs font-semibold uppercase tracking-wide text-text-muted dark:text-text-muted-dark">
+                  History
+                </Text>
+                {taskEventsQuery.isLoading ? (
+                  <Text className="text-xs text-text-muted dark:text-text-muted-dark">
+                    Loading…
+                  </Text>
+                ) : taskEventsQuery.data?.length ? (
+                  <View className="gap-1">
+                    {taskEventsQuery.data.map((event: any) => (
+                      <Text
+                        key={event.id}
+                        className="text-xs leading-5 text-text-muted dark:text-text-muted-dark">
+                        {formatEvent(event)}
+                      </Text>
+                    ))}
+                  </View>
+                ) : (
+                  <Text className="text-xs text-text-muted dark:text-text-muted-dark">
+                    No history yet.
+                  </Text>
+                )}
+              </View>
 
               {canEdit ? (
                 <View className="flex-row flex-wrap gap-3">

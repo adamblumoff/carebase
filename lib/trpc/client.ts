@@ -103,7 +103,7 @@ export const createTrpcClient = (getToken: () => Promise<string | null>) => {
               url: `${apiBaseUrl}/trpc`,
               method: 'POST',
               fetch: jsonGuardFetch,
-              maxBatchSize: 1,
+              maxBatchSize: 10,
               async headers() {
                 const token = await getToken();
                 if (!token) {
@@ -117,7 +117,7 @@ export const createTrpcClient = (getToken: () => Promise<string | null>) => {
             url: `${apiBaseUrl}/trpc`,
             method: 'POST',
             fetch: jsonGuardFetch,
-            maxBatchSize: 1,
+            maxBatchSize: 10,
             async headers() {
               const token = await getToken();
               if (!token) {

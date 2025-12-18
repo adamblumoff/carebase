@@ -92,7 +92,7 @@ Help non-professional, middle-age family caregivers reduce burnout by:
   - if none, route to a “needs setup” state (avoid silent misfiling)
 - Only ingest from sources marked Primary by default (future: “enable ingestion” toggle per source).
 
-### P1 (2–6 weeks): Today view + handoffs + audit trail
+### P1 (2–6 weeks): Today view + daily note + audit trail
 
 **Outcome:** The app becomes a daily operating system, not just a list.
 
@@ -109,12 +109,11 @@ Help non-professional, middle-age family caregivers reduce burnout by:
   - snooze
   - open source email/calendar
 
-2) Handoff notes (shift-change friendly)
-- A lightweight “Handoff” note pinned to Today:
-  - “What happened today”
-  - “What to watch for”
-  - “Open loops”
-- Optional per-day notes; editable by editors/admins.
+2) Daily note (shift-change friendly)
+- A lightweight “Daily note” pinned to Today:
+  - Single shared blob of text for the care team.
+  - Keyed by the CareHub’s timezone day boundary so everyone sees the same “today”.
+- Owner-only edit for now.
 
 3) Audit trail (“what changed, by who”)
 - A `task_events` table capturing:
@@ -132,7 +131,7 @@ Help non-professional, middle-age family caregivers reduce burnout by:
 
 **Acceptance criteria**
 - A caregiver can open the app and finish the top 3 actions in <30 seconds.
-- Handoff reduces repeated texting (“what’s going on?”) inside the family.
+- Daily note reduces repeated texting (“what’s going on?”) inside the family.
 
 ### P2 (6–12 weeks): Care Profile hub + document-first intake + export
 

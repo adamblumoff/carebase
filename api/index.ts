@@ -21,6 +21,7 @@ import { syncCalendarSource } from './modules/ingestion/calendar';
 import { debounceRun, verifyPubsubJwt } from './lib/pubsub';
 import { renewSource, fallbackPoll } from './lib/watch';
 import { Ticker } from './lib/scheduler';
+import { runNotificationTick } from './lib/notifications';
 import { WebSocketServer } from 'ws';
 import { applyWSSHandler } from '@trpc/server/adapters/ws';
 
@@ -383,8 +384,17 @@ const registerPlugins = async () => {
     }
   });
 
+  const notificationTicker = new Ticker(60 * 1000, async () => {
+    try {
+      await runNotificationTick({ db, log: server.log });
+    } catch (err) {
+      server.log.error({ err }, 'notification tick failed');
+    }
+  });
+
   renewalTicker.start(true);
   fallbackTicker.start(true);
+  notificationTicker.start(true);
 
   // one-time bootstrap to ensure watches exist for all active sources
   try {

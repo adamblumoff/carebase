@@ -1,0 +1,1 @@
+DROP INDEX "push_tokens_caregiver_token_uidx";

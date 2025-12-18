@@ -9,6 +9,7 @@ import {
   text,
   timestamp,
   uuid,
+  index,
   uniqueIndex,
   varchar,
 } from 'drizzle-orm/pg-core';
@@ -26,12 +27,33 @@ export const sourceProvider = pgEnum('source_provider', ['gmail']);
 export const sourceStatus = pgEnum('source_status', ['active', 'errored', 'disconnected']);
 export const themePreference = pgEnum('theme_preference', ['light', 'dark']);
 export const careRecipientRole = pgEnum('care_recipient_role', ['owner', 'viewer']);
+export const careRecipientTimezoneSource = pgEnum('care_recipient_timezone_source', [
+  'unset',
+  'owner_device',
+  'explicit',
+]);
+export const pushPlatform = pgEnum('push_platform', ['ios', 'android', 'web']);
+export const notificationType = pgEnum('notification_type', [
+  'task_assigned',
+  'review_digest',
+  'appointment_today',
+]);
+export const taskEventTypeValues = [
+  'created',
+  'reviewed',
+  'status_toggled',
+  'assigned',
+  'snoozed',
+  'updated_details',
+] as const;
+export const taskEventType = pgEnum('task_event_type', taskEventTypeValues);
 
 export const caregivers = pgTable('caregivers', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: text('name').notNull(),
   email: varchar('email', { length: 255 }).notNull().unique(),
   themePreference: themePreference('theme_preference').default('light').notNull(),
+  timezone: varchar('timezone', { length: 64 }).default('UTC').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true })
     .default(sql`now()`)
     .notNull(),
@@ -40,6 +62,8 @@ export const caregivers = pgTable('caregivers', {
 export const careRecipients = pgTable('care_recipients', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: text('name').notNull(),
+  timezone: varchar('timezone', { length: 64 }).default('UTC').notNull(),
+  timezoneSource: careRecipientTimezoneSource('timezone_source').default('unset').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true })
     .default(sql`now()`)
     .notNull(),
@@ -145,6 +169,27 @@ export const tasks = pgTable(
       table.provider,
       table.externalId
     ),
+    careRecipientCreatedIdx: index('tasks_care_recipient_created_at_idx').on(
+      table.careRecipientId,
+      table.createdAt
+    ),
+    careRecipientReviewIdx: index('tasks_care_recipient_review_state_idx').on(
+      table.careRecipientId,
+      table.reviewState
+    ),
+    careRecipientStatusUpdatedIdx: index('tasks_care_recipient_status_updated_at_idx').on(
+      table.careRecipientId,
+      table.status,
+      table.updatedAt
+    ),
+    careRecipientStartIdx: index('tasks_care_recipient_start_at_idx').on(
+      table.careRecipientId,
+      table.startAt
+    ),
+    careRecipientDueIdx: index('tasks_care_recipient_due_at_idx').on(
+      table.careRecipientId,
+      table.dueAt
+    ),
   })
 );
 
@@ -164,6 +209,109 @@ export const taskAssignments = pgTable(
   },
   (table) => ({
     taskUnique: uniqueIndex('task_assignments_task_uidx').on(table.taskId),
+    caregiverIdx: index('task_assignments_caregiver_id_idx').on(table.caregiverId),
+  })
+);
+
+export const pushTokens = pgTable(
+  'push_tokens',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    caregiverId: uuid('caregiver_id')
+      .notNull()
+      .references(() => caregivers.id),
+    token: text('token').notNull(),
+    platform: pushPlatform('platform').notNull(),
+    disabledAt: timestamp('disabled_at', { withTimezone: true }),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true })
+      .default(sql`now()`)
+      .notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .default(sql`now()`)
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .default(sql`now()`)
+      .notNull(),
+  },
+  (table) => ({
+    tokenUnique: uniqueIndex('push_tokens_token_uidx').on(table.token),
+    caregiverActiveIdx: index('push_tokens_caregiver_disabled_at_idx').on(
+      table.caregiverId,
+      table.disabledAt
+    ),
+  })
+);
+
+export const notificationDeliveries = pgTable(
+  'notification_deliveries',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    caregiverId: uuid('caregiver_id')
+      .notNull()
+      .references(() => caregivers.id),
+    type: notificationType('type').notNull(),
+    key: varchar('key', { length: 64 }).notNull(),
+    sentAt: timestamp('sent_at', { withTimezone: true })
+      .default(sql`now()`)
+      .notNull(),
+  },
+  (table) => ({
+    unique: uniqueIndex('notification_deliveries_caregiver_type_key_uidx').on(
+      table.caregiverId,
+      table.type,
+      table.key
+    ),
+  })
+);
+
+export const handoffNotes = pgTable(
+  'handoff_notes',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    careRecipientId: uuid('care_recipient_id')
+      .notNull()
+      .references(() => careRecipients.id),
+    localDate: varchar('local_date', { length: 10 }).notNull(),
+    body: text('body').notNull(),
+    updatedByCaregiverId: uuid('updated_by_caregiver_id')
+      .notNull()
+      .references(() => caregivers.id),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .default(sql`now()`)
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .default(sql`now()`)
+      .notNull(),
+  },
+  (table) => ({
+    unique: uniqueIndex('handoff_notes_care_recipient_local_date_uidx').on(
+      table.careRecipientId,
+      table.localDate
+    ),
+  })
+);
+
+export const taskEvents = pgTable(
+  'task_events',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id),
+    careRecipientId: uuid('care_recipient_id')
+      .notNull()
+      .references(() => careRecipients.id),
+    actorCaregiverId: uuid('actor_caregiver_id')
+      .notNull()
+      .references(() => caregivers.id),
+    type: taskEventType('type').notNull(),
+    payload: jsonb('payload'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .default(sql`now()`)
+      .notNull(),
+  },
+  (table) => ({
+    taskCreatedIdx: index('task_events_task_id_created_at_idx').on(table.taskId, table.createdAt),
   })
 );
 

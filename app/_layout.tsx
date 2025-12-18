@@ -9,6 +9,7 @@ import { PostHogProvider } from 'posthog-react-native';
 import { useFonts } from 'expo-font';
 import { Roboto_500Medium } from '@expo-google-fonts/roboto';
 import { useColorScheme } from 'nativewind';
+import { DeviceRegistration } from '@/components/DeviceRegistration';
 
 import { createQueryClientAndPersister, createTrpcClient, trpc } from '@/lib/trpc/client';
 import { useUserTheme } from '@/app/(hooks)/useUserTheme';
@@ -106,10 +107,7 @@ function TrpcProvider({ children }: { children: React.ReactNode }) {
   return (
     <PersistQueryClientProvider client={queryClient} persistOptions={{ persister }}>
       <trpc.Provider client={trpcClient} queryClient={queryClient}>
-        <ThemeGate>
-          <PreloadTasks />
-          {children}
-        </ThemeGate>
+        <ThemeGate>{children}</ThemeGate>
       </trpc.Provider>
     </PersistQueryClientProvider>
   );
@@ -122,6 +120,7 @@ function ThemeGate({ children }: { children: React.ReactNode }) {
   if (!themeReady) return <FullScreenLoading title="Loading…" colorScheme={colorScheme} />;
   return (
     <PushToastLayer>
+      <DeviceRegistration />
       <SetupGate preload={<PreloadTasks />}>{children}</SetupGate>
     </PushToastLayer>
   );
@@ -133,6 +132,7 @@ function PreloadTasks() {
 
   useEffect(() => {
     if (!isSignedIn) return;
+    utils.today.feed.prefetch().catch(() => {});
     utils.tasks.listThin.prefetch().catch(() => {});
     utils.tasks.stats.prefetch({ upcomingDays: 7 }).catch(() => {});
     utils.tasks.upcoming.prefetch({ days: 7 }).catch(() => {});
@@ -143,6 +143,7 @@ function PreloadTasks() {
     utils.tasks.listThin,
     utils.tasks.stats,
     utils.tasks.upcoming,
+    utils.today.feed,
   ]);
 
   return null;

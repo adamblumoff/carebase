@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useUser } from '@clerk/clerk-expo';
+import { getDeviceTimeZone } from '@/lib/device-timezone';
 
 import { trpc } from '@/lib/trpc/client';
 
@@ -62,13 +63,23 @@ export default function SetupScreen() {
   const submitCreate = () => {
     setError(null);
     if (!canCreate) return;
-    create.mutate({ name: recipientName.trim(), caregiverName: caregiverName.trim() });
+    const timezone = getDeviceTimeZone() ?? undefined;
+    create.mutate({
+      name: recipientName.trim(),
+      caregiverName: caregiverName.trim(),
+      timezone,
+    });
   };
 
   const submitJoin = () => {
     setError(null);
     if (!canJoin) return;
-    acceptInvite.mutate({ token: inviteToken.trim(), caregiverName: caregiverName.trim() });
+    const timezone = getDeviceTimeZone() ?? undefined;
+    acceptInvite.mutate({
+      token: inviteToken.trim(),
+      caregiverName: caregiverName.trim(),
+      timezone,
+    });
   };
 
   return (
