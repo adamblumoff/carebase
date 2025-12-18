@@ -385,7 +385,11 @@ const registerPlugins = async () => {
   });
 
   const notificationTicker = new Ticker(60 * 1000, async () => {
-    await runNotificationTick({ db, log: server.log });
+    try {
+      await runNotificationTick({ db, log: server.log });
+    } catch (err) {
+      server.log.error({ err }, 'notification tick failed');
+    }
   });
 
   renewalTicker.start(true);

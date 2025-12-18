@@ -18,24 +18,79 @@ const withinDigestWindow = (dt: DateTime) => {
   return dt.hour === DIGEST_HOUR_LOCAL && dt.minute < DIGEST_MINUTE_WINDOW;
 };
 
+const timezoneIsInDigestWindow = (timeZone: string, now: Date) => {
+  try {
+    const dt = DateTime.fromJSDate(now, { zone: timeZone });
+    return dt.isValid && withinDigestWindow(dt);
+  } catch {
+    return false;
+  }
+};
+
 export const runNotificationTick = async ({ db, log }: { db: any; log?: any }) => {
   const now = new Date();
 
-  const memberships = await db
-    .select({
-      careRecipientId: careRecipientMemberships.careRecipientId,
-      caregiverId: careRecipientMemberships.caregiverId,
-      role: careRecipientMemberships.role,
-      caregiverTimezone: caregivers.timezone,
-      hubTimezone: careRecipients.timezone,
-    })
-    .from(careRecipientMemberships)
-    .innerJoin(caregivers, eq(caregivers.id, careRecipientMemberships.caregiverId))
-    .innerJoin(careRecipients, eq(careRecipients.id, careRecipientMemberships.careRecipientId));
+  const caregiverTimezoneRows = await db
+    .selectDistinct({ tz: caregivers.timezone })
+    .from(caregivers);
+  const hubTimezoneRows = await db
+    .selectDistinct({ tz: careRecipients.timezone })
+    .from(careRecipients);
+
+  const caregiverTimezonesInWindow = caregiverTimezoneRows
+    .map((row: any) => row.tz as string)
+    .filter(Boolean)
+    .filter((tz: string) => timezoneIsInDigestWindow(tz, now));
+
+  const hubTimezonesInWindow = hubTimezoneRows
+    .map((row: any) => row.tz as string)
+    .filter(Boolean)
+    .filter((tz: string) => timezoneIsInDigestWindow(tz, now));
+
+  if (!caregiverTimezonesInWindow.length && !hubTimezonesInWindow.length) {
+    return;
+  }
+
+  const membershipSelect = {
+    careRecipientId: careRecipientMemberships.careRecipientId,
+    caregiverId: careRecipientMemberships.caregiverId,
+    role: careRecipientMemberships.role,
+    caregiverTimezone: caregivers.timezone,
+    hubTimezone: careRecipients.timezone,
+  };
+
+  const [ownerMemberships, caregiverMemberships] = await Promise.all([
+    hubTimezonesInWindow.length
+      ? db
+          .select(membershipSelect)
+          .from(careRecipientMemberships)
+          .innerJoin(caregivers, eq(caregivers.id, careRecipientMemberships.caregiverId))
+          .innerJoin(
+            careRecipients,
+            eq(careRecipients.id, careRecipientMemberships.careRecipientId)
+          )
+          .where(
+            and(
+              eq(careRecipientMemberships.role, 'owner'),
+              inArray(careRecipients.timezone, hubTimezonesInWindow)
+            )
+          )
+      : Promise.resolve([]),
+    caregiverTimezonesInWindow.length
+      ? db
+          .select(membershipSelect)
+          .from(careRecipientMemberships)
+          .innerJoin(caregivers, eq(caregivers.id, careRecipientMemberships.caregiverId))
+          .innerJoin(
+            careRecipients,
+            eq(careRecipients.id, careRecipientMemberships.careRecipientId)
+          )
+          .where(inArray(caregivers.timezone, caregiverTimezonesInWindow))
+      : Promise.resolve([]),
+  ]);
 
   // Review digest (hub timezone): owner-only, only if pending review exists.
-  const ownersDue = (memberships as any[])
-    .filter((m) => m.role === 'owner')
+  const ownersDue = (ownerMemberships as any[])
     .map((owner) => {
       const dt = DateTime.fromJSDate(now, { zone: owner.hubTimezone ?? 'UTC' });
       if (!withinDigestWindow(dt)) return null;
@@ -99,7 +154,7 @@ export const runNotificationTick = async ({ db, log }: { db: any; log?: any }) =
     string,
     { caregiverId: string; careRecipientId: string; localDate: string }[]
   >();
-  for (const member of memberships as any[]) {
+  for (const member of caregiverMemberships as any[]) {
     const tz = member.caregiverTimezone ?? 'UTC';
     const dt = DateTime.fromJSDate(now, { zone: tz });
     if (!withinDigestWindow(dt)) continue;

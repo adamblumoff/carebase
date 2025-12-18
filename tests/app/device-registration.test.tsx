@@ -62,7 +62,10 @@ test('sets timezone once per sign-in', () => {
   screen.rerender(<DeviceRegistration />);
 
   expect(mockSetTimezoneMutate).toHaveBeenCalledTimes(1);
-  expect(mockSetTimezoneMutate).toHaveBeenCalledWith({ timezone: 'America/Chicago' });
+  expect(mockSetTimezoneMutate).toHaveBeenCalledWith(
+    { timezone: 'America/Chicago' },
+    expect.any(Object)
+  );
 });
 
 test('resets guards after sign-out', () => {

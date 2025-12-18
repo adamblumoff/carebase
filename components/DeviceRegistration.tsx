@@ -51,36 +51,75 @@ export function DeviceRegistration() {
   const { mutate: mutateTimezone } = trpc.caregivers.setTimezone.useMutation();
   const { mutate: mutatePushToken } = trpc.pushTokens.register.useMutation();
   const didSyncTimezoneRef = useRef(false);
+  const timezoneInFlightRef = useRef(false);
+  const lastTimezoneAttemptAtRef = useRef(0);
   const didRegisterPushRef = useRef(false);
+  const pushInFlightRef = useRef(false);
+  const lastPushAttemptAtRef = useRef(0);
 
   useEffect(() => {
     if (!isSignedIn) {
       didSyncTimezoneRef.current = false;
+      timezoneInFlightRef.current = false;
+      lastTimezoneAttemptAtRef.current = 0;
       return;
     }
     if (didSyncTimezoneRef.current) return;
+    if (timezoneInFlightRef.current) return;
+    if (Date.now() - lastTimezoneAttemptAtRef.current < 15_000) return;
     const tz = getDeviceTimeZone();
     if (!tz) return;
-    didSyncTimezoneRef.current = true;
-    mutateTimezone({ timezone: tz });
+    timezoneInFlightRef.current = true;
+    lastTimezoneAttemptAtRef.current = Date.now();
+    mutateTimezone(
+      { timezone: tz },
+      {
+        onSuccess: () => {
+          didSyncTimezoneRef.current = true;
+          timezoneInFlightRef.current = false;
+        },
+        onError: () => {
+          timezoneInFlightRef.current = false;
+        },
+      }
+    );
   }, [isSignedIn, mutateTimezone]);
 
   useEffect(() => {
     if (!isSignedIn) {
       didRegisterPushRef.current = false;
+      pushInFlightRef.current = false;
+      lastPushAttemptAtRef.current = 0;
       return;
     }
     if (didRegisterPushRef.current) return;
-    didRegisterPushRef.current = true;
+    if (pushInFlightRef.current) return;
+    if (Date.now() - lastPushAttemptAtRef.current < 30_000) return;
+    pushInFlightRef.current = true;
+    lastPushAttemptAtRef.current = Date.now();
 
     let cancelled = false;
     void (async () => {
       const token = await registerForPushNotificationsAsync();
       if (cancelled) return;
-      if (!token) return;
+      if (!token) {
+        pushInFlightRef.current = false;
+        return;
+      }
       const platform =
         Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web';
-      mutatePushToken({ token, platform });
+      mutatePushToken(
+        { token, platform },
+        {
+          onSuccess: () => {
+            didRegisterPushRef.current = true;
+            pushInFlightRef.current = false;
+          },
+          onError: () => {
+            pushInFlightRef.current = false;
+          },
+        }
+      );
     })();
 
     return () => {

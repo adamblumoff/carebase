@@ -155,3 +155,8 @@ Server sending:
 
 - Assignment pushes are sent from `trpc.tasks.assign` (to the assignee).
 - Daily digests are sent by a background ticker in `api/index.ts` (review digest + appointment today) and deduped via `notification_deliveries`.
+
+Notes:
+
+- Digest dedupe is per caregiver **and CareHub** (key includes the `careRecipientId`) so multiple hubs can notify on the same day.
+- Push token registration is strict: an Expo push token cannot be reassigned to a different caregiver.

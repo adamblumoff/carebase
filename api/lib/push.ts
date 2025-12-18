@@ -3,6 +3,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { pushTokens } from '../db/schema';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+const EXPO_MAX_MESSAGES_PER_REQUEST = 100;
 
 type ExpoPushMessage = {
   to: string;
@@ -16,6 +17,15 @@ type ExpoPushMessage = {
 const asArray = <T>(value: T | T[] | undefined | null): T[] => {
   if (!value) return [];
   return Array.isArray(value) ? value : [value];
+};
+
+const chunk = <T>(values: T[], size: number) => {
+  if (size <= 0) return [values];
+  const out: T[][] = [];
+  for (let i = 0; i < values.length; i += size) {
+    out.push(values.slice(i, i + size));
+  }
+  return out;
 };
 
 const shouldDisableTokenFromReceipt = (receipt: any) => {
@@ -62,45 +72,55 @@ export const sendPushToCaregiver = async ({
     priority: 'high',
   }));
 
-  let responseJson: any = null;
-  try {
-    const res = await fetch(EXPO_PUSH_URL, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Accept-Encoding': 'gzip, deflate',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(messages),
-    });
-
-    const raw = await res.text().catch(() => '');
-    responseJson = raw ? JSON.parse(raw) : null;
-
-    if (!res.ok) {
-      log?.error?.(
-        { status: res.status, caregiverId, body: raw.slice(0, 500) },
-        'push send failed (non-2xx)'
-      );
-      return { ok: false as const, sent: 0 };
-    }
-
-    if (!responseJson || !responseJson.data) {
-      log?.error?.({ caregiverId, body: raw.slice(0, 500) }, 'push send failed (bad response)');
-      return { ok: false as const, sent: 0 };
-    }
-  } catch (err) {
-    log?.error?.({ err, caregiverId }, 'push send failed');
-    return { ok: false as const, sent: 0 };
-  }
-
-  const receipts = asArray(responseJson?.data);
   const invalidTokens: string[] = [];
-  receipts.forEach((receipt, idx) => {
-    if (!shouldDisableTokenFromReceipt(receipt)) return;
-    const token = messages[idx]?.to;
-    if (token) invalidTokens.push(token);
-  });
+  const chunks = chunk(messages, EXPO_MAX_MESSAGES_PER_REQUEST);
+  let ok = true;
+  let sent = 0;
+
+  for (const batch of chunks) {
+    let responseJson: any = null;
+    try {
+      const res = await fetch(EXPO_PUSH_URL, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Accept-Encoding': 'gzip, deflate',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(batch),
+      });
+
+      const raw = await res.text().catch(() => '');
+      responseJson = raw ? JSON.parse(raw) : null;
+
+      if (!res.ok) {
+        ok = false;
+        log?.error?.(
+          { status: res.status, caregiverId, body: raw.slice(0, 500) },
+          'push send failed (non-2xx)'
+        );
+        continue;
+      }
+
+      if (!responseJson || !responseJson.data) {
+        ok = false;
+        log?.error?.({ caregiverId, body: raw.slice(0, 500) }, 'push send failed (bad response)');
+        continue;
+      }
+    } catch (err) {
+      ok = false;
+      log?.error?.({ err, caregiverId }, 'push send failed');
+      continue;
+    }
+
+    const receipts = asArray(responseJson?.data);
+    receipts.forEach((receipt, idx) => {
+      if (!shouldDisableTokenFromReceipt(receipt)) return;
+      const token = batch[idx]?.to;
+      if (token) invalidTokens.push(token);
+    });
+    sent += batch.length;
+  }
 
   if (invalidTokens.length) {
     const now = new Date();
@@ -110,5 +130,5 @@ export const sendPushToCaregiver = async ({
       .where(inArray(pushTokens.token, invalidTokens));
   }
 
-  return { ok: true as const, sent: messages.length };
+  return { ok: ok as boolean, sent };
 };

@@ -1,12 +1,6 @@
-import { taskEvents } from '../db/schema';
+import { taskEventTypeValues, taskEvents } from '../db/schema';
 
-export type TaskEventType =
-  | 'created'
-  | 'reviewed'
-  | 'status_toggled'
-  | 'assigned'
-  | 'snoozed'
-  | 'updated_details';
+export type TaskEventType = (typeof taskEventTypeValues)[number];
 
 export const recordTaskEvent = async ({
   db,

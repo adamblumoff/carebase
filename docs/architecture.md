@@ -62,6 +62,9 @@
 - `caregivers`: app user record (maps to Clerk user via email).
   - includes `caregivers.timezone` (IANA string, set from the app)
 - `care_recipient_memberships`: links caregivers to exactly one CareHub (role is `owner` or `viewer`).
+- `care_recipients`: CareHub row.
+  - includes `care_recipients.timezone` (IANA string used for shared Daily note day boundaries)
+  - includes `care_recipients.timezone_source` to distinguish “unset” vs derived vs explicit
 - `sources`: connected provider accounts (currently `gmail`), refresh tokens, watch metadata, status.
 - `tasks`: primary UI entity; both manual tasks and ingested tasks live here (ingested tasks also carry `senderDomain` + `ingestionDebug` for diagnosis).
 - `handoff_notes`: daily note keyed by `(careRecipientId, localDate)` using the CareHub timezone.

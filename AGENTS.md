@@ -62,3 +62,7 @@
 - Capture previous cache for rollback, but only roll back if the cache still matches the optimistic state (skip if the user already tapped again).
 - On success, merge the server row back into the cache only if it matches the optimistic state; otherwise leave the user’s newer change intact and rely on a later invalidate to reconcile.
 - Invalidate after settle, preferably low-priority (background) so active lists keep their optimistic feel.
+
+## Push + Timezones (P1)
+- Caregivers report device timezone via `trpc.caregivers.setTimezone`; the hub timezone may be derived only when `care_recipients.timezone_source = 'unset'`.
+- Expo push tokens are stored in `push_tokens`; token registration must not allow cross-caregiver reassignment.

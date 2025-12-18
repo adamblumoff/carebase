@@ -1,5 +1,5 @@
 import { TRPCError } from '@trpc/server';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { careRecipientMemberships, careRecipients, caregivers } from '../../db/schema';
@@ -66,16 +66,16 @@ export const caregiversRouter = router({
         )
         .limit(1);
 
-      // If the owner reports a non-UTC timezone and the hub is still UTC (common after adding this column),
-      // bump the hub to match so shared "Daily note" day-boundaries make sense.
-      if (ownerMembership && input.timezone !== 'UTC') {
+      // If the owner reports a timezone and the hub timezone is still "unset", bump it to match so
+      // shared Daily note day-boundaries make sense. Avoid rewriting hubs whose timezone was explicitly set.
+      if (ownerMembership) {
         await ctx.db
           .update(careRecipients)
-          .set({ timezone: input.timezone })
+          .set({ timezone: input.timezone, timezoneSource: 'owner_device' })
           .where(
             and(
               eq(careRecipients.id, ownerMembership.careRecipientId),
-              sql`${careRecipients.timezone} = 'UTC'`
+              eq(careRecipients.timezoneSource, 'unset')
             )
           );
       }

@@ -27,20 +27,26 @@ export const sourceProvider = pgEnum('source_provider', ['gmail']);
 export const sourceStatus = pgEnum('source_status', ['active', 'errored', 'disconnected']);
 export const themePreference = pgEnum('theme_preference', ['light', 'dark']);
 export const careRecipientRole = pgEnum('care_recipient_role', ['owner', 'viewer']);
+export const careRecipientTimezoneSource = pgEnum('care_recipient_timezone_source', [
+  'unset',
+  'owner_device',
+  'explicit',
+]);
 export const pushPlatform = pgEnum('push_platform', ['ios', 'android', 'web']);
 export const notificationType = pgEnum('notification_type', [
   'task_assigned',
   'review_digest',
   'appointment_today',
 ]);
-export const taskEventType = pgEnum('task_event_type', [
+export const taskEventTypeValues = [
   'created',
   'reviewed',
   'status_toggled',
   'assigned',
   'snoozed',
   'updated_details',
-]);
+] as const;
+export const taskEventType = pgEnum('task_event_type', taskEventTypeValues);
 
 export const caregivers = pgTable('caregivers', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -57,6 +63,7 @@ export const careRecipients = pgTable('care_recipients', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: text('name').notNull(),
   timezone: varchar('timezone', { length: 64 }).default('UTC').notNull(),
+  timezoneSource: careRecipientTimezoneSource('timezone_source').default('unset').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true })
     .default(sql`now()`)
     .notNull(),
@@ -162,6 +169,27 @@ export const tasks = pgTable(
       table.provider,
       table.externalId
     ),
+    careRecipientCreatedIdx: index('tasks_care_recipient_created_at_idx').on(
+      table.careRecipientId,
+      table.createdAt
+    ),
+    careRecipientReviewIdx: index('tasks_care_recipient_review_state_idx').on(
+      table.careRecipientId,
+      table.reviewState
+    ),
+    careRecipientStatusUpdatedIdx: index('tasks_care_recipient_status_updated_at_idx').on(
+      table.careRecipientId,
+      table.status,
+      table.updatedAt
+    ),
+    careRecipientStartIdx: index('tasks_care_recipient_start_at_idx').on(
+      table.careRecipientId,
+      table.startAt
+    ),
+    careRecipientDueIdx: index('tasks_care_recipient_due_at_idx').on(
+      table.careRecipientId,
+      table.dueAt
+    ),
   })
 );
 
@@ -181,6 +209,7 @@ export const taskAssignments = pgTable(
   },
   (table) => ({
     taskUnique: uniqueIndex('task_assignments_task_uidx').on(table.taskId),
+    caregiverIdx: index('task_assignments_caregiver_id_idx').on(table.caregiverId),
   })
 );
 
@@ -206,6 +235,10 @@ export const pushTokens = pgTable(
   },
   (table) => ({
     tokenUnique: uniqueIndex('push_tokens_token_uidx').on(table.token),
+    caregiverActiveIdx: index('push_tokens_caregiver_disabled_at_idx').on(
+      table.caregiverId,
+      table.disabledAt
+    ),
   })
 );
 

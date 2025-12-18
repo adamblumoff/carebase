@@ -107,7 +107,12 @@ export const careRecipientsRouter = router({
 
     const [recipient] = await ctx.db
       .insert(careRecipients)
-      .values({ name: input.name.trim(), timezone, createdAt: now })
+      .values({
+        name: input.name.trim(),
+        timezone,
+        timezoneSource: timezone !== 'UTC' ? 'owner_device' : 'unset',
+        createdAt: now,
+      })
       .returning({
         id: careRecipients.id,
         name: careRecipients.name,
