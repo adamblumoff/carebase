@@ -134,18 +134,15 @@ export const documentsRouter = router({
 
         const taskIds = linkedTasks.map((row) => row.taskId);
 
+        await tx.delete(documentTasks).where(eq(documentTasks.documentId, doc.id));
+
         if (taskIds.length) {
           await tx
             .delete(tasks)
             .where(
-              and(
-                eq(tasks.careRecipientId, membership.careRecipientId),
-                inArray(tasks.id, taskIds)
-              )
+              and(eq(tasks.careRecipientId, membership.careRecipientId), inArray(tasks.id, taskIds))
             );
         }
-
-        await tx.delete(documentTasks).where(eq(documentTasks.documentId, doc.id));
 
         await tx
           .delete(documents)
