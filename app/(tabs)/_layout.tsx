@@ -22,10 +22,11 @@ export default function TabsLayout() {
 
   useEffect(() => {
     if (!isSignedIn) return;
+    utils.today.feed.prefetch().catch(() => {});
     utils.tasks.listThin.prefetch().catch(() => {});
     utils.tasks.stats.prefetch({ upcomingDays: 7 }).catch(() => {});
     utils.tasks.upcoming.prefetch({ days: 7 }).catch(() => {});
-  }, [isSignedIn, utils.tasks.listThin, utils.tasks.stats, utils.tasks.upcoming]);
+  }, [isSignedIn, utils.tasks.listThin, utils.tasks.stats, utils.tasks.upcoming, utils.today.feed]);
 
   return (
     <Tabs
@@ -48,7 +49,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
+          title: 'Today',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home-outline" color={color} size={size} />
           ),

@@ -133,6 +133,7 @@ function PreloadTasks() {
 
   useEffect(() => {
     if (!isSignedIn) return;
+    utils.today.feed.prefetch().catch(() => {});
     utils.tasks.listThin.prefetch().catch(() => {});
     utils.tasks.stats.prefetch({ upcomingDays: 7 }).catch(() => {});
     utils.tasks.upcoming.prefetch({ days: 7 }).catch(() => {});
@@ -143,6 +144,7 @@ function PreloadTasks() {
     utils.tasks.listThin,
     utils.tasks.stats,
     utils.tasks.upcoming,
+    utils.today.feed,
   ]);
 
   return null;
