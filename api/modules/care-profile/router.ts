@@ -17,7 +17,12 @@ const toDate = (value?: string) => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
-const serializeDob = (value?: Date | null) => (value ? value.toISOString().slice(0, 10) : null);
+const serializeDob = (value?: Date | string | null) => {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (typeof value === 'string') return value.slice(0, 10);
+  return null;
+};
 
 export const careProfileRouter = router({
   get: authedProcedure.query(async ({ ctx }) => {
