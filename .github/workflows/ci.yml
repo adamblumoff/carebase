@@ -44,6 +44,8 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
       - name: Test
+        env:
+          GOOGLE_STATE_SECRET: test-secret
         run: pnpm test
 
   migrate-check:
